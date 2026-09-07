@@ -2,7 +2,6 @@ from sqlalchemy import (
     String, 
     Integer,
     DateTime, 
-    Boolean, 
     ForeignKey,
     CheckConstraint,
     Text,
@@ -19,7 +18,6 @@ class Solution(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"),nullable=False,index=True)
     problem_id:Mapped[int] = mapped_column(Integer,ForeignKey("problems.id", ondelete="CASCADE"),nullable=False,index=True)
     solution_text: Mapped[str] = mapped_column(Text, nullable=False)
-    is_meetup_available: Mapped[bool] = mapped_column(Boolean, default=False,nullable=False)
     status: Mapped[str] = mapped_column(String(20),default="pending")
     upvote_count: Mapped[int] = mapped_column(Integer, default=0,nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime,server_default=func.now())

@@ -1,16 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 class Solutions(BaseModel):
     problem_id:  int
     solution_text: str
-    is_meetup_available: bool
 
 class SolutionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     solution_text: str
     status: str
-    is_meetup_available: bool
     upvote_count: int
     created_at: datetime
     updated_at: datetime

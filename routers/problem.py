@@ -23,7 +23,7 @@ def get_problems(category: Optional[str] = None, db: Session = Depends(get_db)):
 def get_problem(problem_id: int, db: Session = Depends(get_db)):
     fnd_prob = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
     
-    if not problem:
+    if not fnd_prob:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Problem with id {problem_id} not found"

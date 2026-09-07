@@ -1,8 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
 
 class CommentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     user_id: int
     solution_id: int

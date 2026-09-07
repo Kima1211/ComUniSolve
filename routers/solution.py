@@ -13,7 +13,6 @@ def create_solution(solution_create: Solutions, db: Session = Depends(get_db), c
         user_id = current_user.id,
         problem_id = solution_create.problem_id,
         solution_text = solution_create.solution_text,
-        is_meetup_available = solution_create.is_meetup_available
     )
     db.add(new_solution)
     db.commit()
@@ -23,7 +22,6 @@ def create_solution(solution_create: Solutions, db: Session = Depends(get_db), c
     "id": new_solution.id,
     "problem_id": new_solution.problem_id,
     "solution_text": new_solution.solution_text, 
-    "is_meetup_available": new_solution.is_meetup_available,
     "status": new_solution.status,
     "posted_by": current_user.name,
     "created_at": new_solution.created_at

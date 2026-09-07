@@ -1,10 +1,12 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
 class Rate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     solution_id: int
-    rated_by: int
+    user_id: int
     score: int
     feedback: Optional[str] = None
     created_at: datetime
