@@ -76,10 +76,14 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
     }
 
 @router.delete("/users/{user_id}")
-def user_delete(user_id: int , user_del: DeleteUser, db: Session = Depends(get_db)):
+def user_delete(user_id: int , user_del: DeleteUser, db: Session = Depends(get_db),current_user: user.User=Depends(get_current_user)):
     find_id = db.query(user.User).filter(user.User.id == user_id).first()
+    
+    
     if not find_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current User doesnt belong to this ID")
     if not verify_password(user_del.user_password, find_id.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Password doesn't match")
 
