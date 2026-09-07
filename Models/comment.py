@@ -5,7 +5,7 @@ from sqlalchemy import (
     func,
     DateTime)
 from sqlalchemy.orm import mapped_column,Mapped
-from database import Base
+from Models.database import Base
 
 class Comment(Base):
     __tablename__ = "comments"

@@ -8,7 +8,7 @@ from sqlalchemy import (
     UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
-from database import Base
+from Models.database import Base
 
 
 class Rating(Base):

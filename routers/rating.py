@@ -21,7 +21,7 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
     if existing_rating:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="User already scored")
     
-    if rating.score < 1 or rating.score > 5:
+    if rate.score < 1 or rate.score > 5:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Score must be 1-5 only")
 
     new_rating = rating.Rating(

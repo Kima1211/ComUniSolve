@@ -5,7 +5,7 @@ from sqlalchemy import (
     Boolean, 
     func,)
 from sqlalchemy.orm import Mapped, mapped_column
-from database import Base
+from Models.database import Base
 
 class User(Base):
     __tablename__ = "users"
