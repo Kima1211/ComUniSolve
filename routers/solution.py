@@ -1,6 +1,6 @@
 from fastapi import HTTPException, APIRouter, status, Depends
 from sqlalchemy.orm import Session
-from Schemas.solution import Solutions, SolutionResponse, SolutionAccept
+from Schemas.solution import SolutionCreate, SolutionResponse, SolutionAccept
 from Models.database import get_db
 from Models import solution,problem,user
 from Security.utils import get_current_user
@@ -8,15 +8,24 @@ from Security.utils import get_current_user
 router = APIRouter()
 
 @router.post("/solutions", status_code=status.HTTP_201_CREATED)
-def create_solution(solution_create: Solutions, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+    fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == solution_create.problem_id).first()
+    
+    if not fnd_problem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+    
     new_solution = solution.Solution(
         user_id = current_user.id,
         problem_id = solution_create.problem_id,
         solution_text = solution_create.solution_text,
     )
-    db.add(new_solution)
-    db.commit()
-    db.refresh(new_solution)
+    try:
+        db.add(new_solution)
+        db.commit()
+        db.refresh(new_solution)
+    except Exception: 
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save solution to the database")
     
     return {
     "id": new_solution.id,
@@ -55,9 +64,14 @@ def update_solution(solution_id: int, db:Session=Depends(get_db),current_user: u
     
     fnd_solution.status = "accepted"
     fnd_problem.status = "resolved"
-    db.commit()
-    db.refresh(fnd_solution)
-    db.refresh(fnd_problem)
+    
+    try:
+        db.commit()
+        db.refresh(fnd_solution)
+        db.refresh(fnd_problem)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to accept solution")
     
     return{
         "status": fnd_solution.status,
@@ -80,9 +94,13 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
     )
     fnd_solution.upvote_count +=1
     
-    db.add(new_upvote)
-    db.commit()
-    db.refresh(new_upvote)
+    try:
+        db.add(new_upvote)
+        db.commit()
+        db.refresh(new_upvote)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail = "Failed to upvote solution")
     
     return {
         "message": "Upvoted Successfully",

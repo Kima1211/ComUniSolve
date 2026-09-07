@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from typing import Optional
-from Schemas.problem import Problems, ProblemResponse
+from Schemas.problem import ProblemCreate, ProblemResponse
 from Models.database import get_db
 from Security.utils import get_current_user
 from Models import problem,user
@@ -31,17 +31,21 @@ def get_problem(problem_id: int, db: Session = Depends(get_db)):
     return fnd_prob
 
 @router.post("/problems", status_code=status.HTTP_201_CREATED)
-def create_problem(prob: Problems, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
     new_problem = problem.Problem(
         user_id=current_user.id,
         title=prob.title,
         description=prob.description,
         category=prob.category
     )
-    db.add(new_problem)
-    db.commit()
-    db.refresh(new_problem)
-    
+    try:
+        db.add(new_problem)
+        db.commit()
+        db.refresh(new_problem)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit problem")
+        
     return {
     "id": new_problem.id,
     "title": new_problem.title,

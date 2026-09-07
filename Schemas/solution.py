@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
-class Solutions(BaseModel):
+class SolutionCreate(BaseModel):
     problem_id:  int
     solution_text: str
 

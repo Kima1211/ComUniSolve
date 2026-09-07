@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
-class Problems(BaseModel) :
+class ProblemCreate(BaseModel) :
     title: str
     description: Optional[str] = None
     category: str

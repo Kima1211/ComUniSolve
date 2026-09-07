@@ -31,8 +31,12 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
         parent_id = create_comm.parent_id,
         content = create_comm.content
     )
-    db.add(new_comment)
-    db.commit()
-    db.refresh(new_comment)
+    try:
+        db.add(new_comment)
+        db.commit()
+        db.refresh(new_comment)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail ="Failed to submit comment")
     
     return new_comment

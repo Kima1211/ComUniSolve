@@ -23,10 +23,13 @@ def reg_body(register: Register, db: Session = Depends(get_db)):
         password = hashed,
         location = register.location
     )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to register")
     
     return {
         "message": "Account successfully registered",
@@ -87,7 +90,11 @@ def user_delete(user_id: int , user_del: DeleteUser, db: Session = Depends(get_d
     if not verify_password(user_del.user_password, find_id.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Password doesn't match")
 
-    db.delete(find_id)
-    db.commit()
+    try:
+        db.delete(find_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user")
     
     return{"message": "Account deleted successfully"}
