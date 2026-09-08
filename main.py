@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from routers import  problem, rating, solution, user,comment
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
@@ -14,3 +15,11 @@ def hello():
     return {
         "message": "Works! Hehe"
     } 
+    
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["GET","POST","PATCH","DELETE" ],
+    allow_headers=["Content-Type", "Authorization"],
+)

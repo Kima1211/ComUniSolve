@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Response, Depends
 from sqlalchemy.orm import Session
 from Schemas.user import Register, DeleteUser, Login
 from Models import user
@@ -42,7 +42,7 @@ def reg_body(register: Register, db: Session = Depends(get_db)):
     }
     
 @router.post("/login")
-def login(login: Login, db: Session = Depends(get_db)):
+def login(login: Login, response: Response,db: Session = Depends(get_db)):
     val_user = db.query(user.User).filter(user.User.email == login.email).first()
     
     if not val_user:
@@ -60,15 +60,24 @@ def login(login: Login, db: Session = Depends(get_db)):
         data={"sub":  val_user.email},
         expires_delta=access_token_expires
     )
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    )
+    
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
         "user": {
             "id": val_user.id,
             "name": val_user.name,
             "email": val_user.email
         }
     }
+    
+    
 @router.get("/users/me")
 def get_profile(current_user: user.User = Depends(get_current_user)):
     return {

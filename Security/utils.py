@@ -3,12 +3,13 @@ import os
 from jose import jwt, JWTError , ExpiredSignatureError
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from Models.database import get_db, Base
 import Models.user as db_models
+
 
 load_dotenv()
 
@@ -36,7 +37,7 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(pepper.encode("utf-8"),salt).decode("utf-8")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    peppered = plain_password + PEPPER
+    peppered = plain_password + PEPPER[:72]
     return bcrypt.checkpw(peppered.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
@@ -69,16 +70,16 @@ def decode_token(token: str) -> Optional[str]:
         return None
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    email = decode_token(token)
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    token = request.cookies.get("access_token")
     
-    if email is None:
+    if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"}
             )
 
+    email = decode_token(token)
     user = db.query(db_models.User).filter(db_models.User.email == email).first()
     
     if user is None:
