@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from 'react-router-dom';
 
 function Login() {
     const [email, setEmail] = useState("")
@@ -17,7 +18,7 @@ function Login() {
         const data = await response.json()
         
         if (response.ok){
-        console.log(data.user,"User Login Succesfully!")
+        console.log(data.user,"User login succesfully!")
         } else {
         setError(data.detail)
         }
@@ -40,11 +41,14 @@ function Login() {
             placeholder="Enter your password" 
             value={password} onChange={(e) => setPassword(e.target.value)} 
             />
-
+            
             <button type="button" 
             className="submit" 
             onClick={handleSubmit}>Submit</button>
             {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}  
+
+        <Link to="/register">REGISTER</Link>
+        
         </div>
 
     )
