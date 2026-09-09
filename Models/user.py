@@ -14,7 +14,6 @@ class User(Base):
     name: Mapped[str] =  mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password: Mapped[str] = mapped_column(String(255), nullable=False)
-    location: Mapped[str] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default= func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default= func.now(), onupdate=func.now())

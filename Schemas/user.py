@@ -4,8 +4,7 @@ from typing import Optional
 class Register(BaseModel):
     name: str
     email: str
-    password: str = Field(..., max_length=72)
-    location: Optional[str] = None
+    password: str = Field(..., min_length=8,max_length=72)
 
 class DeleteUser(BaseModel):
     user_password: str

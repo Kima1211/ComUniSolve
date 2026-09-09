@@ -3,21 +3,29 @@ import { useState } from "react";
 function Login() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
+    const [error, setError] = useState("")
 
-    function handleSubmit() {
-        fetch("http://localhost:8000/login", {
+    async function handleSubmit()  {
+        try{
+        setError("")
+        const response = await fetch("http://localhost:8000/login", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             credentials: "include",
             body: JSON.stringify({email: email, password: password})
         })
-        .then((response) => response.json())
-        .then((data) => {console.log(data.user)})
+        const data = await response.json()
+        
+        if (response.ok){
+        console.log(data.user,"User Login Succesfully!")
+        } else {
+        setError(data.detail)
+        }
 
-        .catch((error) => {
-            console.log("Something went wrong:", error)
-        })
+    } catch(e){
+        setError(e.message || "Something went wrong! Please try again.")
     }
+}
 
     return (
         <div>
@@ -36,6 +44,7 @@ function Login() {
             <button type="button" 
             className="submit" 
             onClick={handleSubmit}>Submit</button>
+            {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}  
         </div>
 
     )

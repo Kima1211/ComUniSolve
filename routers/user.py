@@ -21,7 +21,6 @@ def reg_body(register: Register, db: Session = Depends(get_db)):
         name = register.name,
         email = register.email,
         password = hashed,
-        location = register.location
     )
     try:
         db.add(new_user)
@@ -37,7 +36,6 @@ def reg_body(register: Register, db: Session = Depends(get_db)):
             "id": new_user.id,
             "name": new_user.name,
             "email": new_user.email,
-            "location": new_user.location
         }
     }
     
@@ -84,7 +82,6 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
         "id": current_user.id,
         "name": current_user.name,
         "email": current_user.email,
-        "location": current_user.location
     }
 
 @router.delete("/users/{user_id}")
