@@ -3,7 +3,7 @@ import os
 from jose import jwt, JWTError , ExpiredSignatureError
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status, Request, Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
@@ -54,6 +54,23 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
+def issue_auth_cookie(response: Response, user) -> None:
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+            data={"sub":  user.email},
+            expires_delta=access_token_expires
+        )
+    response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            samesite="lax",
+            secure=False,
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        )
+    
+    
 
 def decode_token(token: str) -> Optional[str]:
     try:

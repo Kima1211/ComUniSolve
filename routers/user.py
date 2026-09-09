@@ -3,18 +3,17 @@ from sqlalchemy.orm import Session
 from Schemas.user import Register, DeleteUser, Login
 from Models import user
 from Models.database import get_db
-from Security.utils import hash_password, verify_password, create_access_token,get_current_user,  ACCESS_TOKEN_EXPIRE_MINUTES
+from Security.utils import hash_password, verify_password, create_access_token,get_current_user, issue_auth_cookie,  ACCESS_TOKEN_EXPIRE_MINUTES
 from datetime import timedelta
 
 router = APIRouter()
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def reg_body(register: Register, db: Session = Depends(get_db)):
+def reg_body(register: Register, response: Response, db: Session = Depends(get_db)):
     existing = db.query(user.User).filter(user.User.email == register.email).first()
     if existing: 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Email already exist")
     
-    #hash the password before saving <3
     hashed = hash_password(register.password)
 
     new_user = user.User(
@@ -26,9 +25,14 @@ def reg_body(register: Register, db: Session = Depends(get_db)):
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
+        
+        
+        
     except Exception:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to register")
+    
+    issue_auth_cookie(response,new_user)
     
     return {
         "message": "Account successfully registered",
@@ -53,19 +57,7 @@ def login(login: Login, response: Response,db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Invalid email or password")
     
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub":  val_user.email},
-        expires_delta=access_token_expires
-    )
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    )
+    issue_auth_cookie(response, val_user)
     
     return {
         "user": {
