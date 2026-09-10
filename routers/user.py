@@ -26,8 +26,6 @@ def reg_body(register: Register, response: Response, db: Session = Depends(get_d
         db.commit()
         db.refresh(new_user)
         
-        
-        
     except Exception:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to register")
