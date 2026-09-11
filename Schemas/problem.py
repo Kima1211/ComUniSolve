@@ -16,3 +16,10 @@ class ProblemResponse(BaseModel):
     category: str
     status: str
     created_at: datetime
+
+class ProblemOverview(BaseModel):
+    
+    total_users: int
+    total_problems: int
+    total_solutions: int
+

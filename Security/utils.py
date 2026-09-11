@@ -70,7 +70,6 @@ def issue_auth_cookie(response: Response, user) -> None:
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
         )
     
-    
 
 def decode_token(token: str) -> Optional[str]:
     try:
@@ -110,9 +109,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
             detail="Account is inactive")
     return user
 
-
-
-
+def get_current_admin(current_user: db_models.User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an admin")
+    return current_user
 
 #not for good practice avoid this
 """def hash_password(password: str) -> str:
