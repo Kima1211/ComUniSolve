@@ -7,8 +7,11 @@ from fastapi import Depends, HTTPException, status, Request, Response
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
-from Models.database import get_db, Base
+from Models.database import get_db
 import Models.user as db_models
+import secrets
+import hashlib
+from Models.refresh_token import RefreshToken
 
 
 load_dotenv()
@@ -23,6 +26,7 @@ if not SECRET_KEY:
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -69,6 +73,28 @@ def issue_auth_cookie(response: Response, user) -> None:
             secure=False,
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
         )
+
+def issue_refresh_token(response: Response, user, db: Session) -> str:
+    token =  secrets.token_urlsafe(32)
+    hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+    
+    db_token = RefreshToken(
+        user_id=user.id,
+        token_hash=hashed_token,
+    )
+    db.add(db_token)
+    db.commit()
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=token,
+        httponly=True,
+        secure=False, 
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+    )
+    return token
     
 
 def decode_token(token: str) -> Optional[str]:

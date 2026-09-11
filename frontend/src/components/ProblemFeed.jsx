@@ -26,9 +26,9 @@ function ProblemFeed() {
         <div>
             <h1>Problem Feed</h1>
             {error && <p>{error}</p>}
+            {problems.length === 0 && <p>No posted yet.</p>}
             {problems.map((problem)=>(
                 <div key={problem.id}>
-                    {problems.length === 0 && <p>No posted yet.</p>}
                     <h3>{problem.title}</h3>
                     <p>{problem.description}</p>
                     <p>{problem.category}</p>

@@ -3,8 +3,7 @@ from sqlalchemy.orm import Session
 from Schemas.user import Register, DeleteUser, Login
 from Models import user
 from Models.database import get_db
-from Security.utils import hash_password, verify_password, create_access_token,get_current_user, issue_auth_cookie,  ACCESS_TOKEN_EXPIRE_MINUTES
-from datetime import timedelta
+from Security.utils import hash_password, verify_password,get_current_user, issue_auth_cookie,  issue_refresh_token
 
 router = APIRouter()
 
@@ -31,6 +30,7 @@ def reg_body(register: Register, response: Response, db: Session = Depends(get_d
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to register")
     
     issue_auth_cookie(response,new_user)
+    issue_refresh_token(response, new_user,db)
     
     return {
         "message": "Account successfully registered",
@@ -56,6 +56,8 @@ def login(login: Login, response: Response,db: Session = Depends(get_db)):
             detail="Invalid email or password")
     
     issue_auth_cookie(response, val_user)
+    issue_refresh_token(response, val_user,db)
+    
     
     return {
         "user": {
@@ -64,7 +66,6 @@ def login(login: Login, response: Response,db: Session = Depends(get_db)):
             "email": val_user.email
         }
     }
-    
     
 @router.get("/users/me")
 def get_profile(current_user: user.User = Depends(get_current_user)):
@@ -77,7 +78,6 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
 @router.delete("/users/{user_id}")
 def user_delete(user_id: int , user_del: DeleteUser, db: Session = Depends(get_db),current_user: user.User=Depends(get_current_user)):
     find_id = db.query(user.User).filter(user.User.id == user_id).first()
-    
     
     if not find_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

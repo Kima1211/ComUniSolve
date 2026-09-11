@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from Models.database import get_db
 from Security.utils import get_current_user
-from Models import problem,user,solution,comment
-from Schemas.comment import CommentEdit,CommentIn,CommentResponse
+from Models import user,solution,comment
+from Schemas.comment import CommentIn,CommentResponse
 
 router = APIRouter()
 
