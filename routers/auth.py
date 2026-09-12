@@ -10,7 +10,7 @@ from Models.user import User
 router = APIRouter()
 
 @router.post("/refresh")
-def refresh_token(request: Request,response: Response, db: Session = Depends(get_db)):
+def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
     token = request.cookies.get("refresh_token")
     
     if token is None:
