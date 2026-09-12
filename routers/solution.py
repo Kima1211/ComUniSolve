@@ -47,34 +47,34 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
     return fnd_solution
 
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
-def update_solution(solution_id: int, db:Session=Depends(get_db),current_user: user.User=Depends(get_current_user)):
+def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
-    if not fnd_solution: 
+    if not fnd_solution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
-    
+
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
-    
+
     if fnd_problem.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Problem doesnt belong to this user")
-    
-        
+
     previously_accepted = (
-        db.query(solution.Solution).filter(solution.Solution.problem_id == fnd_problem.id,solution.Solution.status == "accepted", solution.Solution.id != fnd_solution.id,).first())
-    if previously_accepted:
-        previously_accepted.status = "accepted"
-        
+        db.query(solution.Solution).filter
+        (solution.Solution.problem_id == fnd_problem.id,
+         solution.Solution.status == "accepted"
+         ,solution.Solution.id != fnd_solution.id).first()
+    )
+    
     if previously_accepted:
         previously_accepted.status = "pending"
         previous_author = db.query(user.User).filter(user.User.id == previously_accepted.user_id).first()
-    
-    if previous_author:
-        award_points(previous_author, -10)
-    
+        if previous_author:
+            award_points(previous_author, -10)
+
     fnd_solution.status = "accepted"
     fnd_problem.status = "resolved"
-    
+
     try:
         db.commit()
         db.refresh(fnd_solution)
@@ -82,12 +82,11 @@ def update_solution(solution_id: int, db:Session=Depends(get_db),current_user: u
     except Exception:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to accept solution")
-    
-    return{
+
+    return {
         "status": fnd_solution.status,
         "problem_status": fnd_problem.status
     }
-    
     
 @router.patch("/solutions/{solution_id}/unaccept", response_model=SolutionAccept)
 def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
@@ -111,8 +110,6 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
         award_points(solution_author, -10)
         
     fnd_problem.status = "open"
-    
-    
     
     try:
         db.commit()
