@@ -58,7 +58,11 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
 
     if fnd_problem.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Problem doesnt belong to this user")
-
+    
+    is_self_solve = (
+        fnd_solution.user_id == fnd_problem.user_id
+    )
+        
     previously_accepted = (
         db.query(solution.Solution).filter
         (solution.Solution.problem_id == fnd_problem.id,
@@ -69,9 +73,15 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
     if previously_accepted:
         previously_accepted.status = "pending"
         previous_author = db.query(user.User).filter(user.User.id == previously_accepted.user_id).first()
-        if previous_author:
-            award_points(previous_author, -10)
-
+        if not is_self_solve:
+            if previous_author:
+                award_points(previous_author, -10)
+            
+    new_author = db.query(user.User).filter(user.User.id == fnd_solution.user_id).first()
+    if not is_self_solve:
+        if new_author:
+            award_points(new_author, 10)
+    
     fnd_solution.status = "accepted"
     fnd_problem.status = "resolved"
 
@@ -103,11 +113,16 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
     
     if fnd_solution.status != "accepted":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail ="This solution isn't currently accepted")
+    
+    is_self_solve=(
+        fnd_problem.user_id == fnd_solution.user_id
+    )
 
     fnd_solution.status = "pending"
     solution_author = db.query(user.User).filter(user.User.id == fnd_solution.user_id).first()
-    if solution_author:
-        award_points(solution_author, -10)
+    if not is_self_solve:
+        if solution_author:
+            award_points(solution_author, -10)
         
     fnd_problem.status = "open"
     
