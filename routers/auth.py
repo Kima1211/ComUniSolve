@@ -49,6 +49,30 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     issue_auth_cookie(response, user)
 
     return {"message": "Token Refreshed"}
+
+@router.get("/verify/{token}")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
     
+    db_user = db.query(User).filter(User.verification_token_hash == hashed_token).first()
+    
+    if db_user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail = "Invalid verification token")
+    
+    current_time = datetime.now(timezone.utc)
+    if db_user.verification_token_expires_at is None or current_time >= db_user.verification_token_expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification token has expired")
+    
+    db_user.is_verified=True
+    db_user.verification_token_hash = None
+    db_user.verification_token_expires_at = None
+    
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to verify account")
+    
+    return {"message": "Email verified successfully"}               
 
     

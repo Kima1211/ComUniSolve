@@ -11,15 +11,23 @@ router = APIRouter()
 @router.post("/solutions", status_code=status.HTTP_201_CREATED)
 def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == solution_create.problem_id).first()
+
+    existing_solution = db.query(solution.Solution).filter(solution.Solution.user_id == current_user.id, solution.Solution.problem_id == fnd_problem.id).first()
     
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
     
+    is_self_solution = (
+        fnd_problem.user_id == current_user.id
+    )
     new_solution = solution.Solution(
         user_id = current_user.id,
         problem_id = solution_create.problem_id,
         solution_text = solution_create.solution_text,
     )
+    if not is_self_solution and not existing_solution:
+        award_points(current_user, 2)
+        
     try:
         db.add(new_solution)
         db.commit()
@@ -149,11 +157,20 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
     if existing_upvote:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already upvoted!")
     
+    is_self_upvote = (
+           fnd_solution.user_id == current_user.id
+        )
+    
     new_upvote = solution.Upvote(
         user_id = current_user.id,
         solution_id = solution_id
     )
     fnd_solution.upvote_count +=1
+    
+    solution_author = db.query(user.User).filter(user.User.id == fnd_solution.user_id).first()
+    if not is_self_upvote:
+        if solution_author:
+            award_points(solution_author, 1)
     
     try:
         db.add(new_upvote)

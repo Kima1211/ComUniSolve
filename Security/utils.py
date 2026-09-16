@@ -12,6 +12,7 @@ import Models.user as db_models
 import secrets
 import hashlib
 from Models.refresh_token import RefreshToken
+from Models.user import User
 
 
 load_dotenv()
@@ -95,7 +96,17 @@ def issue_refresh_token(response: Response, user, db: Session) -> str:
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
     return token
+
+def issue_verification_token(user, db:Session) -> str:
+    token = secrets.token_urlsafe(32)
+    hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
     
+    user.verification_token_hash = hashed_token
+    user.verification_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    db.commit()
+    
+    return token
 
 def decode_token(token: str) -> Optional[str]:
     try:

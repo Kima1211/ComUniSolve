@@ -3,7 +3,14 @@ from sqlalchemy.orm import Session
 from Schemas.user import Register, DeleteUser, Login
 from Models import user
 from Models.database import get_db
-from Security.utils import hash_password, verify_password,get_current_user, issue_auth_cookie,  issue_refresh_token
+from Security.utils import (
+    hash_password, 
+    verify_password,
+    get_current_user, 
+    issue_auth_cookie,  
+    issue_refresh_token, 
+    issue_verification_token)
+from Services.email import send_verification_email
 
 router = APIRouter()
 
@@ -31,6 +38,9 @@ def reg_body(register: Register, response: Response, db: Session = Depends(get_d
     
     issue_auth_cookie(response,new_user)
     issue_refresh_token(response, new_user,db)
+    issue_verification_token(new_user, db)
+    token = issue_verification_token(new_user, db)
+    send_verification_email(new_user.email, new_user.name, token)
     
     return {
         "message": "Account successfully registered",
