@@ -4,7 +4,7 @@ from Models.database import get_db
 import hashlib
 from Models.refresh_token import RefreshToken
 from datetime import datetime, timezone
-from Security.utils import issue_auth_cookie
+from Security.utils import issue_auth_cookie, revoke_refresh_token, clear_auth_cookies
 from Models.user import User
 
 router = APIRouter()
@@ -45,10 +45,29 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User associated with token not found",
         )
-    
+
+    if not user.is_active:
+        db.delete(db_token)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is inactive",
+        )
+
     issue_auth_cookie(response, user)
 
     return {"message": "Token Refreshed"}
+
+@router.post("/logout")
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    token = request.cookies.get("refresh_token")
+
+    if token is not None:
+        revoke_refresh_token(token, db)
+
+    clear_auth_cookies(response)
+
+    return {"message": "Logged out"}
 
 @router.get("/verify/{token}")
 def verify_email(token: str, db: Session = Depends(get_db)):

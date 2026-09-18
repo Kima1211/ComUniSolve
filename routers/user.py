@@ -11,6 +11,7 @@ from Security.utils import (
     issue_refresh_token, 
     issue_verification_token)
 from Services.email import send_verification_email
+from Services.reputation import get_tier
 
 router = APIRouter()
 
@@ -82,6 +83,10 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
         "id": current_user.id,
         "name": current_user.name,
         "email": current_user.email,
+        "role": current_user.role,
+        "is_verified": current_user.is_verified,
+        "points": current_user.points,
+        "tier": get_tier(current_user.points),
     }
 
 @router.delete("/users/{user_id}")

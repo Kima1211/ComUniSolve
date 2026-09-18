@@ -14,6 +14,9 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
     
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
+    if not fnd_problem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+
     if fnd_problem.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the problem poster can rate solutions")
     

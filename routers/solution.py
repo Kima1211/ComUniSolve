@@ -47,12 +47,11 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
 
 @router.get("/solutions/problem/{problem_id}", response_model=list[SolutionResponse])
 def get_solution(problem_id: int, db: Session=Depends(get_db)):
-    fnd_solution = db.query(solution.Solution).filter(solution.Solution.problem_id == problem_id).all()
+    fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
+    if not fnd_problem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
-    if not fnd_solution:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="problem not found")
-
-    return fnd_solution
+    return db.query(solution.Solution).filter(solution.Solution.problem_id == problem_id).all()
 
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
 def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):

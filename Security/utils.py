@@ -95,6 +95,33 @@ def issue_refresh_token(response: Response, user, db: Session) -> str:
     )
     return token
 
+def revoke_refresh_token(raw_token: str, db: Session) -> bool:
+    """Delete the refresh_tokens row matching this raw cookie value.
+
+    Returns True if a row was actually deleted. Mirrors issue_refresh_token:
+    the hashing rule lives in exactly one place, next to the function that
+    created the hash in the first place.
+    """
+    hashed_token = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed_token).first()
+
+    if db_token is None:
+        return False
+
+    db.delete(db_token)
+    db.commit()
+    return True
+
+def clear_auth_cookies(response: Response) -> None:
+    """Remove both session cookies from the browser.
+
+    The delete_cookie arguments must match how the cookies were set in
+    issue_auth_cookie / issue_refresh_token, or the browser treats them as
+    different cookies and silently keeps the originals.
+    """
+    response.delete_cookie(key="access_token", httponly=True, samesite="lax", secure=False)
+    response.delete_cookie(key="refresh_token", httponly=True, samesite="lax", secure=False)
+
 def issue_verification_token(user, db:Session) -> str:
     token = secrets.token_urlsafe(32)
     hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
@@ -106,38 +133,48 @@ def issue_verification_token(user, db:Session) -> str:
     
     return token
 
-def decode_token(token: str) -> Optional[str]:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        
-        if email is None:
-            return None
-        return email
-    
-    except ExpiredSignatureError:
-        return None
-    except JWTError:
-        return None
+def decode_token(token: str) -> str:
+    """Return the email stored in the token's `sub` claim.
+
+    Raises ExpiredSignatureError if the token is past its `exp`, and JWTError
+    for anything else wrong with it (bad signature, malformed, missing `sub`).
+    Callers decide what HTTP status those mean - this function only knows tokens.
+    """
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    email = payload.get("sub")
+
+    if email is None:
+        raise JWTError("Token has no 'sub' claim")
+    return email
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
-    
+
     if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Not authenticated",
             )
 
-    email = decode_token(token)
+    try:
+        email = decode_token(token)
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token expired")
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token")
+
     user = db.query(db_models.User).filter(db_models.User.email == email).first()
-    
+
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found")
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

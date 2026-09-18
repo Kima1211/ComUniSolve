@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 
@@ -13,4 +13,4 @@ class Rate(BaseModel):
 
 class RateIn(BaseModel):
     score: int
-    feedback: Optional[str] = None
+    feedback: Optional[str] = Field(None, max_length=1000)

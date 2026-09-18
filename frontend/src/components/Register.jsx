@@ -1,59 +1,62 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { apiPost } from "../api";
+import { useAuth } from "../auth-context";
 
 function Register() {
+    const navigate = useNavigate()
+    const { refreshUser } = useAuth()
+
     const [name, setName] = useState("")
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [error, setError] = useState("")
+    const [submitting, setSubmitting] = useState(false)
 
-    async function handleSubmit() {
-        try{
+    async function handleSubmit(e) {
+        e.preventDefault()
+
+        try {
             setError("")
-                const response = await fetch("http://localhost:8000/register", {
-                    method: "POST", 
-                    headers: {"Content-Type": "application/json"},
-                    credentials: "include",
-                    body: JSON.stringify({name: name, email: email, password: password})
-        })
-        const data = await response.json()
+            setSubmitting(true)
 
-        if (response.ok){
-            console.log(data.data,"User registered succesfully!")
-        } else {
-            setError(data.detail)
-        }
-        } catch (e){
+            await apiPost("/register", { name: name, email: email, password: password })
+            await refreshUser()
+            navigate("/")
+        } catch (e) {
             setError(e.message || "Something went wrong! Please try again.")
+        } finally {
+            setSubmitting(false)
         }
     }
+
     return (
-        <div>
-            <input 
+        <form onSubmit={handleSubmit}>
+            <input
             type="text"
             placeholder="Enter your name"
             value={name} onChange={(e) => setName(e.target.value)}
             />
 
-            <input 
+            <input
             type="email"
             placeholder="Enter your email"
             value={email} onChange={(e) => setEmail(e.target.value)}
             />
 
-            <input 
+            <input
             type="password"
             placeholder="Enter your password"
             value={password} onChange={(e) => setPassword(e.target.value)}
             />
 
-            <button type="button" 
-            className="submit" 
-            onClick={handleSubmit}>Submit</button>
-            {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}  
+            <button type="submit"
+            className="submit"
+            disabled={submitting}>{submitting ? "Registering..." : "Submit"}</button>
+            {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}
 
             <Link to="/login">Log In</Link>
-        </div>
+        </form>
     )
 }
 

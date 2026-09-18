@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import Optional
 
@@ -14,9 +14,9 @@ class CommentResponse(BaseModel):
     updated_at: datetime
 
 class CommentIn(BaseModel):
-    content: str
+    content: str = Field(..., min_length=1, max_length=2000)
     parent_id: Optional[int] = None
 
 class CommentEdit(BaseModel):
-    content: str
+    content: str = Field(..., min_length=1, max_length=2000)
     
