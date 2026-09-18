@@ -33,18 +33,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 def hash_password(password: str) -> str:
-    if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
     
-    pepper  = password + PEPPER[:72]
+    peppered = password + PEPPER
+    pre_hashed = hashlib.sha256(peppered.encode("utf-8")).hexdigest()
     
     salt = bcrypt.gensalt(rounds=12)
-    return bcrypt.hashpw(pepper.encode("utf-8"),salt).decode("utf-8")
+    return bcrypt.hashpw(pre_hashed.encode("utf-8"), salt).decode("utf-8")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    peppered = plain_password + PEPPER[:72]
-    return bcrypt.checkpw(peppered.encode("utf-8"), hashed_password.encode("utf-8"))
-
+    peppered = plain_password + PEPPER
+    pre_hashed = hashlib.sha256(peppered.encode("utf-8")).hexdigest()
+    return bcrypt.checkpw(pre_hashed.encode("utf-8"), hashed_password.encode("utf-8"))
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
@@ -58,7 +57,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
 
 def issue_auth_cookie(response: Response, user) -> None:
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -150,6 +148,12 @@ def get_current_admin(current_user: db_models.User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an admin")
     return current_user
+
+def get_verified_user(current_user: db_models.User = Depends(get_current_user)):
+    if not current_user.is_verified:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Please verify your email before posting")
+    return current_user
+
 
 #not for good practice avoid this
 """def hash_password(password: str) -> str:

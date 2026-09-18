@@ -3,19 +3,19 @@ from sqlalchemy.orm import Session
 from Schemas.solution import SolutionCreate, SolutionResponse, SolutionAccept
 from Models.database import get_db
 from Models import solution,problem,user
-from Security.utils import get_current_user
+from Security.utils import get_current_user, get_verified_user
 from Services.reputation import award_points
 
 router = APIRouter()
 
 @router.post("/solutions", status_code=status.HTTP_201_CREATED)
-def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_verified_user)):
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == solution_create.problem_id).first()
-
-    existing_solution = db.query(solution.Solution).filter(solution.Solution.user_id == current_user.id, solution.Solution.problem_id == fnd_problem.id).first()
-    
+     
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+
+    existing_solution = db.query(solution.Solution).filter(solution.Solution.user_id == current_user.id, solution.Solution.problem_id == fnd_problem.id).first()
     
     is_self_solution = (
         fnd_problem.user_id == current_user.id

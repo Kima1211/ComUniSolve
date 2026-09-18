@@ -3,9 +3,8 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from Schemas.problem import ProblemCreate, ProblemResponse
 from Models.database import get_db
-from Security.utils import get_current_user
+from Security.utils import get_current_user, get_verified_user
 from Models import problem,user
-
 
 router = APIRouter()
 
@@ -31,7 +30,7 @@ def get_problem(problem_id: int, db: Session = Depends(get_db)):
     return fnd_prob
 
 @router.post("/problems", status_code=status.HTTP_201_CREATED)
-def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_verified_user)):
     new_problem = problem.Problem(
         user_id=current_user.id,
         title=prob.title,
