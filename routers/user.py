@@ -38,7 +38,6 @@ def reg_body(register: Register, response: Response, db: Session = Depends(get_d
     
     issue_auth_cookie(response,new_user)
     issue_refresh_token(response, new_user,db)
-    issue_verification_token(new_user, db)
     token = issue_verification_token(new_user, db)
     send_verification_email(new_user.email, new_user.name, token)
     
