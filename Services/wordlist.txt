@@ -1,0 +1,64 @@
+# ComUniSolve keyword filter — Layer 2
+#
+# Two tiers, and the difference matters:
+#
+#   [block]  The post is refused. The user is told which term triggered it and
+#            can edit and post again. Put terms here only when they are abusive
+#            or fraudulent in every plausible context.
+#
+#   [flag]   The post is published, but marked "flagged" and sent to the admin
+#            queue. Put terms here when they are often abuse but sometimes just
+#            ordinary frustrated speech — "tanga ang sistema na 'to" is a
+#            complaint about software, not harassment.
+#
+# Lines starting with # are ignored. Blank lines are ignored. One term per line.
+# A term may be several words ("libreng load"); it is matched as a whole phrase.
+# Matching is case-insensitive and accent-insensitive, on whole words only, so
+# "assign" will never match "ass".
+#
+# This list is deliberately short. Before user testing, extend it — in
+# particular with slurs, which are not included here and which you should take
+# from a maintained source rather than writing by hand. The LDNOOBW
+# "List of Dirty, Naughty, Obscene and Otherwise Bad Words" project publishes
+# per-language files including Tagalog, and is the usual starting point.
+#
+# Editing this file needs no code change and no restart in dev — it is re-read
+# when its modification time changes.
+
+[block]
+putangina
+putang ina
+tangina
+kingina
+punyeta
+pakyu
+gago
+gaga
+tarantado
+hayop ka
+fuck
+fucking
+motherfucker
+shit
+bitch
+asshole
+bastard
+dickhead
+send money to claim
+claim your prize now
+double your money
+
+[flag]
+tanga
+bobo
+ulol
+lintik
+engot
+stupid
+idiot
+useless kayo
+scam
+libreng load
+free load
+earn money fast
+click this link
