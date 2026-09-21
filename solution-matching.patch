@@ -1,0 +1,466 @@
+diff --git a/Schemas/matching.py b/Schemas/matching.py
+new file mode 100644
+index 0000000..2294da3
+--- /dev/null
++++ b/Schemas/matching.py
+@@ -0,0 +1,24 @@
++from pydantic import BaseModel, Field
++from typing import Optional, List
++
++
++class MatchRequest(BaseModel):
++    title: str = Field(..., min_length=1, max_length=255)
++    description: Optional[str] = Field(None, max_length=5000)
++
++
++class MatchedProblem(BaseModel):
++    id: int
++    title: str
++    description: Optional[str] = None
++    category: str
++    status: str
++    # Cosine similarity, 0.0 to 1.0. Returned to the frontend so the interface
++    # can show how confident the match is rather than presenting every result
++    # as equally relevant.
++    score: float
++    accepted_solution: Optional[str] = None
++
++
++class MatchResponse(BaseModel):
++    matches: List[MatchedProblem] = []
+diff --git a/Services/matching.py b/Services/matching.py
+new file mode 100644
+index 0000000..73b6b7b
+--- /dev/null
++++ b/Services/matching.py
+@@ -0,0 +1,96 @@
++"""Solution Matching — finding problems that have already been solved.
++
++The idea: when someone posts "our street light is broken", the community may
++have answered that exact question three months ago. Rather than making them
++wait for a new answer, surface the old one.
++
++How it works, in plain terms:
++
++1. **TF-IDF** turns each problem's text into a list of numbers. TF (term
++   frequency) counts how often a word appears in one problem; IDF (inverse
++   document frequency) reduces the weight of words that appear in *every*
++   problem. So "the" and "problem" count for almost nothing, while "barangay"
++   or "tubig" carry real signal. Every problem becomes a point in space.
++
++2. **Cosine similarity** measures the angle between two of those points. Two
++   problems using the same distinctive words point in nearly the same
++   direction, giving a score near 1.0; unrelated ones sit near 0.0. Angle
++   rather than distance matters, so a long problem and a short one about the
++   same topic still match.
++
++Both run locally through scikit-learn. No API key, no network call, and every
++number is explainable — which is why this, not the Gemini API, is the core of
++the feature. Gemini is an enhancement layer on top, not a dependency.
++"""
++from typing import List, Tuple
++
++from sklearn.feature_extraction.text import TfidfVectorizer
++from sklearn.metrics.pairwise import cosine_similarity
++
++# Below this score, a "match" is noise. Tuned by hand against real posts:
++# 0.10 lets loosely related community problems through, while filtering pairs
++# that merely share common words.
++SIMILARITY_THRESHOLD = 0.10
++
++MAX_MATCHES = 5
++
++
++def _problem_text(title: str, description: str | None, category: str | None = None) -> str:
++    """Everything worth matching on, as one string.
++
++    The title is repeated because it is the most concentrated description of a
++    problem - counting it twice raises the weight of its words without needing
++    a separate weighting step.
++    """
++    parts = [title or "", title or "", description or "", category or ""]
++    return " ".join(parts).strip()
++
++
++def find_similar(
++    query_title: str,
++    query_description: str | None,
++    candidates: List[dict],
++    threshold: float = SIMILARITY_THRESHOLD,
++    limit: int = MAX_MATCHES,
++) -> List[Tuple[int, float]]:
++    """Return [(candidate_id, score), ...], most similar first.
++
++    `candidates` is a list of dicts with id/title/description/category.
++    """
++    query = _problem_text(query_title, query_description)
++    if not query.strip() or not candidates:
++        return []
++
++    corpus = [query] + [
++        _problem_text(c.get("title"), c.get("description"), c.get("category"))
++        for c in candidates
++    ]
++
++    # stop_words="english" drops "the", "and", "is"... Note the honest
++    # limitation for this project: there is no Tagalog stop-word list here, so
++    # Tagalog filler words ("ang", "ng", "sa") are not removed by name. IDF
++    # still reduces their weight automatically, because they appear in most
++    # posts - which is the mechanism doing the real work either way.
++    vectorizer = TfidfVectorizer(
++        stop_words="english",
++        lowercase=True,
++        ngram_range=(1, 2),   # single words and adjacent pairs ("street light")
++        min_df=1,
++    )
++
++    try:
++        matrix = vectorizer.fit_transform(corpus)
++    except ValueError:
++        # Raised when every word was filtered out as a stop word.
++        return []
++
++    # Row 0 is the query; compare it against every other row at once.
++    scores = cosine_similarity(matrix[0:1], matrix[1:]).flatten()
++
++    ranked = [
++        (candidates[i]["id"], float(score))
++        for i, score in enumerate(scores)
++        if score >= threshold
++    ]
++    ranked.sort(key=lambda pair: pair[1], reverse=True)
++    return ranked[:limit]
+diff --git a/frontend/src/components/PostProblem.jsx b/frontend/src/components/PostProblem.jsx
+index 58df2d7..ffc5d01 100644
+--- a/frontend/src/components/PostProblem.jsx
++++ b/frontend/src/components/PostProblem.jsx
+@@ -1,7 +1,8 @@
+-import { useState } from "react";
++import { useEffect, useState } from "react";
+ import { useNavigate } from "react-router-dom";
+ import { apiPost } from "../api";
+ import Layout from "./Layout";
++import SimilarProblems from "./SimilarProblems";
+ 
+ const CATEGORIES = ["Household", "School", "Public", "Health", "Livelihood", "Other"]
+ 
+@@ -17,6 +18,25 @@ function PostProblem() {
+     const [category, setCategory] = useState(CATEGORIES[0])
+     const [error, setError] = useState("")
+     const [submitting, setSubmitting] = useState(false)
++    const [matches, setMatches] = useState([])
++
++    // Solution Matching, live. Debounced by 600ms: without it, every keystroke
++    // would fire a request and the answers would arrive out of order.
++    useEffect(() => {
++        let cancelled = false
++        const timer = setTimeout(() => {
++            // Too short to say anything useful about - clear and stop.
++            if (title.trim().length < 6) {
++                if (!cancelled) setMatches([])
++                return
++            }
++            apiPost("/problems/match", { title, description })
++                .then((data) => { if (!cancelled) setMatches(data.matches || []) })
++                .catch(() => { if (!cancelled) setMatches([]) })
++        }, 600)
++
++        return () => { cancelled = true; clearTimeout(timer) }
++    }, [title, description])
+ 
+     async function handleSubmit(e) {
+         e.preventDefault()
+@@ -85,6 +105,13 @@ function PostProblem() {
+                         {submitting ? "Posting..." : "Post problem"}
+                     </button>
+                 </form>
++
++                <div className="mt-6">
++                    <SimilarProblems
++                        matches={matches}
++                        hint="Someone may already have asked this. Check before posting — an answer might be waiting."
++                    />
++                </div>
+             </div>
+         </Layout>
+     )
+diff --git a/frontend/src/components/ProblemDetail.jsx b/frontend/src/components/ProblemDetail.jsx
+index 67e3ccf..b7943cc 100644
+--- a/frontend/src/components/ProblemDetail.jsx
++++ b/frontend/src/components/ProblemDetail.jsx
+@@ -4,6 +4,7 @@ import { apiGet, apiPost } from "../api";
+ import { useAuth } from "../auth-context";
+ import Layout, { TierBadge } from "./Layout";
+ import SolutionCard from "./SolutionCard";
++import SimilarProblems from "./SimilarProblems";
+ 
+ function ProblemDetail() {
+     const { id } = useParams()
+@@ -17,6 +18,17 @@ function ProblemDetail() {
+     const [text, setText] = useState("")
+     const [submitting, setSubmitting] = useState(false)
+     const [submitError, setSubmitError] = useState("")
++    const [matches, setMatches] = useState([])
++
++    // Similar problems for this one. Separate from the main load because a
++    // failure here must not stop the problem itself from rendering.
++    useEffect(() => {
++        let cancelled = false
++        apiGet(`/problems/${id}/similar`)
++            .then((data) => { if (!cancelled) setMatches(data.matches || []) })
++            .catch(() => { if (!cancelled) setMatches([]) })
++        return () => { cancelled = true }
++    }, [id])
+ 
+     // Two endpoints, one load. Promise.all runs them at the same time rather
+     // than waiting for the first to finish before starting the second.
+@@ -111,6 +123,16 @@ function ProblemDetail() {
+                 )}
+             </article>
+ 
++            {matches.length > 0 && (
++                <div className="mt-6">
++                    <SimilarProblems
++                        matches={matches}
++                        title="Related problems"
++                        hint="Matched by comparing the wording of every problem on the platform."
++                    />
++                </div>
++            )}
++
+             <section className="mt-8">
+                 <h2 className="text-lg font-semibold text-slate-900">
+                     {solutions.length} {solutions.length === 1 ? "solution" : "solutions"}
+diff --git a/frontend/src/components/SimilarProblems.jsx b/frontend/src/components/SimilarProblems.jsx
+new file mode 100644
+index 0000000..7881049
+--- /dev/null
++++ b/frontend/src/components/SimilarProblems.jsx
+@@ -0,0 +1,62 @@
++import { Link } from "react-router-dom";
++
++/**
++ * Renders matches from the Solution Matching engine.
++ *
++ * The score is shown, not hidden. A match at 0.42 and a match at 0.11 are not
++ * equally useful, and pretending otherwise would make the feature feel random
++ * the first time it surfaces something loose.
++ */
++function SimilarProblems({ matches, title = "Similar problems already posted", hint }) {
++    if (!matches || matches.length === 0) return null
++
++    return (
++        <section className="rounded-xl border border-brand-200 bg-brand-50/60 p-5">
++            <h2 className="text-sm font-semibold text-brand-900">{title}</h2>
++            {hint && <p className="mt-1 text-xs text-brand-800/80">{hint}</p>}
++
++            <div className="mt-4 space-y-3">
++                {matches.map((m) => (
++                    <div key={m.id} className="rounded-lg border border-brand-200 bg-white p-4">
++                        <div className="flex items-start justify-between gap-3">
++                            <Link
++                                to={`/problems/${m.id}`}
++                                className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
++                            >
++                                {m.title}
++                            </Link>
++                            <span
++                                className="shrink-0 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-800"
++                                title={`Cosine similarity: ${m.score}`}
++                            >
++                                {Math.round(m.score * 100)}% match
++                            </span>
++                        </div>
++
++                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
++                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
++                                {m.category}
++                            </span>
++                            {m.status === "resolved" && (
++                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700">
++                                    Resolved
++                                </span>
++                            )}
++                        </div>
++
++                        {m.accepted_solution && (
++                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
++                                <p className="text-xs font-semibold text-amber-800">Accepted solution</p>
++                                <p className="mt-1 text-sm text-slate-700 line-clamp-3">
++                                    {m.accepted_solution}
++                                </p>
++                            </div>
++                        )}
++                    </div>
++                ))}
++            </div>
++        </section>
++    )
++}
++
++export default SimilarProblems
+diff --git a/main.py b/main.py
+index 68e3dea..066361e 100644
+--- a/main.py
++++ b/main.py
+@@ -1,5 +1,5 @@
+ from fastapi import FastAPI
+-from routers import  problem, rating, solution, user,comment,admin,auth
++from routers import  problem, rating, solution, user,comment,admin,auth,matching
+ from fastapi.middleware.cors import CORSMiddleware
+ 
+ app = FastAPI()
+@@ -11,6 +11,7 @@ app.include_router(problem.router)
+ app.include_router(comment.router)
+ app.include_router(admin.router)
+ app.include_router(auth.router)
++app.include_router(matching.router)
+ 
+ @app.get("/")
+ def hello():
+diff --git a/requirements.txt b/requirements.txt
+index af0eb02..78ba4b9 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -29,3 +29,8 @@ typing_extensions==4.15.0
+ uvicorn==0.40.0
+ requests==2.33.1
+ email-validator==2.3.0
++scikit-learn==1.9.1
++numpy==2.4.6
++scipy==1.17.1
++joblib==1.6.0
++threadpoolctl==3.7.0
+diff --git a/routers/matching.py b/routers/matching.py
+new file mode 100644
+index 0000000..343cab8
+--- /dev/null
++++ b/routers/matching.py
+@@ -0,0 +1,82 @@
++from fastapi import APIRouter, Depends, HTTPException, status
++from sqlalchemy.orm import Session
++from typing import Optional
++
++from Models.database import get_db
++from Models import problem, solution
++from Schemas.matching import MatchRequest, MatchResponse, MatchedProblem
++from Services.matching import find_similar
++
++router = APIRouter()
++
++
++def _build_matches(query_title: str, query_description: Optional[str], db: Session, exclude_id: Optional[int] = None):
++    query = db.query(problem.Problem)
++    if exclude_id is not None:
++        query = query.filter(problem.Problem.id != exclude_id)
++    rows = query.all()
++
++    candidates = [
++        {"id": p.id, "title": p.title, "description": p.description, "category": p.category}
++        for p in rows
++    ]
++
++    ranked = find_similar(query_title, query_description, candidates)
++    if not ranked:
++        return []
++
++    by_id = {p.id: p for p in rows}
++    matched_ids = [pid for pid, _ in ranked]
++
++    # One query for every accepted solution across all matches, rather than one
++    # per match. The accepted answer is the reusable part - that is the whole
++    # point of matching an old problem to a new one.
++    accepted = (
++        db.query(solution.Solution)
++        .filter(
++            solution.Solution.problem_id.in_(matched_ids),
++            solution.Solution.status == "accepted",
++        )
++        .all()
++    )
++    accepted_by_problem = {s.problem_id: s for s in accepted}
++
++    results = []
++    for pid, score in ranked:
++        p = by_id[pid]
++        sol = accepted_by_problem.get(pid)
++        results.append(
++            MatchedProblem(
++                id=p.id,
++                title=p.title,
++                description=p.description,
++                category=p.category,
++                status=p.status,
++                score=round(score, 4),
++                accepted_solution=sol.solution_text if sol else None,
++            )
++        )
++    return results
++
++
++@router.post("/problems/match", response_model=MatchResponse)
++def match_before_posting(body: MatchRequest, db: Session = Depends(get_db)):
++    """Similar problems for text the user is still typing.
++
++    Called from the Post a Problem form so someone can see an existing answer
++    before creating a duplicate. Deliberately unauthenticated and read-only -
++    it creates nothing.
++    """
++    return MatchResponse(matches=_build_matches(body.title, body.description, db))
++
++
++@router.get("/problems/{problem_id}/similar", response_model=MatchResponse)
++def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
++    """Similar problems for one that already exists, for its detail page."""
++    fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
++    if not fnd:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
++
++    return MatchResponse(
++        matches=_build_matches(fnd.title, fnd.description, db, exclude_id=problem_id)
++    )
+diff --git a/smoke_test.py b/smoke_test.py
+index b7f4601..665137d 100644
+--- a/smoke_test.py
++++ b/smoke_test.py
+@@ -159,6 +159,40 @@ check("/users/me exposes the token expiry so the UI can show a countdown",
+ r = asker.post("/resend-verification")
+ check("An already-verified account cannot resend", r.status_code == 400, f"status={r.status_code}")
+ 
++
++# --- solution matching -------------------------------------------------------
++asker.post("/problems", json={
++    "title": "Barangay streetlight not working near the basketball court",
++    "description": "Another dark corner at night. Who do we report a broken street light to?",
++    "category": "Public"})
++
++r = asker.post("/problems/match", json={
++    "title": "Our street light is broken",
++    "description": "The lamp outside our house has been dark for a month. Who do we report it to?"})
++ms = r.json()["matches"]
++check("Matching finds the related street-light problems",
++      r.status_code == 200 and len(ms) >= 2,
++      f"{[(m['score'], m['title'][:40]) for m in ms]}")
++
++check("Matches are ordered by score, highest first",
++      all(ms[i]["score"] >= ms[i + 1]["score"] for i in range(len(ms) - 1)),
++      f"scores={[m['score'] for m in ms]}")
++
++check("A solved match carries its accepted solution for reuse",
++      any(m["accepted_solution"] for m in ms),
++      f"with_solution={[bool(m['accepted_solution']) for m in ms]}")
++
++r = asker.post("/problems/match", json={
++    "title": "Where can I buy a second hand bicycle",
++    "description": "Any shops nearby selling used bikes for a student?"})
++check("An unrelated problem matches nothing (threshold rejects noise)",
++      r.json()["matches"] == [], f"{r.json()['matches']}")
++
++r = asker.get(f"/problems/{pid}/similar")
++check("A problem's own page can list related problems, excluding itself",
++      r.status_code == 200 and all(m["id"] != pid for m in r.json()["matches"]),
++      f"ids={[m['id'] for m in r.json()['matches']]}")
++
+ print("=" * 70)
+ print(f"{sum(results)}/{len(results)} checks passed")
+ print("=" * 70)

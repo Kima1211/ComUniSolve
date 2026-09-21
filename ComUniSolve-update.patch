@@ -1,0 +1,1192 @@
+From a0f0121a017226d660a71bd2cab699bab3264769 Mon Sep 17 00:00:00 2001
+From: Claude Opus 5 <noreply@anthropic.com>
+Date: Mon, 21 Sep 2026 20:04:25 +0800
+Subject: [PATCH] Paid tier: best model first, AI runs automatically
+
+Five complete files. Delete the old copies first, then apply - every hunk
+creates a file from scratch, so this does not care what state your tree is in.
+
+    git add -A && git commit -m "checkpoint before update"
+    git rm -f Services/gemini.py routers/matching.py \
+              frontend/src/components/ProblemDetail.jsx \
+              check_gemini.py smoke_test.py
+    git apply ComUniSolve-update.patch
+    git add -A && git commit -m "Paid tier: best model first, AI runs automatically"
+
+* Model chain ordered best-first (gemini-3.8-flash). Budget stopped being the
+  constraint at 10,000 requests per day, so quality decides the order.
+* The problem detail page asks the AI by itself - no button. Word overlap
+  renders first so the page is never blank, then the AI answer replaces it.
+* Fixed: a timeout on the first model abandoned the whole chain, so models 2
+  and 3 were never tried.
+* Added AI_DEADLINE (45s) across the whole re-rank.
+* Dormant second provider, active only if GROQ_API_KEY is set.
+* check_gemini.py prints the exact status per model.
+
+Verified: 32/32 smoke checks, 21/21 provider-chain checks, frontend builds.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BemJf22Twvamk1GmyX4ZSE
+---
+ Services/gemini.py                        | 367 ++++++++++++++++++++++
+ check_gemini.py                           | 110 +++++++
+ frontend/src/components/ProblemDetail.jsx | 268 ++++++++++++++++
+ routers/matching.py                       | 145 +++++++++
+ smoke_test.py                             | 227 +++++++++++++
+ 5 files changed, 1117 insertions(+)
+ create mode 100644 Services/gemini.py
+ create mode 100644 check_gemini.py
+ create mode 100644 frontend/src/components/ProblemDetail.jsx
+ create mode 100644 routers/matching.py
+ create mode 100644 smoke_test.py
+
+diff --git a/Services/gemini.py b/Services/gemini.py
+new file mode 100644
+index 0000000..5bdd6c2
+--- /dev/null
++++ b/Services/gemini.py
+@@ -0,0 +1,367 @@
++"""AI re-ranking for Solution Matching.
++
++Gemini is the provider. A second provider (Groq) is supported but dormant -
++it activates only if GROQ_API_KEY is set. Any failure returns None, and the
++caller falls back to TF-IDF.
++"""
++import json
++import os
++import time
++from typing import Callable, List, Optional, Tuple
++
++import requests
++from dotenv import load_dotenv
++
++load_dotenv()
++
++GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
++GROQ_API_KEY = os.getenv("GROQ_API_KEY")
++
++GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
++GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
++
++# Best model first. The chain is for resilience, not budget.
++DEFAULT_GEMINI_MODELS = [
++    "gemini-3.8-flash",
++    "gemini-3.6-flash",
++    "gemini-2.5-flash",
++]
++
++DEFAULT_GROQ_MODELS = [
++    "openai/gpt-oss-120b",
++    "openai/gpt-oss-20b",
++    "qwen/qwen3.8-27b",
++]
++
++
++def _chain_from_env(var: str, default: List[str]) -> List[str]:
++    configured = os.getenv(var, "").strip()
++    if configured:
++        return [m.strip() for m in configured.split(",") if m.strip()]
++    return default
++
++
++MODEL_CHAIN = _chain_from_env("GEMINI_MODELS", DEFAULT_GEMINI_MODELS)
++GROQ_MODEL_CHAIN = _chain_from_env("GROQ_MODELS", DEFAULT_GROQ_MODELS)
++GEMINI_MODEL = os.getenv("GEMINI_MODEL", MODEL_CHAIN[0] if MODEL_CHAIN else "")
++
++TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT", "25"))
++
++# Wall-clock budget across every provider and model.
++DEADLINE_SECONDS = int(os.getenv("AI_DEADLINE", "45"))
++
++MAX_CANDIDATES = 20
++
++# Retry only when the SERVER is at fault. 429 means your own quota is spent,
++# so retrying makes it worse; 400 and 401 fail identically twice.
++RETRYABLE_STATUSES = {500, 502, 503, 504}
++RATE_LIMITED_STATUS = 429
++RETRY_DELAY_SECONDS = 1.5
++
++_CACHE: dict[str, tuple[float, dict]] = {}
++CACHE_TTL_SECONDS = int(os.getenv("GEMINI_CACHE_TTL", "900"))
++CACHE_MAX_ENTRIES = 200
++
++
++def is_enabled() -> bool:
++    return bool(GEMINI_API_KEY or GROQ_API_KEY)
++
++
++_MATCH_PROPERTIES = {
++    "id": {"type": "integer"},
++    "relevance": {"type": "string", "enum": ["high", "medium", "low"]},
++    "reason": {"type": "string"},
++}
++
++_RESPONSE_SCHEMA = {
++    "type": "object",
++    "properties": {
++        "matches": {
++            "type": "array",
++            "items": {
++                "type": "object",
++                "properties": _MATCH_PROPERTIES,
++                "required": ["id", "relevance", "reason"],
++            },
++        }
++    },
++    "required": ["matches"],
++}
++
++# Groq's strict mode additionally requires additionalProperties: false.
++_STRICT_SCHEMA = {
++    "type": "object",
++    "properties": {
++        "matches": {
++            "type": "array",
++            "items": {
++                "type": "object",
++                "properties": _MATCH_PROPERTIES,
++                "required": ["id", "relevance", "reason"],
++                "additionalProperties": False,
++            },
++        }
++    },
++    "required": ["matches"],
++    "additionalProperties": False,
++}
++
++
++def _candidate_line(c: dict) -> str:
++    description = (c.get("description") or "").strip().replace("\n", " ")
++    if len(description) > 300:
++        description = description[:300] + "..."
++    parts = [f'- id {c["id"]}: "{c["title"]}"']
++    if c.get("category"):
++        parts.append(f'[category: {c["category"]}]')
++    if description:
++        parts.append(f"| {description}")
++    return " ".join(parts)
++
++
++def _build_prompt(query_title: str, query_description: Optional[str], candidates: List[dict]) -> str:
++    listing = "\n".join(_candidate_line(c) for c in candidates)
++    return (
++        "You are helping a Filipino community platform decide whether a newly written "
++        "problem has already been asked before. Posts may be in English, Tagalog, or a "
++        "mix of both. Treat different wording for the same real-world issue as a match "
++        '(for example "street light is out", "broken lamppost", and "walang ilaw sa kanto" '
++        "all describe the same problem).\n\n"
++        f"NEW PROBLEM\nTitle: {query_title}\nDescription: {query_description or '(none)'}\n\n"
++        f"EXISTING PROBLEMS\n{listing}\n\n"
++        "Return the existing problems that describe the same underlying issue as the new "
++        "one, or that are closely related to it. Be generous across languages and wording: "
++        "a Tagalog post and an English post about the same real-world situation ARE a match. "
++        "Use 'high' when it is clearly the same issue, 'medium' when it is the same kind of "
++        "issue elsewhere, 'low' when it is only loosely related. Leave genuinely unrelated "
++        "problems out of your answer entirely. Give each one a reason of at most 15 words, "
++        "written for the person who posted. Only use ids from the list above. "
++        'Reply with JSON only, in the form {"matches": [...]}. '
++        'If nothing is related, reply {"matches": []}.'
++    )
++
++
++def _cache_key(query_title: str, query_description: Optional[str], candidates: List[dict]) -> str:
++    """Includes candidate ids, so the answer expires when a new problem is posted."""
++    ids = ",".join(str(c["id"]) for c in sorted(candidates, key=lambda c: c["id"]))
++    return f"{query_title}|{query_description or ''}|{ids}"
++
++
++def _gemini_body(model: str, prompt: str) -> dict:
++    return {
++        "model": model,
++        "input": prompt,
++        "response_format": {
++            "type": "text",
++            "mime_type": "application/json",
++            "schema": _RESPONSE_SCHEMA,
++        },
++    }
++
++
++def _gemini_headers() -> dict:
++    return {"content-type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
++
++
++def _gemini_text(body: dict) -> Optional[str]:
++    for step in body.get("steps", []):
++        for part in step.get("content", []):
++            if part.get("type") == "text" and part.get("text"):
++                return part["text"]
++    return None
++
++
++def _groq_body(model: str, prompt: str) -> dict:
++    return {
++        "model": model,
++        "messages": [{"role": "user", "content": prompt}],
++        "temperature": 0,
++        "response_format": {
++            "type": "json_schema",
++            "json_schema": {
++                "name": "related_problems",
++                "strict": True,
++                "schema": _STRICT_SCHEMA,
++            },
++        },
++    }
++
++
++def _groq_headers() -> dict:
++    return {"content-type": "application/json", "authorization": f"Bearer {GROQ_API_KEY}"}
++
++
++def _groq_text(body: dict) -> Optional[str]:
++    for choice in body.get("choices", []):
++        content = (choice.get("message") or {}).get("content")
++        if content:
++            return content
++    return None
++
++
++class _Provider:
++    def __init__(self, name: str, url: str, models: List[str],
++                 build_body: Callable[[str, str], dict],
++                 build_headers: Callable[[], dict],
++                 extract: Callable[[dict], Optional[str]]):
++        self.name = name
++        self.url = url
++        self.models = models
++        self.build_body = build_body
++        self.build_headers = build_headers
++        self.extract = extract
++
++
++def _active_providers() -> List[_Provider]:
++    providers = []
++    if GEMINI_API_KEY and MODEL_CHAIN:
++        providers.append(_Provider(
++            "gemini", GEMINI_API_URL, MODEL_CHAIN,
++            _gemini_body, _gemini_headers, _gemini_text,
++        ))
++    if GROQ_API_KEY and GROQ_MODEL_CHAIN:
++        providers.append(_Provider(
++            "groq", GROQ_API_URL, GROQ_MODEL_CHAIN,
++            _groq_body, _groq_headers, _groq_text,
++        ))
++    return providers
++
++
++def _ask_provider(provider: _Provider, prompt: str, deadline: float) -> Tuple[Optional[str], Optional[int]]:
++    """Walk one provider's model chain. Returns (json_text, last_status)."""
++    last_status: Optional[int] = None
++    headers = provider.build_headers()
++
++    for index, model in enumerate(provider.models):
++        if time.monotonic() > deadline:
++            print(f"[AI] out of time before trying {provider.name}/{model}")
++            return None, last_status
++
++        body = provider.build_body(model, prompt)
++        response = None
++
++        for attempt in (1, 2):
++            remaining = max(1, int(deadline - time.monotonic()))
++            try:
++                response = requests.post(
++                    provider.url, json=body, headers=headers,
++                    timeout=min(TIMEOUT_SECONDS, remaining),
++                )
++            except requests.exceptions.Timeout:
++                print(f"[AI] {provider.name}/{model} timed out - moving on")
++                response = None
++                break
++            except requests.exceptions.RequestException as e:
++                print(f"[AI] {provider.name}/{model} could not be reached: {e}")
++                response = None
++                break
++
++            last_status = response.status_code
++
++            if response.status_code == RATE_LIMITED_STATUS:
++                print(f"[AI] {provider.name}/{model}: rate limited (429)")
++                break
++
++            if response.status_code not in RETRYABLE_STATUSES:
++                if response.status_code >= 400:
++                    print(f"[AI] {provider.name}/{model} failed "
++                          f"{response.status_code}: {response.text[:200]}")
++                break
++
++            print(f"[AI] {provider.name}/{model} returned {response.status_code} "
++                  f"(attempt {attempt}/2, server busy)")
++            if attempt == 1:
++                time.sleep(RETRY_DELAY_SECONDS)
++
++        if response is not None and response.status_code < 400:
++            try:
++                text = provider.extract(response.json())
++            except ValueError as e:
++                print(f"[AI] {provider.name}/{model} sent something that is not JSON: {e}")
++                text = None
++
++            if text:
++                if index > 0:
++                    print(f"[AI] {provider.name}/{model} answered "
++                          f"(model {index + 1} of {len(provider.models)})")
++                return text, last_status
++
++            print(f"[AI] {provider.name}/{model} answered with no usable text")
++
++    return None, last_status
++
++
++def rerank(query_title: str, query_description: Optional[str], candidates: List[dict]) -> Optional[dict]:
++    """Return {problem_id: {"relevance", "reason"}}.
++
++    None means the AI was unavailable; {} means it ran and found nothing.
++    """
++    if not is_enabled() or not candidates:
++        return None
++
++    key = _cache_key(query_title, query_description, candidates)
++    cached = _CACHE.get(key)
++    if cached and time.time() - cached[0] < CACHE_TTL_SECONDS:
++        print(f"[AI] cache hit - no API call, {len(cached[1])} related")
++        return cached[1]
++
++    prompt = _build_prompt(query_title, query_description, candidates[:MAX_CANDIDATES])
++
++    started = time.monotonic()
++    deadline = started + DEADLINE_SECONDS
++
++    text = None
++    used = None
++    last_status = None
++
++    providers = _active_providers()
++    for position, provider in enumerate(providers):
++        if position > 0:
++            print(f"[AI] {providers[position - 1].name} had nothing left - "
++                  f"falling back to {provider.name}")
++        text, last_status = _ask_provider(provider, prompt, deadline)
++        if text:
++            used = provider.name
++            break
++
++    elapsed = time.monotonic() - started
++
++    if not text:
++        if last_status == RATE_LIMITED_STATUS:
++            print(f"[AI] every model is rate limited ({elapsed:.1f}s). On a paid tier this "
++                  f"is usually the per-minute limit, or spent credit. Showing TF-IDF results.")
++        else:
++            print(f"[AI] no provider answered after {elapsed:.1f}s - showing TF-IDF results.")
++        return None
++
++    try:
++        parsed = json.loads(text)
++    except ValueError as e:
++        print(f"[AI] {used} returned text that is not valid JSON: {e} | {text[:200]}")
++        return None
++
++    valid_ids = {c["id"] for c in candidates}
++    ranked = {}
++    for m in parsed.get("matches", []) or []:
++        if not isinstance(m, dict):
++            continue
++        pid = m.get("id")
++        # Only ids we actually sent - the reply is data, never trusted.
++        if pid in valid_ids and m.get("relevance") in {"high", "medium", "low"}:
++            ranked[pid] = {
++                "relevance": m["relevance"],
++                "reason": str(m.get("reason", ""))[:300],
++            }
++
++    print(f"[AI] {used}: {len(ranked)} related of {len(candidates)} candidates in {elapsed:.1f}s")
++    if not ranked:
++        titles = ", ".join(f'#{c["id"]} "{c["title"][:50]}"' for c in candidates[:MAX_CANDIDATES])
++        print(f"[AI] nothing matched. query={query_title!r} | candidates were: {titles}")
++
++    # Cache successes only.
++    if len(_CACHE) >= CACHE_MAX_ENTRIES:
++        oldest = min(_CACHE, key=lambda k: _CACHE[k][0])
++        del _CACHE[oldest]
++    _CACHE[key] = (time.time(), ranked)
++
++    return ranked
+diff --git a/check_gemini.py b/check_gemini.py
+new file mode 100644
+index 0000000..b034341
+--- /dev/null
++++ b/check_gemini.py
+@@ -0,0 +1,110 @@
++"""Check which AI models actually answer right now.
++
++    python check_gemini.py
++
++One tiny real request per model. 200 = works, 429 = limit spent,
++404 = no such model for your key.
++"""
++import os
++import sys
++
++import requests
++from dotenv import load_dotenv
++
++load_dotenv()
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++from Services.gemini import (  # noqa: E402
++    GEMINI_API_URL,
++    GROQ_API_URL,
++    MODEL_CHAIN,
++    GROQ_MODEL_CHAIN,
++    _gemini_body,
++    _groq_body,
++)
++
++GEMINI_KEY = os.getenv("GEMINI_API_KEY")
++GROQ_KEY = os.getenv("GROQ_API_KEY")
++
++PROBE = 'Reply with this JSON exactly: {"matches": []}'
++
++
++def report(label: str, response) -> None:
++    code = response.status_code
++    if code == 200:
++        print(f"   {label:<30} 200 OK    <- usable right now")
++    elif code == 429:
++        print(f"   {label:<30} 429       limit spent (per-minute, per-day, or no credit)")
++    elif code == 404:
++        print(f"   {label:<30} 404       no such model for this key")
++    elif code in (401, 403):
++        print(f"   {label:<30} {code}       key rejected: {response.text[:120]}")
++    else:
++        print(f"   {label:<30} {code}       {response.text[:160]}")
++
++
++print("=" * 72)
++print("GEMINI")
++print("=" * 72)
++
++if not GEMINI_KEY:
++    print("   GEMINI_API_KEY is not set in .env - the AI layer is off entirely.")
++else:
++    print("\n   Models this key can see:")
++    try:
++        r = requests.get(
++            "https://generativelanguage.googleapis.com/v1beta/models",
++            headers={"x-goog-api-key": GEMINI_KEY},
++            timeout=20,
++        )
++        if r.status_code == 200:
++            names = [m.get("name", "").replace("models/", "") for m in r.json().get("models", [])]
++            for name in sorted(n for n in names if n):
++                print(f"      {name}")
++        else:
++            print(f"      could not list models: {r.status_code} {r.text[:200]}")
++    except requests.exceptions.RequestException as e:
++        print(f"      could not reach the API: {e}")
++
++    print("\n   Trying each model in your chain (one real request each):")
++    for model in MODEL_CHAIN:
++        try:
++            r = requests.post(
++                GEMINI_API_URL,
++                json=_gemini_body(model, PROBE),
++                headers={"content-type": "application/json", "x-goog-api-key": GEMINI_KEY},
++                timeout=30,
++            )
++        except requests.exceptions.RequestException as e:
++            print(f"   {model:<30} could not connect: {e}")
++            continue
++        report(model, r)
++
++print()
++print("=" * 72)
++print("GROQ (dormant fallback)")
++print("=" * 72)
++
++if not GROQ_KEY:
++    print("   GROQ_API_KEY is not set - the fallback is off, which is fine while")
++    print("   Gemini has credit. To arm it: get a free key at console.groq.com and")
++    print("   add GROQ_API_KEY=... to .env. Nothing else needs to change.")
++else:
++    for model in GROQ_MODEL_CHAIN:
++        try:
++            r = requests.post(
++                GROQ_API_URL,
++                json=_groq_body(model, PROBE),
++                headers={"content-type": "application/json",
++                         "authorization": f"Bearer {GROQ_KEY}"},
++                timeout=30,
++            )
++        except requests.exceptions.RequestException as e:
++            print(f"   {model:<30} could not connect: {e}")
++            continue
++        report(model, r)
++
++print()
++print("Any model that printed 200 is working. To change the order the app tries")
++print("them in, put the good ones first in .env:")
++print("   GEMINI_MODELS=gemini-3.8-flash,gemini-3.6-flash")
+diff --git a/frontend/src/components/ProblemDetail.jsx b/frontend/src/components/ProblemDetail.jsx
+new file mode 100644
+index 0000000..596849f
+--- /dev/null
++++ b/frontend/src/components/ProblemDetail.jsx
+@@ -0,0 +1,268 @@
++import { useCallback, useEffect, useRef, useState } from "react";
++import { Link, useParams } from "react-router-dom";
++import { apiGet, apiPost } from "../api";
++import { useAuth } from "../auth-context";
++import Layout, { TierBadge } from "./Layout";
++import SolutionCard from "./SolutionCard";
++import SimilarProblems from "./SimilarProblems";
++
++function ProblemDetail() {
++    const { id } = useParams()
++    const { user } = useAuth()
++
++    const [problem, setProblem] = useState(null)
++    const [solutions, setSolutions] = useState([])
++    const [loading, setLoading] = useState(true)
++    const [error, setError] = useState("")
++
++    const [text, setText] = useState("")
++    const [submitting, setSubmitting] = useState(false)
++    const [submitError, setSubmitError] = useState("")
++    const [matches, setMatches] = useState([])
++    const [matchesAiUsed, setMatchesAiUsed] = useState(false)
++    const [checkingAi, setCheckingAi] = useState(false)
++    const [aiFailed, setAiFailed] = useState(false)
++
++    // StrictMode mounts twice in dev; without this the AI is asked twice.
++    const aiAskedFor = useRef(null)
++
++    const askAI = useCallback(async () => {
++        try {
++            setAiFailed(false)
++            setCheckingAi(true)
++            const data = await apiGet(`/problems/${id}/similar/ai`)
++            setMatches(data.matches || [])
++            setMatchesAiUsed(Boolean(data.ai_used))
++            if (!data.ai_used) setAiFailed(true)
++        } catch {
++            setAiFailed(true)
++        } finally {
++            setCheckingAi(false)
++        }
++    }, [id])
++
++    // Word overlap renders first so the page is never blank, then the AI
++    // answer replaces it.
++    useEffect(() => {
++        let cancelled = false
++        setMatches([])
++        setMatchesAiUsed(false)
++        setAiFailed(false)
++
++        apiGet(`/problems/${id}/similar`)
++            .then((data) => {
++                if (cancelled) return
++                setMatches(data.matches || [])
++                setMatchesAiUsed(Boolean(data.ai_used))
++                if (data.ai_used) return
++                if (aiAskedFor.current === id) return
++                aiAskedFor.current = id
++                return askAI()
++            })
++            .catch(() => { if (!cancelled) setMatches([]) })
++        return () => { cancelled = true }
++    }, [id, askAI])
++
++    // Promise.all so both requests run at the same time.
++    const fetchAll = useCallback(
++        () => Promise.all([apiGet(`/problems/${id}`), apiGet(`/solutions/problem/${id}`)]),
++        [id]
++    )
++
++    // Refetch after any action, so the page shows what the server says.
++    const load = useCallback(async () => {
++        const [p, s] = await fetchAll()
++        setProblem(p)
++        setSolutions(s)
++    }, [fetchAll])
++
++    useEffect(() => {
++        let cancelled = false
++        fetchAll()
++            .then(([p, s]) => { if (!cancelled) { setProblem(p); setSolutions(s) } })
++            .catch((e) => { if (!cancelled) setError(e.message || "Could not load this problem") })
++            .finally(() => { if (!cancelled) setLoading(false) })
++        return () => { cancelled = true }
++    }, [fetchAll])
++
++    async function submitSolution(e) {
++        e.preventDefault()
++        try {
++            setSubmitError("")
++            setSubmitting(true)
++            await apiPost("/solutions", { problem_id: Number(id), solution_text: text })
++            setText("")
++            await load()
++        } catch (e) {
++            setSubmitError(e.message || "Could not submit your solution")
++        } finally {
++            setSubmitting(false)
++        }
++    }
++
++    if (loading) {
++        return <Layout><div className="h-40 animate-pulse rounded-xl bg-white" /></Layout>
++    }
++
++    if (error || !problem) {
++        return (
++            <Layout>
++                <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
++                    {error || "Problem not found."}
++                </p>
++                <Link to="/" className="mt-4 inline-block text-sm font-medium text-brand-700 hover:underline">
++                    Back to the feed
++                </Link>
++            </Layout>
++        )
++    }
++
++    return (
++        <Layout>
++            <Link to="/" className="text-sm font-medium text-slate-500 hover:text-slate-900">
++                ← Back to the feed
++            </Link>
++
++            <article className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
++                <div className="flex items-start justify-between gap-3">
++                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">{problem.title}</h1>
++                    <span
++                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
++                            problem.status === "resolved"
++                                ? "bg-emerald-100 text-emerald-700"
++                                : "bg-amber-100 text-amber-700"
++                        }`}
++                    >
++                        {problem.status === "resolved" ? "Resolved" : "Open"}
++                    </span>
++                </div>
++
++                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
++                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
++                        {problem.category}
++                    </span>
++                    {problem.author && (
++                        <>
++                            <span>posted by {problem.author.name}</span>
++                            <TierBadge tier={problem.author.tier} />
++                        </>
++                    )}
++                </div>
++
++                {problem.description && (
++                    <p className="mt-4 whitespace-pre-wrap text-slate-700">{problem.description}</p>
++                )}
++            </article>
++
++            <div className="mt-6">
++                <SimilarProblems
++                    matches={matches}
++                    aiUsed={matchesAiUsed}
++                    title="Related problems"
++                    hint={
++                        matchesAiUsed
++                            ? "Word overlap gathered the candidates; the AI judged which describe the same issue, including across English and Tagalog."
++                            : "Matched by comparing the wording of every problem on the platform."
++                    }
++                />
++
++                {checkingAi && (
++                    <p className="mt-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50
++                                  px-4 py-2 text-sm text-purple-800">
++                        <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
++                        Checking with AI for problems worded differently...
++                    </p>
++                )}
++
++                {!checkingAi && matchesAiUsed && matches.length === 0 && (
++                    <p className="mt-3 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500">
++                        The AI read every other problem on the platform and found none describing this issue.
++                    </p>
++                )}
++
++                {!checkingAi && aiFailed && (
++                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg
++                                    border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
++                        <span>
++                            {matches.length > 0
++                                ? "The AI layer could not be reached, so these are word matches only."
++                                : "The AI layer could not be reached, and word matching found nothing."}
++                        </span>
++                        <button
++                            type="button"
++                            onClick={askAI}
++                            className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs
++                                       font-medium text-amber-900 hover:bg-amber-100"
++                        >
++                            Try again
++                        </button>
++                    </div>
++                )}
++            </div>
++
++            <section className="mt-8">
++                <h2 className="text-lg font-semibold text-slate-900">
++                    {solutions.length} {solutions.length === 1 ? "solution" : "solutions"}
++                </h2>
++
++                <div className="mt-4 space-y-3">
++                    {solutions.length === 0 && (
++                        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
++                            No solutions yet. If you know the answer, share it below.
++                        </p>
++                    )}
++                    {solutions.map((s) => (
++                        <SolutionCard
++                            key={s.id}
++                            solution={s}
++                            problem={problem}
++                            currentUser={user}
++                            onChanged={load}
++                        />
++                    ))}
++                </div>
++            </section>
++
++            <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
++                <h2 className="text-lg font-semibold text-slate-900">Your solution</h2>
++
++                {!user ? (
++                    <p className="mt-3 text-sm text-slate-600">
++                        <Link to="/login" className="font-medium text-brand-700 hover:underline">Sign in</Link>
++                        {" "}to answer this problem.
++                    </p>
++                ) : !user.is_verified ? (
++                    <p className="mt-3 text-sm text-amber-800">
++                        Verify your email before posting a solution — check your inbox for the link.
++                    </p>
++                ) : (
++                    <form onSubmit={submitSolution} className="mt-3">
++                        <textarea
++                            rows={4}
++                            value={text}
++                            onChange={(e) => setText(e.target.value)}
++                            placeholder="Explain how to solve this, step by step."
++                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none
++                                       focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
++                        />
++                        {submitError && (
++                            <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                                {submitError}
++                            </p>
++                        )}
++                        <button
++                            type="submit"
++                            disabled={submitting || !text.trim()}
++                            className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white
++                                       hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
++                        >
++                            {submitting ? "Posting..." : "Post solution"}
++                        </button>
++                    </form>
++                )}
++            </section>
++        </Layout>
++    )
++}
++
++export default ProblemDetail
+diff --git a/routers/matching.py b/routers/matching.py
+new file mode 100644
+index 0000000..750b1b3
+--- /dev/null
++++ b/routers/matching.py
+@@ -0,0 +1,145 @@
++import os
++
++from fastapi import APIRouter, Depends, HTTPException, status
++from sqlalchemy.orm import Session
++from typing import Optional
++
++from Models.database import get_db
++from Models import problem, solution
++from Schemas.matching import MatchRequest, MatchResponse, MatchedProblem
++from Services.matching import find_similar, build_candidate_pool, SIMILARITY_THRESHOLD, MAX_MATCHES
++from Services import gemini
++
++router = APIRouter()
++
++_RELEVANCE_ORDER = {"high": 3, "medium": 2, "low": 1, "none": 0}
++
++# Off by default to keep the page fast: the frontend loads this endpoint for an
++# instant word-overlap answer, then calls the /ai endpoint in the background.
++AUTO_AI_ON_DETAIL = os.getenv("GEMINI_AUTO_ON_DETAIL", "false").lower() in {"1", "true", "yes"}
++
++
++def _fetch_candidates(db: Session, exclude_id: Optional[int]):
++    query = db.query(problem.Problem)
++    if exclude_id is not None:
++        query = query.filter(problem.Problem.id != exclude_id)
++    rows = query.all()
++    candidates = [
++        {"id": p.id, "title": p.title, "description": p.description, "category": p.category}
++        for p in rows
++    ]
++    return rows, candidates
++
++
++def _accepted_solutions(db: Session, problem_ids):
++    """One query for every accepted solution, not one per match."""
++    if not problem_ids:
++        return {}
++    rows = (
++        db.query(solution.Solution)
++        .filter(
++            solution.Solution.problem_id.in_(problem_ids),
++            solution.Solution.status == "accepted",
++        )
++        .all()
++    )
++    return {s.problem_id: s for s in rows}
++
++
++def _build_matches(
++    query_title: str,
++    query_description: Optional[str],
++    db: Session,
++    exclude_id: Optional[int] = None,
++    use_ai: bool = False,
++):
++    rows, candidates = _fetch_candidates(db, exclude_id)
++    if not candidates:
++        return [], False
++
++    by_id = {p.id: p for p in rows}
++
++    # Layer 1: TF-IDF. Always runs, and is the fallback if layer 2 fails.
++    tfidf_scores = dict(build_candidate_pool(query_title, query_description, candidates))
++
++    ai_ranked = None
++    if use_ai and gemini.is_enabled():
++        # The pool deliberately includes candidates scoring near zero - the
++        # paraphrases and Tagalog posts word-overlap cannot see.
++        pool = [c for c in candidates if c["id"] in tfidf_scores]
++        ai_ranked = gemini.rerank(query_title, query_description, pool)
++
++    # None = the AI could not be consulted. {} = it ran and found nothing,
++    # which is a real answer, not a reason to fall back.
++    if ai_ranked is not None:
++        chosen = [
++            (pid, tfidf_scores.get(pid, 0.0), info)
++            for pid, info in ai_ranked.items()
++        ]
++        chosen.sort(key=lambda t: (_RELEVANCE_ORDER.get(t[2]["relevance"], 0), t[1]), reverse=True)
++        chosen = chosen[:MAX_MATCHES]
++    else:
++        chosen = [
++            (pid, score, None)
++            for pid, score in sorted(tfidf_scores.items(), key=lambda kv: kv[1], reverse=True)
++            if score >= SIMILARITY_THRESHOLD
++        ][:MAX_MATCHES]
++
++    accepted = _accepted_solutions(db, [pid for pid, _, _ in chosen])
++
++    results = []
++    for pid, score, info in chosen:
++        p = by_id[pid]
++        sol = accepted.get(pid)
++        results.append(
++            MatchedProblem(
++                id=p.id,
++                title=p.title,
++                description=p.description,
++                category=p.category,
++                status=p.status,
++                score=round(score, 4),
++                accepted_solution=sol.solution_text if sol else None,
++                relevance=info["relevance"] if info else None,
++                reason=info["reason"] if info else None,
++            )
++        )
++    return results, ai_ranked is not None
++
++
++@router.post("/problems/match", response_model=MatchResponse)
++def match_before_posting(body: MatchRequest, db: Session = Depends(get_db)):
++    """TF-IDF only - this fires every 600ms while the user types."""
++    matches, ai_used = _build_matches(body.title, body.description, db, use_ai=False)
++    return MatchResponse(matches=matches, ai_used=ai_used)
++
++
++@router.post("/problems/match/ai", response_model=MatchResponse)
++def match_with_ai(body: MatchRequest, db: Session = Depends(get_db)):
++    """The same search with the AI layer, triggered by the user."""
++    matches, ai_used = _build_matches(body.title, body.description, db, use_ai=True)
++    return MatchResponse(matches=matches, ai_used=ai_used)
++
++
++@router.get("/problems/{problem_id}/similar", response_model=MatchResponse)
++def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
++    fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
++    if not fnd:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
++
++    matches, ai_used = _build_matches(
++        fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=AUTO_AI_ON_DETAIL
++    )
++    return MatchResponse(matches=matches, ai_used=ai_used)
++
++
++@router.get("/problems/{problem_id}/similar/ai", response_model=MatchResponse)
++def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
++    fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
++    if not fnd:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
++
++    matches, ai_used = _build_matches(
++        fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True
++    )
++    return MatchResponse(matches=matches, ai_used=ai_used)
+diff --git a/smoke_test.py b/smoke_test.py
+new file mode 100644
+index 0000000..554ec53
+--- /dev/null
++++ b/smoke_test.py
+@@ -0,0 +1,227 @@
++"""End-to-end smoke test for ComUniSolve.
++
++!! DROPS AND RECREATES EVERY TABLE. !! Point it at a throwaway database only:
++
++    set TEST_DATABASE_URL=postgresql+psycopg2://postgres:pw@localhost/comunisolve_test
++    python smoke_test.py
++"""
++import os
++import sys
++
++TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
++if not TEST_DATABASE_URL or "test" not in TEST_DATABASE_URL.lower():
++    sys.exit("Refusing to run: set TEST_DATABASE_URL to a throwaway database whose name contains 'test'.")
++
++os.environ["DATABASE_URL"] = TEST_DATABASE_URL
++for k, v in [("PASSWORD_PEPPER", "test-pepper"), ("SECRET_KEY", "test-secret"),
++             ("BREVO_API_KEY", "k"), ("SENDER_EMAIL", "a@b.c"),
++             ("FRONTEND_URL", "http://localhost:5173")]:
++    os.environ.setdefault(k, v)
++
++from fastapi.testclient import TestClient
++import routers.user as user_router
++user_router.send_verification_email = lambda *a, **k: None
++
++from Models.database import engine, Base, SessionLocal
++from Models import user, problem, solution, comment, rating, refresh_token
++
++Base.metadata.drop_all(bind=engine)
++Base.metadata.create_all(bind=engine)
++
++from main import app
++
++results = []
++
++def check(label, ok, evidence=""):
++    results.append(ok)
++    print(f"[{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {evidence}" if evidence else ""))
++
++def verified_client(name, email):
++    c = TestClient(app)
++    c.post("/register", json={"name": name, "email": email, "password": "password123"})
++    db = SessionLocal()
++    u = db.query(user.User).filter(user.User.email == email).first()
++    u.is_verified = True
++    db.commit()
++    uid = u.id
++    db.close()
++    c.post("/login", json={"email": email, "password": "password123"})
++    return c, uid
++
++
++print("=" * 70)
++print("COMUNISOLVE SMOKE TEST")
++print("=" * 70)
++
++asker, asker_id = verified_client("Maria Santos", "maria@example.com")
++helper, helper_id = verified_client("Ben Cruz", "ben@example.com")
++
++r = asker.post("/problems", json={"title": "Street light is out", "description": "Dark for weeks", "category": "Public"})
++check("Post a problem", r.status_code == 201)
++pid = r.json()["id"]
++
++r = asker.get(f"/problems/{pid}")
++body = r.json()
++check("Problem includes its author and a solution count",
++      r.status_code == 200 and body.get("author", {}).get("name") == "Maria Santos" and body.get("solution_count") == 0,
++      f"author={body.get('author')}, solution_count={body.get('solution_count')}")
++
++r = asker.get("/problems")
++check("Feed is ordered newest first", r.status_code == 200 and isinstance(r.json(), list))
++
++r = asker.get(f"/problems?user_id={asker_id}")
++check("Feed can be filtered to one user's problems",
++      r.status_code == 200 and len(r.json()) == 1 and r.json()[0]["id"] == pid,
++      f"count={len(r.json())}")
++
++r = helper.post("/solutions", json={"problem_id": pid, "solution_text": "Report it to the barangay office."})
++check("Another user can submit a solution", r.status_code == 201)
++sid = r.json()["id"]
++
++r = asker.get(f"/solutions/problem/{pid}")
++sol = r.json()[0]
++check("Solution list includes the author and their tier",
++      r.status_code == 200 and sol["author"]["name"] == "Ben Cruz" and "tier" in sol["author"],
++      f"author={sol['author']}")
++
++check("Author payload never leaks email",
++      "email" not in sol["author"],
++      f"keys={sorted(sol['author'].keys())}")
++
++r = asker.patch(f"/solutions/{sid}/accept")
++check("Problem owner can accept a solution",
++      r.status_code == 200 and r.json()["problem_status"] == "resolved",
++      f"{r.json()}")
++
++r = helper.patch(f"/solutions/{sid}/accept")
++check("A non-owner cannot accept", r.status_code == 403)
++
++r = asker.post(f"/solutions/{sid}/upvote")
++check("Upvote works and increments the counter",
++      r.status_code == 200 and r.json()["upvote_count"] == 1, f"{r.json()}")
++
++r = asker.post(f"/solutions/{sid}/upvote")
++check("The same user cannot upvote twice", r.status_code == 400)
++
++r = asker.post(f"/comment/{sid}", json={"content": "Thank you, this worked!", "parent_id": None})
++check("Comment can be posted", r.status_code == 200)
++
++r = asker.get(f"/solutions/{sid}/comments")
++check("Comments can be read back with their author",
++      r.status_code == 200 and len(r.json()) == 1 and r.json()[0]["author"]["name"] == "Maria Santos",
++      f"count={len(r.json())}")
++
++r = asker.post(f"/solutions/{sid}/rate", json={"score": 5, "feedback": "Very clear"})
++check("Problem owner can rate the solution", r.status_code == 200, f"status={r.status_code}")
++
++r = helper.get("/users/me")
++me = r.json()
++check("Helper earned reputation points for the accepted solution",
++      me["points"] > 0, f"points={me['points']}, tier={me['tier']}")
++
++r = asker.get(f"/solutions/problem/{pid}")
++check("Empty-but-valid problems still return a list, not 404",
++      asker.get("/solutions/problem/999999").status_code == 404 and r.status_code == 200)
++
++
++# --- verification gate -------------------------------------------------------
++unverified = TestClient(app)
++r = unverified.post("/register", json={"name": "Nena Lim", "email": "nena@example.com", "password": "password123"})
++check("Registration succeeds without verifying", r.status_code == 201)
++
++r = unverified.get("/users/me")
++check("An unverified account is authenticated but flagged unverified",
++      r.status_code == 200 and r.json()["is_verified"] is False,
++      f"is_verified={r.json().get('is_verified')}")
++
++r = unverified.post("/problems", json={"title": "Should be blocked", "description": "x", "category": "Public"})
++check("An unverified account cannot post a problem", r.status_code == 403, f"status={r.status_code}")
++
++r = unverified.post("/resend-verification")
++check("Resend is refused inside the cooldown (registration just sent one)",
++      r.status_code == 429, f"status={r.status_code}")
++
++# Age the token by two minutes so the cooldown has passed, without the test
++# having to sit and wait for it.
++from datetime import timedelta as _td
++db = SessionLocal()
++nena = db.query(user.User).filter(user.User.email == "nena@example.com").first()
++nena.verification_token_expires_at = nena.verification_token_expires_at - _td(minutes=2)
++db.commit(); db.close()
++
++r = unverified.post("/resend-verification")
++check("Resend works once the cooldown has passed", r.status_code == 200, f"{r.json()}")
++
++r = unverified.get("/users/me")
++check("/users/me exposes the token expiry so the UI can show a countdown",
++      "verification_expires_at" in r.json(), f"keys={sorted(r.json().keys())}")
++
++r = asker.post("/resend-verification")
++check("An already-verified account cannot resend", r.status_code == 400, f"status={r.status_code}")
++
++
++# --- solution matching -------------------------------------------------------
++asker.post("/problems", json={
++    "title": "Barangay streetlight not working near the basketball court",
++    "description": "Another dark corner at night. Who do we report a broken street light to?",
++    "category": "Public"})
++
++r = asker.post("/problems/match", json={
++    "title": "Our street light is broken",
++    "description": "The lamp outside our house has been dark for a month. Who do we report it to?"})
++ms = r.json()["matches"]
++check("Matching finds the related street-light problems",
++      r.status_code == 200 and len(ms) >= 2,
++      f"{[(m['score'], m['title'][:40]) for m in ms]}")
++
++check("Matches are ordered by score, highest first",
++      all(ms[i]["score"] >= ms[i + 1]["score"] for i in range(len(ms) - 1)),
++      f"scores={[m['score'] for m in ms]}")
++
++check("A solved match carries its accepted solution for reuse",
++      any(m["accepted_solution"] for m in ms),
++      f"with_solution={[bool(m['accepted_solution']) for m in ms]}")
++
++r = asker.post("/problems/match", json={
++    "title": "Where can I buy a second hand bicycle",
++    "description": "Any shops nearby selling used bikes for a student?"})
++check("An unrelated problem matches nothing (threshold rejects noise)",
++      r.json()["matches"] == [], f"{r.json()['matches']}")
++
++r = asker.get(f"/problems/{pid}/similar")
++check("A problem's own page can list related problems, excluding itself",
++      r.status_code == 200 and all(m["id"] != pid for m in r.json()["matches"]),
++      f"ids={[m['id'] for m in r.json()['matches']]}")
++
++# --- the AI layer degrades safely -------------------------------------------
++# Forced off, so these pass whether or not real API keys are present.
++from Services import gemini as _gemini
++
++_saved_keys = (_gemini.GEMINI_API_KEY, _gemini.GROQ_API_KEY)
++_gemini.GEMINI_API_KEY = None
++_gemini.GROQ_API_KEY = None
++
++check("The AI layer reports itself disabled when no provider has a key",
++      _gemini.is_enabled() is False, f"is_enabled={_gemini.is_enabled()}")
++
++check("No provider is attempted when no key is configured",
++      _gemini._active_providers() == [], f"{_gemini._active_providers()}")
++
++r = asker.post("/problems/match/ai", json={
++    "title": "Our street light is broken",
++    "description": "The lamp outside our house has been dark for a month."})
++body = r.json()
++check("The AI endpoint still returns TF-IDF results when no AI is available",
++      r.status_code == 200 and len(body["matches"]) >= 1 and body["ai_used"] is False,
++      f"ai_used={body['ai_used']}, matches={len(body['matches'])}")
++
++check("Results are honest about which layers ran",
++      all(m["reason"] is None for m in body["matches"]),
++      "no AI reason is invented when the AI did not run")
++
++_gemini.GEMINI_API_KEY, _gemini.GROQ_API_KEY = _saved_keys
++
++print("=" * 70)
++print(f"{sum(results)}/{len(results)} checks passed")
++print("=" * 70)
++sys.exit(0 if all(results) else 1)
+-- 
+2.43.0
+

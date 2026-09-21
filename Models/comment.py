@@ -4,8 +4,9 @@ from sqlalchemy import (
     Text, 
     func,
     DateTime)
-from sqlalchemy.orm import mapped_column,Mapped
+from sqlalchemy.orm import mapped_column, Mapped, relationship
 from Models.database import Base
+from Models.user import User  # noqa: F401  - see the note in Models/problem.py
 
 class Comment(Base):
     __tablename__ = "comments"
@@ -17,3 +18,5 @@ class Comment(Base):
     content: Mapped[str] = mapped_column(Text,nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    author = relationship("User", lazy="joined")

@@ -51,7 +51,19 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
-    return db.query(solution.Solution).filter(solution.Solution.problem_id == problem_id).all()
+    # Accepted answer first, then most upvoted, then newest. Reputation
+    # deliberately does not affect this order - that was considered and
+    # rejected, to avoid burying good answers from new contributors.
+    return (
+        db.query(solution.Solution)
+        .filter(solution.Solution.problem_id == problem_id)
+        .order_by(
+            (solution.Solution.status == "accepted").desc(),
+            solution.Solution.upvote_count.desc(),
+            solution.Solution.created_at.desc(),
+        )
+        .all()
+    )
 
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
 def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):

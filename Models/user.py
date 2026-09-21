@@ -7,6 +7,7 @@ from sqlalchemy import (
     func,)
 from sqlalchemy.orm import Mapped, mapped_column
 from Models.database import Base
+from Services.reputation import get_tier
 from typing import Optional
 
 class User(Base):
@@ -26,5 +27,11 @@ class User(Base):
     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default= func.now(), onupdate=func.now())
     
     __table_args__ = (CheckConstraint(role.in_(['admin', 'client']), name="user_role"),)
+
+    @property
+    def tier(self) -> str:
+        """Title derived from points. Computed, never stored, so it cannot
+        drift out of sync with the points column it describes."""
+        return get_tier(self.points)
     
     

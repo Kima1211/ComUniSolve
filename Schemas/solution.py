@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
+from typing import Optional
+from Schemas.author import AuthorOut
 
 class SolutionCreate(BaseModel):
     problem_id:  int
@@ -14,6 +16,9 @@ class SolutionResponse(BaseModel):
     upvote_count: int
     created_at: datetime
     updated_at: datetime
+    user_id: int
+    problem_id: int
+    author: Optional[AuthorOut] = None
 
 class  SolutionAccept(BaseModel):
     status:  str

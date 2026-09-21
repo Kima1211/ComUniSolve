@@ -87,6 +87,9 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
         "is_verified": current_user.is_verified,
         "points": current_user.points,
         "tier": get_tier(current_user.points),
+        # Lets the verify screen show a countdown on the resend button instead
+        # of letting the user click it and receive a 429.
+        "verification_expires_at": current_user.verification_token_expires_at,
     }
 
 @router.delete("/users/{user_id}")

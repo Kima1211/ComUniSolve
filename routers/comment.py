@@ -7,6 +7,20 @@ from Schemas.comment import CommentIn,CommentResponse
 
 router = APIRouter()
 
+@router.get("/solutions/{solution_id}/comments", response_model=list[CommentResponse])
+def get_comments(solution_id: int, db: Session = Depends(get_db)):
+    """Comments on one solution, oldest first so a thread reads top to bottom."""
+    fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
+    if not fnd_solution:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+
+    return (
+        db.query(comment.Comment)
+        .filter(comment.Comment.solution_id == solution_id)
+        .order_by(comment.Comment.created_at.asc())
+        .all()
+    )
+
 @router.post("/comment/{solution_id}", response_model=CommentResponse)
 def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()

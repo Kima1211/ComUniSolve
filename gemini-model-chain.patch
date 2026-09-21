@@ -1,0 +1,97 @@
+diff --git a/Services/gemini.py b/Services/gemini.py
+index 53401a9..e94832e 100644
+--- a/Services/gemini.py
++++ b/Services/gemini.py
+@@ -29,20 +29,38 @@ from dotenv import load_dotenv
+ load_dotenv()
+ 
+ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")          # optional by design
+-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+ GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+ 
++# Free-tier limits are counted PER MODEL - 20 requests per day each. So a list
++# of models is a list of separate daily budgets, and walking down it when one
++# is exhausted is simply using the allowance you already have.
++#
++# Ordered cheapest-and-least-contended first: the lite model has double the
++# per-minute allowance (10 rather than 5), and older models are less busy than
++# whatever launched most recently.
++DEFAULT_MODEL_CHAIN = [
++    "gemini-2.5-flash-lite",
++    "gemini-2.5-flash",
++    "gemini-3.6-flash",
++    "gemini-3.8-flash",
++]
++
++_configured = os.getenv("GEMINI_MODELS", "").strip()
++MODEL_CHAIN = (
++    [m.strip() for m in _configured.split(",") if m.strip()]
++    if _configured
++    else DEFAULT_MODEL_CHAIN
++)
++
++# Kept for anything still reading it, and so a single-model override works.
++GEMINI_MODEL = os.getenv("GEMINI_MODEL", MODEL_CHAIN[0])
++
+ # 8 seconds was too tight in practice: a re-rank of 20 candidates has real
+ # generation work to do, and the first call after an idle period is slower
+ # still. Tunable from .env without touching code.
+ TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT", "25"))
+ MAX_CANDIDATES = 20
+ 
+-# A second model to try when the first is overloaded. Google returns 503
+-# "experiencing high demand" on popular models at busy times - it says nothing
+-# about your code, and a different model is usually free.
+-GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
+-
+ # Statuses worth trying again: the SERVER is busy or briefly broken.
+ #
+ # 429 is deliberately NOT in this set. A 429 means the rate limit on YOUR key
+@@ -174,12 +192,13 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
+     started = time.monotonic()
+     response = None
+ 
+-    # Try the main model twice, then the fallback model twice. A 503 comes back
+-    # in well under a second, so retrying costs almost nothing - unlike a
+-    # timeout, which is already slow and is never retried.
+-    models = [GEMINI_MODEL] + ([GEMINI_FALLBACK_MODEL] if GEMINI_FALLBACK_MODEL != GEMINI_MODEL else [])
++    # Walk the chain: each model has its own daily allowance, so an exhausted
++    # one is a reason to move on rather than to give up. A 503 is retried once
++    # per model because it comes back in well under a second; a 429 is not,
++    # because retrying spends a budget that has already run out.
++    models = MODEL_CHAIN
+ 
+-    for model in models:
++    for index, model in enumerate(models):
+         payload["model"] = model
+         for attempt in (1, 2):
+             try:
+@@ -211,9 +230,12 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
+                 time.sleep(RETRY_DELAY_SECONDS)
+ 
+         if response is not None and response.status_code < 400:
++            if index > 0:
++                print(f"[GEMINI] {model} answered (model {index + 1} of {len(models)})")
+             break
+-        if len(models) > 1 and model == models[0]:
+-            print(f"[GEMINI] trying {GEMINI_FALLBACK_MODEL} instead")
++
++        if index < len(models) - 1:
++            print(f"[GEMINI] trying {models[index + 1]} next")
+ 
+     elapsed = time.monotonic() - started
+ 
+@@ -223,9 +245,10 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
+     if response.status_code >= 400:
+         if response.status_code == RATE_LIMITED_STATUS:
+             print(
+-                f"[GEMINI] rate limit reached on every model after {elapsed:.1f}s. This is YOUR "
+-                f"key's quota, not Google being busy. Per-minute limits clear within a minute; "
+-                f"per-day limits clear tomorrow. Check yours in AI Studio. Showing TF-IDF results."
++                f"[GEMINI] all {len(models)} models rate-limited after {elapsed:.1f}s. This is "
++                f"YOUR key's quota, not Google being busy. The free tier allows 5 requests per "
++                f"minute and 20 per day PER MODEL - a per-minute limit clears in a minute, a "
++                f"daily one tomorrow. Showing TF-IDF results."
+             )
+         elif response.status_code in RETRYABLE_STATUSES:
+             print(

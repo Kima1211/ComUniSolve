@@ -1,9 +1,11 @@
 import ProblemFeed from './ProblemFeed'
-import AuthPanel from './AuthPanel'
+import Layout from './Layout'
 
 function Home() {
     return (
-        <><ProblemFeed/><AuthPanel/></>
+        <Layout>
+            <ProblemFeed />
+        </Layout>
     )
 }
 

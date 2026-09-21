@@ -4,10 +4,49 @@ from Models.database import get_db
 import hashlib
 from Models.refresh_token import RefreshToken
 from datetime import datetime, timezone
-from Security.utils import issue_auth_cookie, revoke_refresh_token, clear_auth_cookies
+from datetime import timedelta
+from Security.utils import (
+    issue_auth_cookie,
+    revoke_refresh_token,
+    clear_auth_cookies,
+    issue_verification_token,
+    get_current_user,
+)
 from Models.user import User
+from Services.email import send_verification_email
 
 router = APIRouter()
+
+# A verification token lasts 24 hours, so "issued at" is expires_at minus 24h.
+# Refusing a resend within this window stops the button being used to spam
+# someone's inbox - or to burn through the free email quota in one afternoon.
+RESEND_COOLDOWN = timedelta(seconds=60)
+
+
+@router.post("/resend-verification")
+def resend_verification(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account is already verified",
+        )
+
+    expires_at = current_user.verification_token_expires_at
+    if expires_at is not None:
+        issued_at = expires_at - timedelta(hours=24)
+        if datetime.now(timezone.utc) - issued_at < RESEND_COOLDOWN:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Please wait a minute before requesting another email",
+            )
+
+    # Issuing a new token overwrites the old one, so any previously emailed
+    # link stops working from this moment. That is the intended behaviour -
+    # only the most recent link should ever be valid.
+    token = issue_verification_token(current_user, db)
+    send_verification_email(current_user.email, current_user.name, token)
+
+    return {"message": f"Verification email sent to {current_user.email}"}
 
 @router.post("/refresh")
 def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):

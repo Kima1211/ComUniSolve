@@ -7,9 +7,10 @@ from sqlalchemy import (
     Text,
     func,
     UniqueConstraint)
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 from Models.database import Base
+from Models.user import User  # noqa: F401  - see the note in Models/problem.py
 
 class Solution(Base):
     __tablename__ = "solutions"
@@ -22,6 +23,11 @@ class Solution(Base):
     upvote_count: Mapped[int] = mapped_column(Integer, default=0,nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime,server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime,server_default=func.now(), onupdate=func.now())
+
+    # A relationship adds no column and needs no migration - it just tells
+    # SQLAlchemy how to follow the user_id foreign key to the User row, so
+    # response schemas can include the author.
+    author = relationship("User", lazy="joined")
 
     __table_args__ = (CheckConstraint(status.in_(["pending", "accepted"]), name="valid_solution_status"),)
     

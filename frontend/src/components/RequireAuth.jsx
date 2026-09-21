@@ -11,28 +11,33 @@ import { useAuth } from "../auth-context";
  * the same check into each component.
  */
 function RequireAuth({ children, adminOnly = false }) {
-  const { user, loading } = useAuth();
-  const location = useLocation();
+    const { user, loading } = useAuth();
+    const location = useLocation();
 
-  // Critical: while the first /users/me call is still in flight, user is null
-  // but that does NOT mean logged out - it means "not known yet". Redirecting
-  // here would bounce a signed-in user to the login page on every refresh.
-  if (loading) {
-    return <p>Loading...</p>;
-  }
+    // Critical: while the first /users/me call is still in flight, user is null
+    // but that does NOT mean logged out - it means "not known yet". Redirecting
+    // here would bounce a signed-in user to the login page on every refresh.
+    if (loading) {
+        return <p className="p-8 text-sm text-slate-500">Loading...</p>;
+    }
 
-  if (!user) {
-    // replace: swap this entry in the history instead of adding one, so the
-    // back button does not send them straight back to the blocked page.
-    // state.from lets the login page send them where they were going.
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  }
+    if (!user) {
+        // replace: swap this entry in the history instead of adding one, so the
+        // back button does not send them straight back to the blocked page.
+        // state.from lets the login page send them where they were going.
+        return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    }
 
-  if (adminOnly && user.role !== "admin") {
-    return <p>You do not have permission to view this page.</p>;
-  }
+    // An unverified account is authenticated but not yet allowed in.
+    if (!user.is_verified) {
+        return <Navigate to="/verify-email" replace />;
+    }
 
-  return children;
+    if (adminOnly && user.role !== "admin") {
+        return <p className="p-8 text-sm text-slate-600">You do not have permission to view this page.</p>;
+    }
+
+    return children;
 }
 
 export default RequireAuth;

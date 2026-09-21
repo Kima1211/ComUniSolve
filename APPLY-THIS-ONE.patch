@@ -1,0 +1,2551 @@
+diff --git a/Models/comment.py b/Models/comment.py
+index da484c5..7682484 100644
+--- a/Models/comment.py
++++ b/Models/comment.py
+@@ -4,7 +4,7 @@ from sqlalchemy import (
+     Text, 
+     func,
+     DateTime)
+-from sqlalchemy.orm import mapped_column,Mapped
++from sqlalchemy.orm import mapped_column, Mapped, relationship
+ from Models.database import Base
+ 
+ class Comment(Base):
+@@ -16,4 +16,6 @@ class Comment(Base):
+     parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("comments.id",ondelete="CASCADE"),nullable=True,index=True)
+     content: Mapped[str] = mapped_column(Text,nullable=False)
+     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+-    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+\ No newline at end of file
++    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
++
++    author = relationship("User", lazy="joined")
+\ No newline at end of file
+diff --git a/Models/problem.py b/Models/problem.py
+index 9db7d74..28fb62f 100644
+--- a/Models/problem.py
++++ b/Models/problem.py
+@@ -6,7 +6,7 @@ from sqlalchemy import (
+     CheckConstraint,
+     Text,
+     func,)
+-from sqlalchemy.orm import Mapped, mapped_column
++from sqlalchemy.orm import Mapped, mapped_column, relationship
+ from typing import Optional
+ from Models.database import Base
+ 
+@@ -22,4 +22,6 @@ class Problem(Base):
+     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+     
++    author = relationship("User", lazy="joined")
++
+     __table_args__ = (CheckConstraint(status.in_(["open", "resolved"]), name="valid_status"),)
+\ No newline at end of file
+diff --git a/Models/solution.py b/Models/solution.py
+index b12242a..376ccd5 100644
+--- a/Models/solution.py
++++ b/Models/solution.py
+@@ -7,7 +7,7 @@ from sqlalchemy import (
+     Text,
+     func,
+     UniqueConstraint)
+-from sqlalchemy.orm import Mapped, mapped_column
++from sqlalchemy.orm import Mapped, mapped_column, relationship
+ from typing import Optional
+ from Models.database import Base
+ 
+@@ -23,6 +23,11 @@ class Solution(Base):
+     created_at: Mapped[DateTime] = mapped_column(DateTime,server_default=func.now())
+     updated_at: Mapped[DateTime] = mapped_column(DateTime,server_default=func.now(), onupdate=func.now())
+ 
++    # A relationship adds no column and needs no migration - it just tells
++    # SQLAlchemy how to follow the user_id foreign key to the User row, so
++    # response schemas can include the author.
++    author = relationship("User", lazy="joined")
++
+     __table_args__ = (CheckConstraint(status.in_(["pending", "accepted"]), name="valid_solution_status"),)
+     
+ class Upvote(Base):
+diff --git a/Models/user.py b/Models/user.py
+index 1c782b7..2cb161a 100644
+--- a/Models/user.py
++++ b/Models/user.py
+@@ -7,6 +7,7 @@ from sqlalchemy import (
+     func,)
+ from sqlalchemy.orm import Mapped, mapped_column
+ from Models.database import Base
++from Services.reputation import get_tier
+ from typing import Optional
+ 
+ class User(Base):
+@@ -26,5 +27,11 @@ class User(Base):
+     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default= func.now(), onupdate=func.now())
+     
+     __table_args__ = (CheckConstraint(role.in_(['admin', 'client']), name="user_role"),)
++
++    @property
++    def tier(self) -> str:
++        """Title derived from points. Computed, never stored, so it cannot
++        drift out of sync with the points column it describes."""
++        return get_tier(self.points)
+     
+     
+\ No newline at end of file
+diff --git a/Schemas/author.py b/Schemas/author.py
+new file mode 100644
+index 0000000..8d93bf4
+--- /dev/null
++++ b/Schemas/author.py
+@@ -0,0 +1,16 @@
++from pydantic import BaseModel, ConfigDict
++
++
++class AuthorOut(BaseModel):
++    """The public face of a user, embedded in problems, solutions and comments.
++
++    Deliberately excludes email, role, is_active and verification state. A
++    response schema is what stops a private field leaking - not the intention
++    to be careful when writing the endpoint.
++    """
++    model_config = ConfigDict(from_attributes=True)
++
++    id: int
++    name: str
++    points: int
++    tier: str
+diff --git a/Schemas/comment.py b/Schemas/comment.py
+index c090e78..44f5c98 100644
+--- a/Schemas/comment.py
++++ b/Schemas/comment.py
+@@ -1,6 +1,7 @@
+ from pydantic import BaseModel, ConfigDict, Field
+ from datetime import datetime
+ from typing import Optional
++from Schemas.author import AuthorOut
+ 
+ class CommentResponse(BaseModel):
+     model_config = ConfigDict(from_attributes=True)
+@@ -12,6 +13,7 @@ class CommentResponse(BaseModel):
+     content: str
+     created_at: datetime
+     updated_at: datetime
++    author: Optional[AuthorOut] = None
+ 
+ class CommentIn(BaseModel):
+     content: str = Field(..., min_length=1, max_length=2000)
+diff --git a/Schemas/problem.py b/Schemas/problem.py
+index ea15b51..62c080f 100644
+--- a/Schemas/problem.py
++++ b/Schemas/problem.py
+@@ -1,6 +1,7 @@
+ from pydantic import BaseModel, ConfigDict, Field
+ from typing import Optional
+ from datetime import datetime
++from Schemas.author import AuthorOut
+ 
+ class ProblemCreate(BaseModel) :
+     title: str = Field(..., min_length=1, max_length=255)
+@@ -9,13 +10,16 @@ class ProblemCreate(BaseModel) :
+     
+ class ProblemResponse(BaseModel):
+     model_config = ConfigDict(from_attributes=True)
+-    
++
+     id: int
+     title: str
+     description: Optional[str] = None
+     category: str
+     status: str
+     created_at: datetime
++    user_id: int
++    author: Optional[AuthorOut] = None
++    solution_count: int = 0
+ 
+ class ProblemOverview(BaseModel):
+     
+diff --git a/Schemas/solution.py b/Schemas/solution.py
+index 69d9f0f..065bd81 100644
+--- a/Schemas/solution.py
++++ b/Schemas/solution.py
+@@ -1,5 +1,7 @@
+ from pydantic import BaseModel, ConfigDict, Field
+ from datetime import datetime
++from typing import Optional
++from Schemas.author import AuthorOut
+ 
+ class SolutionCreate(BaseModel):
+     problem_id:  int
+@@ -14,6 +16,9 @@ class SolutionResponse(BaseModel):
+     upvote_count: int
+     created_at: datetime
+     updated_at: datetime
++    user_id: int
++    problem_id: int
++    author: Optional[AuthorOut] = None
+ 
+ class  SolutionAccept(BaseModel):
+     status:  str
+diff --git a/frontend/package.json b/frontend/package.json
+index 4d8082a..73206f0 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -10,9 +10,11 @@
+     "preview": "vite preview"
+   },
+   "dependencies": {
++    "@tailwindcss/vite": "^4.3.3",
+     "react": "^19.2.8",
+     "react-dom": "^19.2.8",
+-    "react-router-dom": "^7.18.3"
++    "react-router-dom": "^7.18.3",
++    "tailwindcss": "^4.3.3"
+   },
+   "devDependencies": {
+     "@eslint/js": "^10.0.1",
+diff --git a/frontend/src/App.css b/frontend/src/App.css
+deleted file mode 100644
+index f90339d..0000000
+--- a/frontend/src/App.css
++++ /dev/null
+@@ -1,184 +0,0 @@
+-.counter {
+-  font-size: 16px;
+-  padding: 5px 10px;
+-  border-radius: 5px;
+-  color: var(--accent);
+-  background: var(--accent-bg);
+-  border: 2px solid transparent;
+-  transition: border-color 0.3s;
+-  margin-bottom: 24px;
+-
+-  &:hover {
+-    border-color: var(--accent-border);
+-  }
+-  &:focus-visible {
+-    outline: 2px solid var(--accent);
+-    outline-offset: 2px;
+-  }
+-}
+-
+-.hero {
+-  position: relative;
+-
+-  .base,
+-  .framework,
+-  .vite {
+-    inset-inline: 0;
+-    margin: 0 auto;
+-  }
+-
+-  .base {
+-    width: 170px;
+-    position: relative;
+-    z-index: 0;
+-  }
+-
+-  .framework,
+-  .vite {
+-    position: absolute;
+-  }
+-
+-  .framework {
+-    z-index: 1;
+-    top: 34px;
+-    height: 28px;
+-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
+-      scale(1.4);
+-  }
+-
+-  .vite {
+-    z-index: 0;
+-    top: 107px;
+-    height: 26px;
+-    width: auto;
+-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
+-      scale(0.8);
+-  }
+-}
+-
+-#center {
+-  display: flex;
+-  flex-direction: column;
+-  gap: 25px;
+-  place-content: center;
+-  place-items: center;
+-  flex-grow: 1;
+-
+-  @media (max-width: 1024px) {
+-    padding: 32px 20px 24px;
+-    gap: 18px;
+-  }
+-}
+-
+-#next-steps {
+-  display: flex;
+-  border-top: 1px solid var(--border);
+-  text-align: left;
+-
+-  & > div {
+-    flex: 1 1 0;
+-    padding: 32px;
+-    @media (max-width: 1024px) {
+-      padding: 24px 20px;
+-    }
+-  }
+-
+-  .icon {
+-    margin-bottom: 16px;
+-    width: 22px;
+-    height: 22px;
+-  }
+-
+-  @media (max-width: 1024px) {
+-    flex-direction: column;
+-    text-align: center;
+-  }
+-}
+-
+-#docs {
+-  border-right: 1px solid var(--border);
+-
+-  @media (max-width: 1024px) {
+-    border-right: none;
+-    border-bottom: 1px solid var(--border);
+-  }
+-}
+-
+-#next-steps ul {
+-  list-style: none;
+-  padding: 0;
+-  display: flex;
+-  gap: 8px;
+-  margin: 32px 0 0;
+-
+-  .logo {
+-    height: 18px;
+-  }
+-
+-  a {
+-    color: var(--text-h);
+-    font-size: 16px;
+-    border-radius: 6px;
+-    background: var(--social-bg);
+-    display: flex;
+-    padding: 6px 12px;
+-    align-items: center;
+-    gap: 8px;
+-    text-decoration: none;
+-    transition: box-shadow 0.3s;
+-
+-    &:hover {
+-      box-shadow: var(--shadow);
+-    }
+-    .button-icon {
+-      height: 18px;
+-      width: 18px;
+-    }
+-  }
+-
+-  @media (max-width: 1024px) {
+-    margin-top: 20px;
+-    flex-wrap: wrap;
+-    justify-content: center;
+-
+-    li {
+-      flex: 1 1 calc(50% - 8px);
+-    }
+-
+-    a {
+-      width: 100%;
+-      justify-content: center;
+-      box-sizing: border-box;
+-    }
+-  }
+-}
+-
+-#spacer {
+-  height: 88px;
+-  border-top: 1px solid var(--border);
+-  @media (max-width: 1024px) {
+-    height: 48px;
+-  }
+-}
+-
+-.ticks {
+-  position: relative;
+-  width: 100%;
+-
+-  &::before,
+-  &::after {
+-    content: '';
+-    position: absolute;
+-    top: -4.5px;
+-    border: 5px solid transparent;
+-  }
+-
+-  &::before {
+-    left: 0;
+-    border-left-color: var(--border);
+-  }
+-  &::after {
+-    right: 0;
+-    border-right-color: var(--border);
+-  }
+-}
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index 93c255b..2a0be0a 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -1,22 +1,30 @@
+ import { Routes, Route } from 'react-router-dom'
+-import './App.css'
+ import Login from './components/Login'
+ import Register from './components/Register'
+ import Home from './components/Home'
+ import PostProblem from './components/PostProblem'
++import ProblemDetail from './components/ProblemDetail'
+ import AdminDashboard from './components/AdminDashboard'
+ import VerifyEmail from './components/VerifyEmail'
++import VerifyNotice from './components/VerifyNotice'
+ import RequireAuth from './components/RequireAuth'
++import RequireVerified from './components/RequireVerified'
+ 
+ function App() {
+   return (
+     <Routes>
+-      <Route path="/" element={<Home />} />
++      {/* Always reachable. /verify/:token must be, or the emailed link could
++          never be clicked; /verify-email is the gate itself. */}
+       <Route path="/login" element={<Login />} />
+       <Route path="/register" element={<Register />} />
+       <Route path="/verify/:token" element={<VerifyEmail />} />
++      <Route path="/verify-email" element={<VerifyNotice />} />
+ 
+-      {}
++      {/* Public to guests, closed to signed-in-but-unverified accounts. */}
++      <Route path="/" element={<RequireVerified><Home /></RequireVerified>} />
++      <Route path="/problems/:id" element={<RequireVerified><ProblemDetail /></RequireVerified>} />
++
++      {/* Signed in only. RequireAuth also sends unverified users to the gate. */}
+       <Route
+         path="/postproblem"
+         element={
+diff --git a/frontend/src/components/AdminDashboard.jsx b/frontend/src/components/AdminDashboard.jsx
+index 2cc7e72..4b86994 100644
+--- a/frontend/src/components/AdminDashboard.jsx
++++ b/frontend/src/components/AdminDashboard.jsx
+@@ -1,6 +1,16 @@
+ import { useEffect, useState } from "react";
+ import { useNavigate } from "react-router-dom";
+ import { apiGet } from "../api";
++import Layout from "./Layout";
++
++function StatCard({ label, value }) {
++    return (
++        <div className="rounded-xl border border-slate-200 bg-white p-6">
++            <p className="text-sm font-medium text-slate-500">{label}</p>
++            <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{value}</p>
++        </div>
++    )
++}
+ 
+ function AdminDashboard() {
+     const navigate = useNavigate()
+@@ -10,44 +20,41 @@ function AdminDashboard() {
+     const [loading, setLoading] = useState(true)
+ 
+     useEffect(() => {
+-        async function loadOverview() {
+-            try {
+-                setError("")
+-                const data = await apiGet("/admin/overview")
+-                setTotal(data)
+-            } catch (e) {
+-                if (e.status === 401) {
+-                    navigate("/login")
+-                    return
+-                }
++        let cancelled = false
++        apiGet("/admin/overview")
++            .then((data) => { if (!cancelled) setTotal(data) })
++            .catch((e) => {
++                if (cancelled) return
++                if (e.status === 401) { navigate("/login"); return }
+                 setError(e.message || "Something went wrong! Please try again.")
+-            } finally {
+-                setLoading(false)
+-            }
+-        }
+-        loadOverview()
++            })
++            .finally(() => { if (!cancelled) setLoading(false) })
++        return () => { cancelled = true }
+     }, [navigate])
+ 
+-    if (loading) {
+-        return <p>Loading overview...</p>
+-    }
+-
+-    if (error) {
+-        return <p style={{ color: 'red' }}>{error}</p>
+-    }
+-
+-    // total is null until a successful fetch fills it, so nothing below ever
+-    // reads a field off a shape that has not arrived yet.
+-    if (!total) {
+-        return null
+-    }
+-
+     return (
+-        <div>
+-            <p>Total Users: {total.total_users}</p>
+-            <p>Total Problems: {total.total_problems}</p>
+-            <p>Total Solutions: {total.total_solutions}</p>
+-        </div>
++        <Layout>
++            <h1 className="text-xl font-bold text-slate-900">System overview</h1>
++            <p className="mt-1 text-sm text-slate-500">Live counts across the platform.</p>
++
++            {loading && (
++                <div className="mt-6 grid gap-4 sm:grid-cols-3">
++                    {[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl bg-white" />)}
++                </div>
++            )}
++
++            {error && (
++                <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
++            )}
++
++            {total && (
++                <div className="mt-6 grid gap-4 sm:grid-cols-3">
++                    <StatCard label="Total users" value={total.total_users} />
++                    <StatCard label="Total problems" value={total.total_problems} />
++                    <StatCard label="Total solutions" value={total.total_solutions} />
++                </div>
++            )}
++        </Layout>
+     )
+ }
+ 
+diff --git a/frontend/src/components/AuthLayout.jsx b/frontend/src/components/AuthLayout.jsx
+new file mode 100644
+index 0000000..e709f08
+--- /dev/null
++++ b/frontend/src/components/AuthLayout.jsx
+@@ -0,0 +1,51 @@
++import { Link } from "react-router-dom";
++import CommunityPreview from "./CommunityPreview";
++
++/**
++ * Split-screen shell shared by Login and Register: the form on the left, a
++ * live snippet of the community feed on the right.
++ *
++ * On a phone the right panel is hidden entirely and the form fills the screen -
++ * see CommunityPreview. That is the whole responsive strategy for these pages.
++ */
++function AuthLayout({ title, subtitle, children, footer }) {
++    return (
++        // One column by default, two equal columns from lg up. min-h-screen on
++        // the grid makes both panels full height regardless of which is taller.
++        <div className="min-h-screen grid lg:grid-cols-2">
++
++            {/* Left: the form */}
++            <div className="flex flex-col justify-center px-6 py-12 sm:px-12">
++                <div className="mx-auto w-full max-w-sm">
++
++                    <Link to="/" className="inline-flex items-center gap-2">
++                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
++                            C
++                        </span>
++                        <span className="text-lg font-bold tracking-tight text-slate-900">
++                            ComUniSolve
++                        </span>
++                    </Link>
++
++                    <h1 className="mt-10 text-2xl font-bold tracking-tight text-slate-900">
++                        {title}
++                    </h1>
++                    {subtitle && (
++                        <p className="mt-2 text-sm text-slate-500">{subtitle}</p>
++                    )}
++
++                    <div className="mt-8">{children}</div>
++
++                    {footer && (
++                        <p className="mt-8 text-sm text-slate-600">{footer}</p>
++                    )}
++                </div>
++            </div>
++
++            {/* Right: what the visitor is signing up for */}
++            <CommunityPreview />
++        </div>
++    )
++}
++
++export default AuthLayout
+diff --git a/frontend/src/components/CommunityPreview.jsx b/frontend/src/components/CommunityPreview.jsx
+new file mode 100644
+index 0000000..8b17ecf
+--- /dev/null
++++ b/frontend/src/components/CommunityPreview.jsx
+@@ -0,0 +1,104 @@
++import { useEffect, useState } from "react";
++import { apiGet } from "../api";
++
++/**
++ * The right-hand panel of the auth pages: a live snippet of the problem feed.
++ *
++ * A guest can read problems without an account (Chapter 4, Figure 2), so this
++ * shows a visitor what ComUniSolve actually is before asking them to sign up -
++ * real content instead of a decorative stock photo.
++ *
++ * It must never break the login page. If the backend is down or the feed is
++ * empty, it quietly falls back to the "how it works" points below.
++ */
++
++const HOW_IT_WORKS = [
++    { title: "Post a problem", body: "Describe something your community is dealing with." },
++    { title: "Get real solutions", body: "Neighbours answer, and the best answer gets accepted." },
++    { title: "Build reputation", body: "Helpful members earn points and recognised titles." },
++]
++
++function CommunityPreview() {
++    const [problems, setProblems] = useState([])
++
++    useEffect(() => {
++        let cancelled = false
++
++        apiGet("/problems")
++            .then((data) => {
++                if (cancelled) return
++                // Only the newest three - this is a teaser, not the feed.
++                setProblems(Array.isArray(data) ? data.slice(0, 3) : [])
++            })
++            .catch(() => {
++                // Deliberately silent. A failed preview is not the visitor's
++                // problem, and an error message here would be noise on a page
++                // whose only job is signing in.
++                if (!cancelled) setProblems([])
++            })
++
++        return () => { cancelled = true }
++    }, [])
++
++    return (
++        // hidden on small screens, flex from lg up: on a phone the form is the
++        // whole page, and a second column would just push it off-screen.
++        <div className="hidden lg:flex flex-col justify-center bg-gradient-to-br from-brand-700 to-brand-900 px-12 py-16 text-white">
++            <div className="max-w-md">
++                <h2 className="text-3xl font-bold leading-tight">
++                    Community problems,<br />community solutions.
++                </h2>
++                <p className="mt-4 text-brand-100">
++                    A place for neighbours to ask for help with everyday problems —
++                    and for the people who know the answer to share it.
++                </p>
++
++                {problems.length > 0 ? (
++                    <div className="mt-10">
++                        <p className="text-xs font-semibold uppercase tracking-wider text-brand-200">
++                            Recently posted
++                        </p>
++                        <div className="mt-4 space-y-3">
++                            {problems.map((problem) => (
++                                <div
++                                    key={problem.id}
++                                    className="rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm"
++                                >
++                                    <div className="flex items-start justify-between gap-3">
++                                        <h3 className="font-semibold text-white">{problem.title}</h3>
++                                        <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-0.5 text-xs text-brand-50">
++                                            {problem.category}
++                                        </span>
++                                    </div>
++                                    {problem.description && (
++                                        // line-clamp-2 cuts long text to two lines with an
++                                        // ellipsis, so one rambling post cannot stretch the card.
++                                        <p className="mt-1.5 text-sm text-brand-100 line-clamp-2">
++                                            {problem.description}
++                                        </p>
++                                    )}
++                                </div>
++                            ))}
++                        </div>
++                    </div>
++                ) : (
++                    <div className="mt-10 space-y-5">
++                        {HOW_IT_WORKS.map((step, index) => (
++                            <div key={step.title} className="flex gap-4">
++                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-semibold">
++                                    {index + 1}
++                                </span>
++                                <div>
++                                    <p className="font-semibold">{step.title}</p>
++                                    <p className="text-sm text-brand-100">{step.body}</p>
++                                </div>
++                            </div>
++                        ))}
++                    </div>
++                )}
++            </div>
++        </div>
++    )
++}
++
++export default CommunityPreview
+diff --git a/frontend/src/components/Home.jsx b/frontend/src/components/Home.jsx
+index 370d3e3..49719c7 100644
+--- a/frontend/src/components/Home.jsx
++++ b/frontend/src/components/Home.jsx
+@@ -1,9 +1,11 @@
+ import ProblemFeed from './ProblemFeed'
+-import AuthPanel from './AuthPanel'
++import Layout from './Layout'
+ 
+ function Home() {
+     return (
+-        <><ProblemFeed/><AuthPanel/></>
++        <Layout>
++            <ProblemFeed />
++        </Layout>
+     )
+ }
+ 
+diff --git a/frontend/src/components/Layout.jsx b/frontend/src/components/Layout.jsx
+new file mode 100644
+index 0000000..03589bd
+--- /dev/null
++++ b/frontend/src/components/Layout.jsx
+@@ -0,0 +1,91 @@
++import { Link, useNavigate } from "react-router-dom";
++import { useAuth } from "../auth-context";
++
++function TierBadge({ tier }) {
++    // Gold is reserved for accepted solutions, so the top tier uses purple -
++    // two signals that must never look like each other.
++    const colours = {
++        "Newcomer": "bg-slate-100 text-slate-600",
++        "Contributor": "bg-sky-100 text-sky-700",
++        "Trusted Helper": "bg-emerald-100 text-emerald-700",
++        "Community Expert": "bg-purple-100 text-purple-700",
++    }
++    return (
++        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colours[tier] || colours.Newcomer}`}>
++            {tier}
++        </span>
++    )
++}
++
++function Layout({ children }) {
++    const { user, loading, logout } = useAuth()
++    const navigate = useNavigate()
++
++    async function handleLogout() {
++        await logout()
++        navigate("/")
++    }
++
++    return (
++        <div className="min-h-screen bg-slate-50">
++            <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
++                <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
++                    <Link to="/" className="flex items-center gap-2">
++                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
++                            C
++                        </span>
++                        <span className="text-lg font-bold tracking-tight text-slate-900">ComUniSolve</span>
++                    </Link>
++
++                    {loading ? null : user ? (
++                        <div className="flex items-center gap-3">
++                            <Link
++                                to="/postproblem"
++                                className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
++                            >
++                                Post a problem
++                            </Link>
++                            {user.role === "admin" && (
++                                <Link to="/admin/overview" className="text-sm font-medium text-slate-600 hover:text-slate-900">
++                                    Admin
++                                </Link>
++                            )}
++                            <div className="hidden sm:flex items-center gap-2">
++                                <span className="text-sm font-medium text-slate-700">{user.name}</span>
++                                <TierBadge tier={user.tier} />
++                            </div>
++                            <button
++                                type="button"
++                                onClick={handleLogout}
++                                className="text-sm font-medium text-slate-500 hover:text-slate-900"
++                            >
++                                Log out
++                            </button>
++                        </div>
++                    ) : (
++                        <div className="flex items-center gap-3">
++                            <Link to="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900">
++                                Log in
++                            </Link>
++                            <Link
++                                to="/register"
++                                className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
++                            >
++                                Register
++                            </Link>
++                        </div>
++                    )}
++                </div>
++            </header>
++
++            {/* No "unverified" banner here any more: an unverified account
++                never reaches a page wrapped in Layout - RequireVerified sends
++                it to /verify-email first. */}
++
++            <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
++        </div>
++    )
++}
++
++export { TierBadge }
++export default Layout
+diff --git a/frontend/src/components/Login.jsx b/frontend/src/components/Login.jsx
+index eba0409..e33a0a1 100644
+--- a/frontend/src/components/Login.jsx
++++ b/frontend/src/components/Login.jsx
+@@ -2,6 +2,15 @@ import { useState } from "react";
+ import { Link, useNavigate, useLocation } from 'react-router-dom';
+ import { apiPost } from "../api";
+ import { useAuth } from "../auth-context";
++import AuthLayout from "./AuthLayout";
++
++// One string reused by every input, so the fields cannot drift apart visually.
++// Plain JavaScript - no Tailwind feature involved, just a variable.
++const inputClass =
++    "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
++    "placeholder-slate-400 outline-none transition " +
++    "focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 " +
++    "disabled:bg-slate-50 disabled:text-slate-400"
+ 
+ function Login() {
+     const navigate = useNavigate()
+@@ -38,28 +47,70 @@ function Login() {
+     }
+ 
+     return (
+-        <form onSubmit={handleSubmit}>
+-            <input
+-            type="email"
+-            placeholder="Enter your email"
+-            value={email} onChange={(e) => setEmail(e.target.value)}
+-            />
+-
+-            <input
+-            type="password"
+-            placeholder="Enter your password"
+-            value={password} onChange={(e) => setPassword(e.target.value)}
+-            />
+-
+-            <button type="submit"
+-            className="submit"
+-            disabled={submitting}>{submitting ? "Logging in..." : "Submit"}</button>
+-            {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}
++        <AuthLayout
++            title="Welcome back"
++            subtitle="Sign in to post problems and share solutions."
++            footer={
++                <>
++                    New to ComUniSolve?{" "}
++                    <Link to="/register" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
++                        Create an account
++                    </Link>
++                </>
++            }
++        >
++            <form onSubmit={handleSubmit} className="space-y-4">
++                <div>
++                    {/* htmlFor ties the label to the input's id: clicking the
++                        label focuses the field, and screen readers announce it. */}
++                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
++                        Email
++                    </label>
++                    <input
++                        id="email"
++                        type="email"
++                        autoComplete="email"
++                        placeholder="you@example.com"
++                        className={inputClass}
++                        disabled={submitting}
++                        value={email}
++                        onChange={(e) => setEmail(e.target.value)}
++                    />
++                </div>
+ 
+-        <Link to="/register">REGISTER</Link>
++                <div>
++                    <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
++                        Password
++                    </label>
++                    <input
++                        id="password"
++                        type="password"
++                        autoComplete="current-password"
++                        placeholder="Enter your password"
++                        className={inputClass}
++                        disabled={submitting}
++                        value={password}
++                        onChange={(e) => setPassword(e.target.value)}
++                    />
++                </div>
+ 
+-        </form>
++                {error && (
++                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                        {error}
++                    </div>
++                )}
+ 
++                <button
++                    type="submit"
++                    disabled={submitting}
++                    className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition
++                               hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
++                               disabled:cursor-not-allowed disabled:bg-slate-300"
++                >
++                    {submitting ? "Signing in..." : "Sign in"}
++                </button>
++            </form>
++        </AuthLayout>
+     )
+ }
+ 
+diff --git a/frontend/src/components/PostProblem.jsx b/frontend/src/components/PostProblem.jsx
+index eaecab8..58df2d7 100644
+--- a/frontend/src/components/PostProblem.jsx
++++ b/frontend/src/components/PostProblem.jsx
+@@ -1,38 +1,32 @@
+ import { useState } from "react";
+ import { useNavigate } from "react-router-dom";
+ import { apiPost } from "../api";
++import Layout from "./Layout";
++
++const CATEGORIES = ["Household", "School", "Public", "Health", "Livelihood", "Other"]
++
++const inputClass =
++    "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 " +
++    "outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+ 
+ function PostProblem() {
+     const navigate = useNavigate()
+ 
+     const [title, setTitle] = useState("")
+     const [description, setDescription] = useState("")
+-    const [category, setCategory] = useState("")
++    const [category, setCategory] = useState(CATEGORIES[0])
+     const [error, setError] = useState("")
+     const [submitting, setSubmitting] = useState(false)
+ 
+     async function handleSubmit(e) {
+         e.preventDefault()
+-
+         try {
+             setError("")
+             setSubmitting(true)
+-
+-            const data = await apiPost("/problems", {
+-                title: title,
+-                description: description,
+-                category: category,
+-            })
+-            console.log(data)
+-            navigate('/')
++            const data = await apiPost("/problems", { title, description, category })
++            navigate(`/problems/${data.id}`)
+         } catch (e) {
+-            // By the time an ApiError with status 401 reaches here, api() has
+-            // already tried /refresh and failed - so the session really is over
+-            // and the only useful next step is to log in again.
+-            if (e.status === 401) {
+-                navigate('/login')
+-                return
+-            }
++            if (e.status === 401) { navigate('/login'); return }
+             setError(e.message || "Something went wrong! Please try again.")
+         } finally {
+             setSubmitting(false)
+@@ -40,29 +34,59 @@ function PostProblem() {
+     }
+ 
+     return (
+-        <form onSubmit={handleSubmit}>
+-            <input
+-            type="text"
+-            placeholder="Title"
+-            value={title} onChange={(e) => setTitle(e.target.value)}
+-            />
++        <Layout>
++            <div className="mx-auto max-w-2xl">
++                <h1 className="text-xl font-bold text-slate-900">Post a problem</h1>
++                <p className="mt-1 text-sm text-slate-500">
++                    Describe it clearly — the more context, the better the answers.
++                </p>
++
++                <form onSubmit={handleSubmit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6">
++                    <div>
++                        <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-1">Title</label>
++                        <input
++                            id="title" type="text" className={inputClass} disabled={submitting}
++                            placeholder="Street light on Rizal St. has been out for weeks"
++                            value={title} onChange={(e) => setTitle(e.target.value)}
++                        />
++                    </div>
++
++                    <div>
++                        <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-1">Description</label>
++                        <textarea
++                            id="description" rows={6} className={inputClass} disabled={submitting}
++                            placeholder="What is happening, since when, and what have you already tried?"
++                            value={description} onChange={(e) => setDescription(e.target.value)}
++                        />
++                    </div>
+ 
+-            <textarea
+-            placeholder="Description"
+-            value={description} onChange={(e) => setDescription(e.target.value)}
+-            />
++                    <div>
++                        <label htmlFor="category" className="block text-sm font-medium text-slate-700 mb-1">Category</label>
++                        <select
++                            id="category" className={inputClass} disabled={submitting}
++                            value={category} onChange={(e) => setCategory(e.target.value)}
++                        >
++                            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
++                        </select>
++                    </div>
+ 
+-            <input
+-            type="text"
+-            placeholder="Category"
+-            value={category} onChange={(e) => setCategory(e.target.value)}
+-            />
++                    {error && (
++                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                            {error}
++                        </div>
++                    )}
+ 
+-            <button type="submit"
+-            className="submitProblem"
+-            disabled={submitting}>{submitting ? "Posting..." : "Submit Problem"}</button>
+-            {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}
+-        </form>
++                    <button
++                        type="submit"
++                        disabled={submitting || !title.trim()}
++                        className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white
++                                   hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
++                    >
++                        {submitting ? "Posting..." : "Post problem"}
++                    </button>
++                </form>
++            </div>
++        </Layout>
+     )
+ }
+ 
+diff --git a/frontend/src/components/ProblemDetail.jsx b/frontend/src/components/ProblemDetail.jsx
+new file mode 100644
+index 0000000..67e3ccf
+--- /dev/null
++++ b/frontend/src/components/ProblemDetail.jsx
+@@ -0,0 +1,179 @@
++import { useCallback, useEffect, useState } from "react";
++import { Link, useParams } from "react-router-dom";
++import { apiGet, apiPost } from "../api";
++import { useAuth } from "../auth-context";
++import Layout, { TierBadge } from "./Layout";
++import SolutionCard from "./SolutionCard";
++
++function ProblemDetail() {
++    const { id } = useParams()
++    const { user } = useAuth()
++
++    const [problem, setProblem] = useState(null)
++    const [solutions, setSolutions] = useState([])
++    const [loading, setLoading] = useState(true)
++    const [error, setError] = useState("")
++
++    const [text, setText] = useState("")
++    const [submitting, setSubmitting] = useState(false)
++    const [submitError, setSubmitError] = useState("")
++
++    // Two endpoints, one load. Promise.all runs them at the same time rather
++    // than waiting for the first to finish before starting the second.
++    const fetchAll = useCallback(
++        () => Promise.all([apiGet(`/problems/${id}`), apiGet(`/solutions/problem/${id}`)]),
++        [id]
++    )
++
++    // Used after any action (accept, upvote, comment) so the page reflects
++    // what the server actually says rather than a guess made locally.
++    const load = useCallback(async () => {
++        const [p, s] = await fetchAll()
++        setProblem(p)
++        setSolutions(s)
++    }, [fetchAll])
++
++    useEffect(() => {
++        let cancelled = false
++        fetchAll()
++            .then(([p, s]) => { if (!cancelled) { setProblem(p); setSolutions(s) } })
++            .catch((e) => { if (!cancelled) setError(e.message || "Could not load this problem") })
++            .finally(() => { if (!cancelled) setLoading(false) })
++        return () => { cancelled = true }
++    }, [fetchAll])
++
++    async function submitSolution(e) {
++        e.preventDefault()
++        try {
++            setSubmitError("")
++            setSubmitting(true)
++            await apiPost("/solutions", { problem_id: Number(id), solution_text: text })
++            setText("")
++            await load()
++        } catch (e) {
++            setSubmitError(e.message || "Could not submit your solution")
++        } finally {
++            setSubmitting(false)
++        }
++    }
++
++    if (loading) {
++        return <Layout><div className="h-40 animate-pulse rounded-xl bg-white" /></Layout>
++    }
++
++    if (error || !problem) {
++        return (
++            <Layout>
++                <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
++                    {error || "Problem not found."}
++                </p>
++                <Link to="/" className="mt-4 inline-block text-sm font-medium text-brand-700 hover:underline">
++                    Back to the feed
++                </Link>
++            </Layout>
++        )
++    }
++
++    return (
++        <Layout>
++            <Link to="/" className="text-sm font-medium text-slate-500 hover:text-slate-900">
++                ← Back to the feed
++            </Link>
++
++            <article className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
++                <div className="flex items-start justify-between gap-3">
++                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">{problem.title}</h1>
++                    <span
++                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
++                            problem.status === "resolved"
++                                ? "bg-emerald-100 text-emerald-700"
++                                : "bg-amber-100 text-amber-700"
++                        }`}
++                    >
++                        {problem.status === "resolved" ? "Resolved" : "Open"}
++                    </span>
++                </div>
++
++                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
++                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
++                        {problem.category}
++                    </span>
++                    {problem.author && (
++                        <>
++                            <span>posted by {problem.author.name}</span>
++                            <TierBadge tier={problem.author.tier} />
++                        </>
++                    )}
++                </div>
++
++                {problem.description && (
++                    <p className="mt-4 whitespace-pre-wrap text-slate-700">{problem.description}</p>
++                )}
++            </article>
++
++            <section className="mt-8">
++                <h2 className="text-lg font-semibold text-slate-900">
++                    {solutions.length} {solutions.length === 1 ? "solution" : "solutions"}
++                </h2>
++
++                <div className="mt-4 space-y-3">
++                    {solutions.length === 0 && (
++                        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
++                            No solutions yet. If you know the answer, share it below.
++                        </p>
++                    )}
++                    {solutions.map((s) => (
++                        <SolutionCard
++                            key={s.id}
++                            solution={s}
++                            problem={problem}
++                            currentUser={user}
++                            onChanged={load}
++                        />
++                    ))}
++                </div>
++            </section>
++
++            <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
++                <h2 className="text-lg font-semibold text-slate-900">Your solution</h2>
++
++                {!user ? (
++                    <p className="mt-3 text-sm text-slate-600">
++                        <Link to="/login" className="font-medium text-brand-700 hover:underline">Sign in</Link>
++                        {" "}to answer this problem.
++                    </p>
++                ) : !user.is_verified ? (
++                    <p className="mt-3 text-sm text-amber-800">
++                        Verify your email before posting a solution — check your inbox for the link.
++                    </p>
++                ) : (
++                    <form onSubmit={submitSolution} className="mt-3">
++                        <textarea
++                            rows={4}
++                            value={text}
++                            onChange={(e) => setText(e.target.value)}
++                            placeholder="Explain how to solve this, step by step."
++                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none
++                                       focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
++                        />
++                        {submitError && (
++                            <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                                {submitError}
++                            </p>
++                        )}
++                        <button
++                            type="submit"
++                            disabled={submitting || !text.trim()}
++                            className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white
++                                       hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
++                        >
++                            {submitting ? "Posting..." : "Post solution"}
++                        </button>
++                    </form>
++                )}
++            </section>
++        </Layout>
++    )
++}
++
++export default ProblemDetail
+diff --git a/frontend/src/components/ProblemFeed.jsx b/frontend/src/components/ProblemFeed.jsx
+index 52aeb24..0b70861 100644
+--- a/frontend/src/components/ProblemFeed.jsx
++++ b/frontend/src/components/ProblemFeed.jsx
+@@ -1,45 +1,89 @@
+ import { useEffect, useState } from "react"
++import { Link } from "react-router-dom"
+ import { apiGet } from "../api"
+ 
++export function ProblemCard({ problem }) {
++    return (
++        <Link
++            to={`/problems/${problem.id}`}
++            className="block rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-300 hover:shadow-sm"
++        >
++            <div className="flex items-start justify-between gap-3">
++                <h3 className="font-semibold text-slate-900">{problem.title}</h3>
++                <span
++                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
++                        problem.status === "resolved"
++                            ? "bg-emerald-100 text-emerald-700"
++                            : "bg-amber-100 text-amber-700"
++                    }`}
++                >
++                    {problem.status === "resolved" ? "Resolved" : "Open"}
++                </span>
++            </div>
++
++            {problem.description && (
++                <p className="mt-2 text-sm text-slate-600 line-clamp-2">{problem.description}</p>
++            )}
++
++            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
++                <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
++                    {problem.category}
++                </span>
++                {problem.author && <span>by {problem.author.name}</span>}
++                <span>
++                    {problem.solution_count} {problem.solution_count === 1 ? "solution" : "solutions"}
++                </span>
++            </div>
++        </Link>
++    )
++}
++
+ function ProblemFeed() {
+     const [error, setError] = useState("")
+     const [problems, setProblems] = useState([])
+     const [loading, setLoading] = useState(true)
+ 
+     useEffect(() => {
+-        async function loadProblems() {
+-            try {
+-                setError("")
+-                const data = await apiGet("/problems")
+-                setProblems(data)
+-            } catch (e) {
+-                setError(e.message || "Something went wrong")
+-            } finally {
+-                setLoading(false)
+-            }
+-        }
+-        loadProblems()
++        let cancelled = false
++        apiGet("/problems")
++            .then((data) => { if (!cancelled) setProblems(data) })
++            .catch((e) => { if (!cancelled) setError(e.message || "Something went wrong") })
++            .finally(() => { if (!cancelled) setLoading(false) })
++        return () => { cancelled = true }
+     }, [])
+ 
+-    // Three genuinely different states, told apart properly. Before, an empty
+-    // array meant both "still fetching" and "nothing posted", so the feed
+-    // flashed "No posted yet." on every single page load before the data landed.
+     if (loading) {
+-        return <p>Loading problems...</p>
++        return (
++            <div className="space-y-3">
++                {[0, 1, 2].map((i) => (
++                    <div key={i} className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white" />
++                ))}
++            </div>
++        )
+     }
+ 
+     return (
+         <div>
+-            <h1>Problem Feed</h1>
+-            {error && <p style={{ color: 'red' }}>{error}</p>}
+-            {!error && problems.length === 0 && <p>No problems posted yet.</p>}
+-            {problems.map((problem) => (
+-                <div key={problem.id}>
+-                    <h3>{problem.title}</h3>
+-                    <p>{problem.description}</p>
+-                    <p>{problem.category}</p>
++            <h1 className="text-xl font-bold text-slate-900">Community problems</h1>
++            <p className="mt-1 text-sm text-slate-500">Newest first.</p>
++
++            {error && (
++                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                    {error}
+                 </div>
+-            ))}
++            )}
++
++            {!error && problems.length === 0 && (
++                <p className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
++                    No problems posted yet. Be the first.
++                </p>
++            )}
++
++            <div className="mt-5 space-y-3">
++                {problems.map((problem) => (
++                    <ProblemCard key={problem.id} problem={problem} />
++                ))}
++            </div>
+         </div>
+     )
+ }
+diff --git a/frontend/src/components/Register.jsx b/frontend/src/components/Register.jsx
+index 2891958..480de08 100644
+--- a/frontend/src/components/Register.jsx
++++ b/frontend/src/components/Register.jsx
+@@ -2,6 +2,13 @@ import { useState } from "react";
+ import { Link, useNavigate } from "react-router-dom";
+ import { apiPost } from "../api";
+ import { useAuth } from "../auth-context";
++import AuthLayout from "./AuthLayout";
++
++const inputClass =
++    "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
++    "placeholder-slate-400 outline-none transition " +
++    "focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 " +
++    "disabled:bg-slate-50 disabled:text-slate-400"
+ 
+ function Register() {
+     const navigate = useNavigate()
+@@ -22,7 +29,9 @@ function Register() {
+ 
+             await apiPost("/register", { name: name, email: email, password: password })
+             await refreshUser()
+-            navigate("/")
++            // Straight to the gate rather than to "/", which would only bounce
++            // them here anyway now that unverified accounts are held back.
++            navigate("/verify-email", { replace: true })
+         } catch (e) {
+             setError(e.message || "Something went wrong! Please try again.")
+         } finally {
+@@ -31,32 +40,88 @@ function Register() {
+     }
+ 
+     return (
+-        <form onSubmit={handleSubmit}>
+-            <input
+-            type="text"
+-            placeholder="Enter your name"
+-            value={name} onChange={(e) => setName(e.target.value)}
+-            />
+-
+-            <input
+-            type="email"
+-            placeholder="Enter your email"
+-            value={email} onChange={(e) => setEmail(e.target.value)}
+-            />
+-
+-            <input
+-            type="password"
+-            placeholder="Enter your password"
+-            value={password} onChange={(e) => setPassword(e.target.value)}
+-            />
+-
+-            <button type="submit"
+-            className="submit"
+-            disabled={submitting}>{submitting ? "Registering..." : "Submit"}</button>
+-            {error && <p style={{ color: 'red', marginTop: '5px' }}>{error}</p>}
+-
+-            <Link to="/login">Log In</Link>
+-        </form>
++        <AuthLayout
++            title="Create your account"
++            subtitle="Join your community and start solving problems together."
++            footer={
++                <>
++                    Already have an account?{" "}
++                    <Link to="/login" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
++                        Sign in
++                    </Link>
++                </>
++            }
++        >
++            <form onSubmit={handleSubmit} className="space-y-4">
++                <div>
++                    <label htmlFor="name" className="block text-sm font-medium text-slate-700 mb-1">
++                        Name
++                    </label>
++                    <input
++                        id="name"
++                        type="text"
++                        autoComplete="name"
++                        placeholder="Juan dela Cruz"
++                        className={inputClass}
++                        disabled={submitting}
++                        value={name}
++                        onChange={(e) => setName(e.target.value)}
++                    />
++                </div>
++
++                <div>
++                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
++                        Email
++                    </label>
++                    <input
++                        id="email"
++                        type="email"
++                        autoComplete="email"
++                        placeholder="you@example.com"
++                        className={inputClass}
++                        disabled={submitting}
++                        value={email}
++                        onChange={(e) => setEmail(e.target.value)}
++                    />
++                </div>
++
++                <div>
++                    <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
++                        Password
++                    </label>
++                    <input
++                        id="password"
++                        type="password"
++                        autoComplete="new-password"
++                        placeholder="At least 8 characters"
++                        className={inputClass}
++                        disabled={submitting}
++                        value={password}
++                        onChange={(e) => setPassword(e.target.value)}
++                    />
++                    {/* Tells the user the rule before the server rejects them.
++                        The backend still enforces min_length=8 - this is a
++                        courtesy, not the validation. */}
++                    <p className="mt-1 text-xs text-slate-500">Must be at least 8 characters.</p>
++                </div>
++
++                {error && (
++                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                        {error}
++                    </div>
++                )}
++
++                <button
++                    type="submit"
++                    disabled={submitting}
++                    className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition
++                               hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
++                               disabled:cursor-not-allowed disabled:bg-slate-300"
++                >
++                    {submitting ? "Creating account..." : "Create account"}
++                </button>
++            </form>
++        </AuthLayout>
+     )
+ }
+ 
+diff --git a/frontend/src/components/RequireAuth.jsx b/frontend/src/components/RequireAuth.jsx
+index ddf61ee..4250c54 100644
+--- a/frontend/src/components/RequireAuth.jsx
++++ b/frontend/src/components/RequireAuth.jsx
+@@ -11,28 +11,33 @@ import { useAuth } from "../auth-context";
+  * the same check into each component.
+  */
+ function RequireAuth({ children, adminOnly = false }) {
+-  const { user, loading } = useAuth();
+-  const location = useLocation();
++    const { user, loading } = useAuth();
++    const location = useLocation();
+ 
+-  // Critical: while the first /users/me call is still in flight, user is null
+-  // but that does NOT mean logged out - it means "not known yet". Redirecting
+-  // here would bounce a signed-in user to the login page on every refresh.
+-  if (loading) {
+-    return <p>Loading...</p>;
+-  }
++    // Critical: while the first /users/me call is still in flight, user is null
++    // but that does NOT mean logged out - it means "not known yet". Redirecting
++    // here would bounce a signed-in user to the login page on every refresh.
++    if (loading) {
++        return <p className="p-8 text-sm text-slate-500">Loading...</p>;
++    }
+ 
+-  if (!user) {
+-    // replace: swap this entry in the history instead of adding one, so the
+-    // back button does not send them straight back to the blocked page.
+-    // state.from lets the login page send them where they were going.
+-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+-  }
++    if (!user) {
++        // replace: swap this entry in the history instead of adding one, so the
++        // back button does not send them straight back to the blocked page.
++        // state.from lets the login page send them where they were going.
++        return <Navigate to="/login" replace state={{ from: location.pathname }} />;
++    }
+ 
+-  if (adminOnly && user.role !== "admin") {
+-    return <p>You do not have permission to view this page.</p>;
+-  }
++    // An unverified account is authenticated but not yet allowed in.
++    if (!user.is_verified) {
++        return <Navigate to="/verify-email" replace />;
++    }
+ 
+-  return children;
++    if (adminOnly && user.role !== "admin") {
++        return <p className="p-8 text-sm text-slate-600">You do not have permission to view this page.</p>;
++    }
++
++    return children;
+ }
+ 
+ export default RequireAuth;
+diff --git a/frontend/src/components/RequireVerified.jsx b/frontend/src/components/RequireVerified.jsx
+new file mode 100644
+index 0000000..2db2b4a
+--- /dev/null
++++ b/frontend/src/components/RequireVerified.jsx
+@@ -0,0 +1,29 @@
++import { Navigate } from "react-router-dom";
++import { useAuth } from "../auth-context";
++
++/**
++ * Blocks a signed-in but unverified account from the app.
++ *
++ * Note who this does NOT affect: guests. Chapter 4's Figure 2 says a visitor
++ * without an account can read public problems, so a logged-out visitor passes
++ * straight through. Only someone who has registered and not yet confirmed
++ * their email is held at the gate.
++ */
++function RequireVerified({ children }) {
++    const { user, loading } = useAuth()
++
++    // While the first /users/me call is in flight, user is null - which means
++    // "not known yet", not "guest". Deciding now would bounce people wrongly
++    // on every page refresh.
++    if (loading) {
++        return <p className="p-8 text-sm text-slate-500">Loading...</p>
++    }
++
++    if (user && !user.is_verified) {
++        return <Navigate to="/verify-email" replace />
++    }
++
++    return children
++}
++
++export default RequireVerified
+diff --git a/frontend/src/components/SolutionCard.jsx b/frontend/src/components/SolutionCard.jsx
+new file mode 100644
+index 0000000..ffe8884
+--- /dev/null
++++ b/frontend/src/components/SolutionCard.jsx
+@@ -0,0 +1,207 @@
++import { useState } from "react";
++import { apiGet, apiPost, apiPatch } from "../api";
++import { TierBadge } from "./Layout";
++
++/**
++ * One solution: its author, the text, and every action the backend allows -
++ * accept/unaccept (problem owner), upvote (anyone signed in), rate (problem
++ * owner) and comments (anyone signed in).
++ *
++ * onChanged() tells the parent page to refetch, so counts and statuses stay
++ * truthful instead of being guessed at locally.
++ */
++function SolutionCard({ solution, problem, currentUser, onChanged }) {
++    const [error, setError] = useState("")
++    const [busy, setBusy] = useState(false)
++
++    const [comments, setComments] = useState(null)   // null = not loaded yet
++    const [commentText, setCommentText] = useState("")
++    const [ratingOpen, setRatingOpen] = useState(false)
++
++    const isAccepted = solution.status === "accepted"
++    const isProblemOwner = currentUser && currentUser.id === problem.user_id
++    const signedIn = Boolean(currentUser)
++
++    async function run(action) {
++        try {
++            setError("")
++            setBusy(true)
++            await action()
++            onChanged()
++        } catch (e) {
++            setError(e.message || "Something went wrong")
++        } finally {
++            setBusy(false)
++        }
++    }
++
++    async function toggleComments() {
++        if (comments !== null) {
++            setComments(null)
++            return
++        }
++        try {
++            setComments(await apiGet(`/solutions/${solution.id}/comments`))
++        } catch (e) {
++            setError(e.message || "Could not load comments")
++        }
++    }
++
++    async function submitComment(e) {
++        e.preventDefault()
++        if (!commentText.trim()) return
++        try {
++            setBusy(true)
++            await apiPost(`/comment/${solution.id}`, { content: commentText, parent_id: null })
++            setCommentText("")
++            setComments(await apiGet(`/solutions/${solution.id}/comments`))
++        } catch (e) {
++            setError(e.message || "Could not post comment")
++        } finally {
++            setBusy(false)
++        }
++    }
++
++    return (
++        <div
++            className={`rounded-xl border bg-white p-5 ${
++                isAccepted ? "border-amber-300 ring-1 ring-amber-200" : "border-slate-200"
++            }`}
++        >
++            {isAccepted && (
++                <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
++                    Accepted solution
++                </p>
++            )}
++
++            <div className="flex items-center gap-2">
++                <span className="text-sm font-semibold text-slate-900">
++                    {solution.author ? solution.author.name : "Unknown"}
++                </span>
++                {solution.author && <TierBadge tier={solution.author.tier} />}
++            </div>
++
++            <p className="mt-3 whitespace-pre-wrap text-slate-700">{solution.solution_text}</p>
++
++            <div className="mt-4 flex flex-wrap items-center gap-2">
++                <button
++                    type="button"
++                    disabled={!signedIn || busy}
++                    onClick={() => run(() => apiPost(`/solutions/${solution.id}/upvote`))}
++                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700
++                               hover:border-brand-400 hover:text-brand-700 disabled:opacity-40"
++                    title={signedIn ? "Upvote this solution" : "Sign in to upvote"}
++                >
++                    ▲ {solution.upvote_count}
++                </button>
++
++                {isProblemOwner && (
++                    isAccepted ? (
++                        <button
++                            type="button"
++                            disabled={busy}
++                            onClick={() => run(() => apiPatch(`/solutions/${solution.id}/unaccept`))}
++                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
++                        >
++                            Un-accept
++                        </button>
++                    ) : (
++                        <button
++                            type="button"
++                            disabled={busy}
++                            onClick={() => run(() => apiPatch(`/solutions/${solution.id}/accept`))}
++                            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40"
++                        >
++                            Accept
++                        </button>
++                    )
++                )}
++
++                {isProblemOwner && (
++                    <button
++                        type="button"
++                        onClick={() => setRatingOpen((v) => !v)}
++                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
++                    >
++                        Rate
++                    </button>
++                )}
++
++                <button
++                    type="button"
++                    onClick={toggleComments}
++                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-900"
++                >
++                    {comments === null ? "Comments" : "Hide comments"}
++                </button>
++            </div>
++
++            {ratingOpen && isProblemOwner && (
++                <div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 p-3">
++                    <span className="text-sm text-slate-600">Your rating:</span>
++                    {[1, 2, 3, 4, 5].map((score) => (
++                        <button
++                            key={score}
++                            type="button"
++                            disabled={busy}
++                            onClick={() =>
++                                run(async () => {
++                                    await apiPost(`/solutions/${solution.id}/rate`, { score, feedback: null })
++                                    setRatingOpen(false)
++                                })
++                            }
++                            className="h-8 w-8 rounded-md border border-slate-300 text-sm font-semibold text-slate-700 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
++                        >
++                            {score}
++                        </button>
++                    ))}
++                </div>
++            )}
++
++            {error && (
++                <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                    {error}
++                </p>
++            )}
++
++            {comments !== null && (
++                <div className="mt-4 border-t border-slate-100 pt-4">
++                    {comments.length === 0 && (
++                        <p className="text-sm text-slate-500">No comments yet.</p>
++                    )}
++                    <div className="space-y-3">
++                        {comments.map((c) => (
++                            <div key={c.id} className="rounded-lg bg-slate-50 px-3 py-2">
++                                <p className="text-xs font-semibold text-slate-700">
++                                    {c.author ? c.author.name : "Unknown"}
++                                </p>
++                                <p className="text-sm text-slate-700">{c.content}</p>
++                            </div>
++                        ))}
++                    </div>
++
++                    {signedIn && (
++                        <form onSubmit={submitComment} className="mt-3 flex gap-2">
++                            <input
++                                type="text"
++                                value={commentText}
++                                onChange={(e) => setCommentText(e.target.value)}
++                                placeholder="Add a comment"
++                                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
++                            />
++                            <button
++                                type="submit"
++                                disabled={busy}
++                                className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-40"
++                            >
++                                Send
++                            </button>
++                        </form>
++                    )}
++                </div>
++            )}
++        </div>
++    )
++}
++
++export default SolutionCard
+diff --git a/frontend/src/components/VerifyEmail.jsx b/frontend/src/components/VerifyEmail.jsx
+index dfed12d..9faa161 100644
+--- a/frontend/src/components/VerifyEmail.jsx
++++ b/frontend/src/components/VerifyEmail.jsx
+@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
+ import { Link, useParams } from "react-router-dom";
+ import { apiGet } from "../api";
+ import { useAuth } from "../auth-context";
++import Layout from "./Layout";
+ 
+ function VerifyEmail() {
+-    // useParams reads the :token placeholder out of the URL that App.jsx
+-    // declared for this route.
+     const { token } = useParams()
+     const { refreshUser } = useAuth()
+ 
+@@ -13,35 +12,50 @@ function VerifyEmail() {
+     const [message, setMessage] = useState("")
+ 
+     useEffect(() => {
+-        // This fetch is triggered by the page appearing, not by a user action,
+-        // which is exactly what useEffect is for - the same reasoning as
+-        // ProblemFeed, not PostProblem.
+-        async function verify() {
+-            try {
+-                const data = await apiGet(`/verify/${token}`)
++        let cancelled = false
++        apiGet(`/verify/${token}`)
++            .then((data) => {
++                if (cancelled) return
+                 setStatus("success")
+                 setMessage(data.message || "Email verified successfully")
+-                // The banner saying "your email is not verified" is driven by
+-                // is_verified, which the app fetched before this happened.
+-                // Re-ask, so the UI matches reality without a manual reload.
+                 refreshUser()
+-            } catch (e) {
++            })
++            .catch((e) => {
++                if (cancelled) return
+                 setStatus("failed")
+                 setMessage(e.message || "Something went wrong! Please try again.")
+-            }
+-        }
+-        verify()
++            })
++        return () => { cancelled = true }
+     }, [token, refreshUser])
+ 
+-    if (status === "checking") {
+-        return <p>Verifying your email...</p>
+-    }
+-
+     return (
+-        <div>
+-            <p style={{ color: status === "success" ? "green" : "red" }}>{message}</p>
+-            <Link to="/">Go to the problem feed</Link>
+-        </div>
++        <Layout>
++            <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center">
++                {status === "checking" && <p className="text-slate-600">Verifying your email...</p>}
++
++                {status !== "checking" && (
++                    <>
++                        <div
++                            className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full text-xl ${
++                                status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
++                            }`}
++                        >
++                            {status === "success" ? "✓" : "!"}
++                        </div>
++                        <h1 className="mt-4 text-lg font-semibold text-slate-900">
++                            {status === "success" ? "Email verified" : "Verification failed"}
++                        </h1>
++                        <p className="mt-2 text-sm text-slate-600">{message}</p>
++                        <Link
++                            to="/"
++                            className="mt-6 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
++                        >
++                            Go to the problem feed
++                        </Link>
++                    </>
++                )}
++            </div>
++        </Layout>
+     )
+ }
+ 
+diff --git a/frontend/src/components/VerifyNotice.jsx b/frontend/src/components/VerifyNotice.jsx
+new file mode 100644
+index 0000000..6e0a339
+--- /dev/null
++++ b/frontend/src/components/VerifyNotice.jsx
+@@ -0,0 +1,126 @@
++import { useEffect, useState } from "react";
++import { Navigate, useNavigate } from "react-router-dom";
++import { apiPost } from "../api";
++import { useAuth } from "../auth-context";
++
++/**
++ * The wall an unverified account sits behind.
++ *
++ * Two escapes are deliberate, not decoration: resend (in case the email never
++ * arrived) and log out (so nobody is trapped on a dead end). Without them, a
++ * hard verification gate plus a slow mail provider means a real user simply
++ * cannot use the app and has no way to say so.
++ */
++function VerifyNotice() {
++    const { user, loading, refreshUser, logout } = useAuth()
++    const navigate = useNavigate()
++
++    const [message, setMessage] = useState("")
++    const [error, setError] = useState("")
++    const [sending, setSending] = useState(false)
++    const [cooldown, setCooldown] = useState(0)
++
++    // The backend refuses a resend within 60s of the last one. Registration
++    // already sent an email, so without this the button would fail the moment
++    // someone arrives. Counting down is honest; an error would look broken.
++    const expiresAt = user?.verification_expires_at
++    useEffect(() => {
++        if (!expiresAt) return
++        const issuedAt = new Date(expiresAt).getTime() - 24 * 60 * 60 * 1000
++        const tick = () => {
++            const left = Math.ceil((issuedAt + 60_000 - Date.now()) / 1000)
++            setCooldown(left > 0 ? left : 0)
++        }
++        tick()
++        const timer = setInterval(tick, 1000)
++        return () => clearInterval(timer)
++    }, [expiresAt])
++
++    // People click the link in a different tab. Re-asking the server every few
++    // seconds means this page notices on its own, instead of leaving them
++    // staring at a screen that is already out of date.
++    useEffect(() => {
++        const timer = setInterval(() => { refreshUser() }, 5000)
++        return () => clearInterval(timer)
++    }, [refreshUser])
++
++    if (loading) return null
++    if (!user) return <Navigate to="/login" replace />
++    if (user.is_verified) return <Navigate to="/" replace />
++
++    async function handleResend() {
++        try {
++            setError(""); setMessage(""); setSending(true)
++            const data = await apiPost("/resend-verification")
++            setMessage(data.message || "Verification email sent.")
++        } catch (e) {
++            setError(e.message || "Could not send the email. Please try again.")
++        } finally {
++            setSending(false)
++        }
++    }
++
++    async function handleLogout() {
++        await logout()
++        navigate("/login")
++    }
++
++    return (
++        <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
++            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center">
++                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-xl text-brand-700">
++                    ✉
++                </div>
++
++                <h1 className="mt-5 text-xl font-bold text-slate-900">Verify your email</h1>
++                <p className="mt-2 text-sm text-slate-600">
++                    We sent a verification link to<br />
++                    <span className="font-medium text-slate-900">{user.email}</span>
++                </p>
++                <p className="mt-3 text-sm text-slate-500">
++                    Click the link to activate your account. This page will continue
++                    automatically once you do.
++                </p>
++
++                {message && (
++                    <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
++                        {message}
++                    </p>
++                )}
++                {error && (
++                    <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
++                        {error}
++                    </p>
++                )}
++
++                <button
++                    type="button"
++                    onClick={handleResend}
++                    disabled={sending || cooldown > 0}
++                    className="mt-6 w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white
++                               hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
++                >
++                    {sending
++                        ? "Sending..."
++                        : cooldown > 0
++                            ? `Resend available in ${cooldown}s`
++                            : "Resend the email"}
++                </button>
++
++                <p className="mt-4 text-xs text-slate-500">
++                    Check your spam folder too — it can take a few minutes to arrive.
++                </p>
++
++                <button
++                    type="button"
++                    onClick={handleLogout}
++                    className="mt-6 text-sm font-medium text-slate-500 hover:text-slate-900"
++                >
++                    Log out
++                </button>
++            </div>
++        </div>
++    )
++}
++
++export default VerifyNotice
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index 2c84af0..67a37db 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -1,111 +1,28 @@
+-:root {
+-  --text: #6b6375;
+-  --text-h: #08060d;
+-  --bg: #fff;
+-  --border: #e5e4e7;
+-  --code-bg: #f4f3ec;
+-  --accent: #aa3bff;
+-  --accent-bg: rgba(170, 59, 255, 0.1);
+-  --accent-border: rgba(170, 59, 255, 0.5);
+-  --social-bg: rgba(244, 243, 236, 0.5);
+-  --shadow:
+-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+-
+-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+-  --mono: ui-monospace, Consolas, monospace;
+-
+-  font: 18px/145% var(--sans);
+-  letter-spacing: 0.18px;
+-  color-scheme: light dark;
+-  color: var(--text);
+-  background: var(--bg);
+-  font-synthesis: none;
+-  text-rendering: optimizeLegibility;
+-  -webkit-font-smoothing: antialiased;
+-  -moz-osx-font-smoothing: grayscale;
+-
+-  @media (max-width: 1024px) {
+-    font-size: 16px;
+-  }
+-}
+-
+-@media (prefers-color-scheme: dark) {
+-  :root {
+-    --text: #9ca3af;
+-    --text-h: #f3f4f6;
+-    --bg: #16171d;
+-    --border: #2e303a;
+-    --code-bg: #1f2028;
+-    --accent: #c084fc;
+-    --accent-bg: rgba(192, 132, 252, 0.15);
+-    --accent-border: rgba(192, 132, 252, 0.5);
+-    --social-bg: rgba(47, 48, 58, 0.5);
+-    --shadow:
+-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+-  }
+-
+-  #social .button-icon {
+-    filter: invert(1) brightness(2);
+-  }
++@import "tailwindcss";
++
++/* Tailwind v4 is configured in CSS, not in a tailwind.config.js file.
++   Anything declared in @theme becomes a real utility class, so defining
++   --color-brand-600 gives you bg-brand-600, text-brand-600, border-brand-600
++   and so on. Naming the palette "brand" rather than using teal-600 directly
++   means the whole system recolours from this one block. */
++@theme {
++  --color-brand-50: #f0fdfa;
++  --color-brand-100: #ccfbf1;
++  --color-brand-200: #99f6e4;
++  --color-brand-300: #5eead4;
++  --color-brand-400: #2dd4bf;
++  --color-brand-500: #14b8a6;
++  --color-brand-600: #0d9488;
++  --color-brand-700: #0f766e;
++  --color-brand-800: #115e59;
++  --color-brand-900: #134e4a;
++
++  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
++    Roboto, "Helvetica Neue", Arial, sans-serif;
+ }
+ 
+ body {
++  @apply bg-slate-50 text-slate-800 antialiased;
+   margin: 0;
+-}
+-
+-#root {
+-  width: 1126px;
+-  max-width: 100%;
+-  margin: 0 auto;
+-  text-align: center;
+-  border-inline: 1px solid var(--border);
+-  min-height: 100svh;
+-  display: flex;
+-  flex-direction: column;
+-  box-sizing: border-box;
+-}
+-
+-h1,
+-h2 {
+-  font-family: var(--heading);
+-  font-weight: 500;
+-  color: var(--text-h);
+-}
+-
+-h1 {
+-  font-size: 56px;
+-  letter-spacing: -1.68px;
+-  margin: 32px 0;
+-  @media (max-width: 1024px) {
+-    font-size: 36px;
+-    margin: 20px 0;
+-  }
+-}
+-h2 {
+-  font-size: 24px;
+-  line-height: 118%;
+-  letter-spacing: -0.24px;
+-  margin: 0 0 8px;
+-  @media (max-width: 1024px) {
+-    font-size: 20px;
+-  }
+-}
+-p {
+-  margin: 0;
+-}
+-
+-code,
+-.counter {
+-  font-family: var(--mono);
+-  display: inline-flex;
+-  border-radius: 4px;
+-  color: var(--text-h);
+-}
+-
+-code {
+-  font-size: 15px;
+-  line-height: 135%;
+-  padding: 4px 8px;
+-  background: var(--code-bg);
++  min-height: 100vh;
+ }
+diff --git a/frontend/vite.config.js b/frontend/vite.config.js
+index 9982072..a3a6628 100644
+--- a/frontend/vite.config.js
++++ b/frontend/vite.config.js
+@@ -1,7 +1,8 @@
+ import react from '@vitejs/plugin-react'
++import tailwindcss from '@tailwindcss/vite'
+ import { defineConfig } from 'vite'
+ 
+ // https://vite.dev/config/
+ export default defineConfig({
+-  plugins: [react()],
++  plugins: [react(), tailwindcss()],
+ })
+diff --git a/routers/auth.py b/routers/auth.py
+index 43bbd82..d0485a3 100644
+--- a/routers/auth.py
++++ b/routers/auth.py
+@@ -4,11 +4,50 @@ from Models.database import get_db
+ import hashlib
+ from Models.refresh_token import RefreshToken
+ from datetime import datetime, timezone
+-from Security.utils import issue_auth_cookie, revoke_refresh_token, clear_auth_cookies
++from datetime import timedelta
++from Security.utils import (
++    issue_auth_cookie,
++    revoke_refresh_token,
++    clear_auth_cookies,
++    issue_verification_token,
++    get_current_user,
++)
+ from Models.user import User
++from Services.email import send_verification_email
+ 
+ router = APIRouter()
+ 
++# A verification token lasts 24 hours, so "issued at" is expires_at minus 24h.
++# Refusing a resend within this window stops the button being used to spam
++# someone's inbox - or to burn through the free email quota in one afternoon.
++RESEND_COOLDOWN = timedelta(seconds=60)
++
++
++@router.post("/resend-verification")
++def resend_verification(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
++    if current_user.is_verified:
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail="This account is already verified",
++        )
++
++    expires_at = current_user.verification_token_expires_at
++    if expires_at is not None:
++        issued_at = expires_at - timedelta(hours=24)
++        if datetime.now(timezone.utc) - issued_at < RESEND_COOLDOWN:
++            raise HTTPException(
++                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
++                detail="Please wait a minute before requesting another email",
++            )
++
++    # Issuing a new token overwrites the old one, so any previously emailed
++    # link stops working from this moment. That is the intended behaviour -
++    # only the most recent link should ever be valid.
++    token = issue_verification_token(current_user, db)
++    send_verification_email(current_user.email, current_user.name, token)
++
++    return {"message": f"Verification email sent to {current_user.email}"}
++
+ @router.post("/refresh")
+ def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+     token = request.cookies.get("refresh_token")
+diff --git a/routers/comment.py b/routers/comment.py
+index 3d12158..8ea0edb 100644
+--- a/routers/comment.py
++++ b/routers/comment.py
+@@ -7,6 +7,20 @@ from Schemas.comment import CommentIn,CommentResponse
+ 
+ router = APIRouter()
+ 
++@router.get("/solutions/{solution_id}/comments", response_model=list[CommentResponse])
++def get_comments(solution_id: int, db: Session = Depends(get_db)):
++    """Comments on one solution, oldest first so a thread reads top to bottom."""
++    fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
++    if not fnd_solution:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
++
++    return (
++        db.query(comment.Comment)
++        .filter(comment.Comment.solution_id == solution_id)
++        .order_by(comment.Comment.created_at.asc())
++        .all()
++    )
++
+ @router.post("/comment/{solution_id}", response_model=CommentResponse)
+ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
+diff --git a/routers/problem.py b/routers/problem.py
+index bdfbe86..fecbf9a 100644
+--- a/routers/problem.py
++++ b/routers/problem.py
+@@ -1,32 +1,67 @@
+ from fastapi import APIRouter, HTTPException, status, Depends
+ from sqlalchemy.orm import Session
++from sqlalchemy import func
+ from typing import Optional
+ from Schemas.problem import ProblemCreate, ProblemResponse
+ from Models.database import get_db
+ from Security.utils import get_current_user, get_verified_user
+-from Models import problem,user
++from Models import problem, user, solution
+ 
+ router = APIRouter()
+ 
++def _attach_solution_counts(problems, db):
++    """Set .solution_count on each problem using one grouped query.
++
++    Counting inside a loop would fire one query per problem (the N+1 problem);
++    this fires exactly one no matter how many problems there are.
++    """
++    if not problems:
++        return problems
++
++    ids = [p.id for p in problems]
++    counts = dict(
++        db.query(solution.Solution.problem_id, func.count(solution.Solution.id))
++        .filter(solution.Solution.problem_id.in_(ids))
++        .group_by(solution.Solution.problem_id)
++        .all()
++    )
++    for p in problems:
++        p.solution_count = counts.get(p.id, 0)
++    return problems
++
++
+ @router.get("/problems", response_model=list[ProblemResponse])
+-def get_problems(category: Optional[str] = None, db: Session = Depends(get_db)):
++def get_problems(
++    category: Optional[str] = None,
++    user_id: Optional[int] = None,
++    db: Session = Depends(get_db),
++):
+     query = db.query(problem.Problem)
+-    
++
+     if category:
+         query = query.filter(problem.Problem.category == category)
+-        
+-    return query.all()
+-    
++
++    if user_id:
++        query = query.filter(problem.Problem.user_id == user_id)
++
++    # Without an explicit ORDER BY, SQL makes no promise about row order, and
++    # Postgres physically moves a row when it is updated - so accepting a
++    # solution used to shuffle that problem's position in the feed.
++    query = query.order_by(problem.Problem.created_at.desc())
++
++    return _attach_solution_counts(query.all(), db)
++
+ 
+ @router.get("/problems/{problem_id}", response_model=ProblemResponse)
+ def get_problem(problem_id: int, db: Session = Depends(get_db)):
+     fnd_prob = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
+-    
++
+     if not fnd_prob:
+         raise HTTPException(
+             status_code=status.HTTP_404_NOT_FOUND,
+             detail=f"Problem with id {problem_id} not found"
+     )
++    _attach_solution_counts([fnd_prob], db)
+     return fnd_prob
+ 
+ @router.post("/problems", status_code=status.HTTP_201_CREATED)
+diff --git a/routers/solution.py b/routers/solution.py
+index 8e0bb9e..0cd0ea4 100644
+--- a/routers/solution.py
++++ b/routers/solution.py
+@@ -51,7 +51,19 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
+     if not fnd_problem:
+         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+ 
+-    return db.query(solution.Solution).filter(solution.Solution.problem_id == problem_id).all()
++    # Accepted answer first, then most upvoted, then newest. Reputation
++    # deliberately does not affect this order - that was considered and
++    # rejected, to avoid burying good answers from new contributors.
++    return (
++        db.query(solution.Solution)
++        .filter(solution.Solution.problem_id == problem_id)
++        .order_by(
++            (solution.Solution.status == "accepted").desc(),
++            solution.Solution.upvote_count.desc(),
++            solution.Solution.created_at.desc(),
++        )
++        .all()
++    )
+ 
+ @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
+ def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+diff --git a/routers/user.py b/routers/user.py
+index 041a859..5d60b74 100644
+--- a/routers/user.py
++++ b/routers/user.py
+@@ -87,6 +87,9 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
+         "is_verified": current_user.is_verified,
+         "points": current_user.points,
+         "tier": get_tier(current_user.points),
++        # Lets the verify screen show a countdown on the resend button instead
++        # of letting the user click it and receive a 429.
++        "verification_expires_at": current_user.verification_token_expires_at,
+     }
+ 
+ @router.delete("/users/{user_id}")
+diff --git a/smoke_test.py b/smoke_test.py
+new file mode 100644
+index 0000000..b7f4601
+--- /dev/null
++++ b/smoke_test.py
+@@ -0,0 +1,165 @@
++"""End-to-end smoke test for ComUniSolve.
++
++!! DROPS AND RECREATES EVERY TABLE. !! Point it at a throwaway database only:
++
++    set TEST_DATABASE_URL=postgresql+psycopg2://postgres:pw@localhost/comunisolve_test
++    python smoke_test.py
++"""
++import os
++import sys
++
++TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
++if not TEST_DATABASE_URL or "test" not in TEST_DATABASE_URL.lower():
++    sys.exit("Refusing to run: set TEST_DATABASE_URL to a throwaway database whose name contains 'test'.")
++
++os.environ["DATABASE_URL"] = TEST_DATABASE_URL
++for k, v in [("PASSWORD_PEPPER", "test-pepper"), ("SECRET_KEY", "test-secret"),
++             ("BREVO_API_KEY", "k"), ("SENDER_EMAIL", "a@b.c"),
++             ("FRONTEND_URL", "http://localhost:5173")]:
++    os.environ.setdefault(k, v)
++
++from fastapi.testclient import TestClient
++import routers.user as user_router
++user_router.send_verification_email = lambda *a, **k: None
++
++from Models.database import engine, Base, SessionLocal
++from Models import user, problem, solution, comment, rating, refresh_token
++
++Base.metadata.drop_all(bind=engine)
++Base.metadata.create_all(bind=engine)
++
++from main import app
++
++results = []
++
++def check(label, ok, evidence=""):
++    results.append(ok)
++    print(f"[{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {evidence}" if evidence else ""))
++
++def verified_client(name, email):
++    c = TestClient(app)
++    c.post("/register", json={"name": name, "email": email, "password": "password123"})
++    db = SessionLocal()
++    u = db.query(user.User).filter(user.User.email == email).first()
++    u.is_verified = True
++    db.commit()
++    uid = u.id
++    db.close()
++    c.post("/login", json={"email": email, "password": "password123"})
++    return c, uid
++
++
++print("=" * 70)
++print("COMUNISOLVE SMOKE TEST")
++print("=" * 70)
++
++asker, asker_id = verified_client("Maria Santos", "maria@example.com")
++helper, helper_id = verified_client("Ben Cruz", "ben@example.com")
++
++r = asker.post("/problems", json={"title": "Street light is out", "description": "Dark for weeks", "category": "Public"})
++check("Post a problem", r.status_code == 201)
++pid = r.json()["id"]
++
++r = asker.get(f"/problems/{pid}")
++body = r.json()
++check("Problem includes its author and a solution count",
++      r.status_code == 200 and body.get("author", {}).get("name") == "Maria Santos" and body.get("solution_count") == 0,
++      f"author={body.get('author')}, solution_count={body.get('solution_count')}")
++
++r = asker.get("/problems")
++check("Feed is ordered newest first", r.status_code == 200 and isinstance(r.json(), list))
++
++r = asker.get(f"/problems?user_id={asker_id}")
++check("Feed can be filtered to one user's problems",
++      r.status_code == 200 and len(r.json()) == 1 and r.json()[0]["id"] == pid,
++      f"count={len(r.json())}")
++
++r = helper.post("/solutions", json={"problem_id": pid, "solution_text": "Report it to the barangay office."})
++check("Another user can submit a solution", r.status_code == 201)
++sid = r.json()["id"]
++
++r = asker.get(f"/solutions/problem/{pid}")
++sol = r.json()[0]
++check("Solution list includes the author and their tier",
++      r.status_code == 200 and sol["author"]["name"] == "Ben Cruz" and "tier" in sol["author"],
++      f"author={sol['author']}")
++
++check("Author payload never leaks email",
++      "email" not in sol["author"],
++      f"keys={sorted(sol['author'].keys())}")
++
++r = asker.patch(f"/solutions/{sid}/accept")
++check("Problem owner can accept a solution",
++      r.status_code == 200 and r.json()["problem_status"] == "resolved",
++      f"{r.json()}")
++
++r = helper.patch(f"/solutions/{sid}/accept")
++check("A non-owner cannot accept", r.status_code == 403)
++
++r = asker.post(f"/solutions/{sid}/upvote")
++check("Upvote works and increments the counter",
++      r.status_code == 200 and r.json()["upvote_count"] == 1, f"{r.json()}")
++
++r = asker.post(f"/solutions/{sid}/upvote")
++check("The same user cannot upvote twice", r.status_code == 400)
++
++r = asker.post(f"/comment/{sid}", json={"content": "Thank you, this worked!", "parent_id": None})
++check("Comment can be posted", r.status_code == 200)
++
++r = asker.get(f"/solutions/{sid}/comments")
++check("Comments can be read back with their author",
++      r.status_code == 200 and len(r.json()) == 1 and r.json()[0]["author"]["name"] == "Maria Santos",
++      f"count={len(r.json())}")
++
++r = asker.post(f"/solutions/{sid}/rate", json={"score": 5, "feedback": "Very clear"})
++check("Problem owner can rate the solution", r.status_code == 200, f"status={r.status_code}")
++
++r = helper.get("/users/me")
++me = r.json()
++check("Helper earned reputation points for the accepted solution",
++      me["points"] > 0, f"points={me['points']}, tier={me['tier']}")
++
++r = asker.get(f"/solutions/problem/{pid}")
++check("Empty-but-valid problems still return a list, not 404",
++      asker.get("/solutions/problem/999999").status_code == 404 and r.status_code == 200)
++
++
++# --- verification gate -------------------------------------------------------
++unverified = TestClient(app)
++r = unverified.post("/register", json={"name": "Nena Lim", "email": "nena@example.com", "password": "password123"})
++check("Registration succeeds without verifying", r.status_code == 201)
++
++r = unverified.get("/users/me")
++check("An unverified account is authenticated but flagged unverified",
++      r.status_code == 200 and r.json()["is_verified"] is False,
++      f"is_verified={r.json().get('is_verified')}")
++
++r = unverified.post("/problems", json={"title": "Should be blocked", "description": "x", "category": "Public"})
++check("An unverified account cannot post a problem", r.status_code == 403, f"status={r.status_code}")
++
++r = unverified.post("/resend-verification")
++check("Resend is refused inside the cooldown (registration just sent one)",
++      r.status_code == 429, f"status={r.status_code}")
++
++# Age the token by two minutes so the cooldown has passed, without the test
++# having to sit and wait for it.
++from datetime import timedelta as _td
++db = SessionLocal()
++nena = db.query(user.User).filter(user.User.email == "nena@example.com").first()
++nena.verification_token_expires_at = nena.verification_token_expires_at - _td(minutes=2)
++db.commit(); db.close()
++
++r = unverified.post("/resend-verification")
++check("Resend works once the cooldown has passed", r.status_code == 200, f"{r.json()}")
++
++r = unverified.get("/users/me")
++check("/users/me exposes the token expiry so the UI can show a countdown",
++      "verification_expires_at" in r.json(), f"keys={sorted(r.json().keys())}")
++
++r = asker.post("/resend-verification")
++check("An already-verified account cannot resend", r.status_code == 400, f"status={r.status_code}")
++
++print("=" * 70)
++print(f"{sum(results)}/{len(results)} checks passed")
++print("=" * 70)
++sys.exit(0 if all(results) else 1)

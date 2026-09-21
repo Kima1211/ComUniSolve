@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routers import  problem, rating, solution, user,comment,admin,auth
+from routers import  problem, rating, solution, user,comment,admin,auth,matching
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -11,6 +11,7 @@ app.include_router(problem.router)
 app.include_router(comment.router)
 app.include_router(admin.router)
 app.include_router(auth.router)
+app.include_router(matching.router)
 
 @app.get("/")
 def hello():
