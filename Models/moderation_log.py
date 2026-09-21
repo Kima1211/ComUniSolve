@@ -14,6 +14,11 @@ from Models.database import Base
 MODERATION_ACTIONS = ["approved", "removed", "restored", "dismissed", "suspended", "unsuspended"]
 TARGET_TYPES = ["problem", "solution", "user"]
 
+# The moderation vocabulary lives here so problems and solutions cannot drift
+# apart from each other, or from migrations/2026_09_21_moderation.sql.
+AI_STATUSES = ["unchecked", "ok", "unclear", "inappropriate"]
+MODERATION_STATUSES = ["visible", "flagged", "removed"]
+
 
 class ModerationLog(Base):
     __tablename__ = "moderation_logs"

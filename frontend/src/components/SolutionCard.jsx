@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { apiGet, apiPost, apiPatch } from "../api";
 import { TierBadge } from "./Layout";
+import ReportButton from "./ReportButton";
 
 /**
  * One solution: its author, the text, and every action the backend allows -
@@ -134,6 +135,12 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                 >
                     {comments === null ? "Comments" : "Hide comments"}
                 </button>
+
+                {signedIn && currentUser?.id !== solution.user_id && (
+                    <div className="ml-auto">
+                        <ReportButton solutionId={solution.id} />
+                    </div>
+                )}
             </div>
 
             {ratingOpen && isProblemOwner && (

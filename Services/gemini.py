@@ -365,3 +365,89 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
     _CACHE[key] = (time.time(), ranked)
 
     return ranked
+
+
+def ask_json(prompt: str, gemini_schema: dict, groq_schema: dict,
+             label: str = "ai_task") -> Optional[dict]:
+    """Send one prompt through the provider chain and return parsed JSON.
+
+    This is the generic half of rerank(): provider fallback, the model chain,
+    retries, timeouts and the overall deadline. A second AI feature reuses it
+    instead of growing a second copy that can drift out of sync with this one.
+
+    Returns None whenever no provider produced usable JSON. Every caller must
+    have a path that still works in that case - the platform has to run when
+    the API does not.
+    """
+    providers: List[_Provider] = []
+
+    if GEMINI_API_KEY and MODEL_CHAIN:
+        providers.append(_Provider(
+            "gemini", GEMINI_API_URL, MODEL_CHAIN,
+            lambda model, text: {
+                "model": model,
+                "input": text,
+                "response_format": {
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": gemini_schema,
+                },
+            },
+            _gemini_headers, _gemini_text,
+        ))
+
+    if GROQ_API_KEY and GROQ_MODEL_CHAIN:
+        providers.append(_Provider(
+            "groq", GROQ_API_URL, GROQ_MODEL_CHAIN,
+            lambda model, text: {
+                "model": model,
+                "messages": [{"role": "user", "content": text}],
+                "temperature": 0,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {"name": label, "strict": True, "schema": groq_schema},
+                },
+            },
+            _groq_headers, _groq_text,
+        ))
+
+    if not providers:
+        return None
+
+    started = time.monotonic()
+    deadline = started + DEADLINE_SECONDS
+
+    text = None
+    used = None
+    last_status = None
+
+    for position, provider in enumerate(providers):
+        if position > 0:
+            print(f"[AI:{label}] {providers[position - 1].name} had nothing left - "
+                  f"falling back to {provider.name}")
+        text, last_status = _ask_provider(provider, prompt, deadline)
+        if text:
+            used = provider.name
+            break
+
+    elapsed = time.monotonic() - started
+
+    if not text:
+        if last_status == RATE_LIMITED_STATUS:
+            print(f"[AI:{label}] every model is rate limited ({elapsed:.1f}s)")
+        else:
+            print(f"[AI:{label}] no provider answered after {elapsed:.1f}s")
+        return None
+
+    try:
+        parsed = json.loads(text)
+    except ValueError as e:
+        print(f"[AI:{label}] {used} returned text that is not valid JSON: {e} | {text[:200]}")
+        return None
+
+    if not isinstance(parsed, dict):
+        print(f"[AI:{label}] {used} returned {type(parsed).__name__}, expected an object")
+        return None
+
+    print(f"[AI:{label}] {used} answered in {elapsed:.1f}s")
+    return parsed

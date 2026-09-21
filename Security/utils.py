@@ -13,6 +13,7 @@ import secrets
 import hashlib
 from Models.refresh_token import RefreshToken
 from Models.user import User
+from Services.reputation import is_currently_suspended
 
 
 load_dotenv()
@@ -189,6 +190,29 @@ def get_current_admin(current_user: db_models.User = Depends(get_current_user)):
 def get_verified_user(current_user: db_models.User = Depends(get_current_user)):
     if not current_user.is_verified:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Please verify your email before posting")
+    return current_user
+
+
+def get_active_poster(current_user: db_models.User = Depends(get_verified_user)):
+    """A verified user who is not currently suspended.
+
+    Every endpoint that WRITES something - posting, solving, commenting,
+    upvoting, rating, reporting - depends on this. Reading is deliberately
+    left alone: a suspended user can still browse and still see why they were
+    suspended, which is kinder and easier to explain than a blanket lockout.
+
+    Note it calls is_currently_suspended() rather than reading is_suspended.
+    Suspensions expire lazily, so the flag alone goes stale the moment an end
+    date passes.
+    """
+    if is_currently_suspended(current_user):
+        until = current_user.suspended_until
+        when = f" until {until:%d %b %Y}" if until else ""
+        reason = f" Reason: {current_user.suspension_reason}" if current_user.suspension_reason else ""
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Your account is suspended{when}.{reason}",
+        )
     return current_user
 
 

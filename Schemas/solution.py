@@ -6,6 +6,8 @@ from Schemas.author import AuthorOut
 class SolutionCreate(BaseModel):
     problem_id:  int
     solution_text: str = Field(..., min_length=1, max_length=5000)
+    # See ProblemCreate.acknowledged - clears an "unclear" verdict only.
+    acknowledged: bool = False
 
 class SolutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

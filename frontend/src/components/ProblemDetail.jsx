@@ -5,6 +5,8 @@ import { useAuth } from "../auth-context";
 import Layout, { TierBadge } from "./Layout";
 import SolutionCard from "./SolutionCard";
 import SimilarProblems from "./SimilarProblems";
+import ModerationNotice from "./ModerationNotice";
+import ReportButton from "./ReportButton";
 
 function ProblemDetail() {
     const { id } = useParams()
@@ -18,6 +20,7 @@ function ProblemDetail() {
     const [text, setText] = useState("")
     const [submitting, setSubmitting] = useState(false)
     const [submitError, setSubmitError] = useState("")
+    const [solutionGate, setSolutionGate] = useState(null)
     const [matches, setMatches] = useState([])
     const [matchesAiUsed, setMatchesAiUsed] = useState(false)
     const [checkingAi, setCheckingAi] = useState(false)
@@ -85,19 +88,31 @@ function ProblemDetail() {
         return () => { cancelled = true }
     }, [fetchAll])
 
-    async function submitSolution(e) {
-        e.preventDefault()
+    // Solutions go through the same moderation gate as problems.
+    async function postSolution(acknowledged) {
         try {
             setSubmitError("")
+            setSolutionGate(null)
             setSubmitting(true)
-            await apiPost("/solutions", { problem_id: Number(id), solution_text: text })
+            await apiPost("/solutions", {
+                problem_id: Number(id), solution_text: text, acknowledged,
+            })
             setText("")
             await load()
         } catch (e) {
+            if (e.status === 422 && e.detail?.verdict) {
+                setSolutionGate(e.detail)
+                return
+            }
             setSubmitError(e.message || "Could not submit your solution")
         } finally {
             setSubmitting(false)
         }
+    }
+
+    function submitSolution(e) {
+        e.preventDefault()
+        postSolution(false)
     }
 
     if (loading) {
@@ -146,6 +161,11 @@ function ProblemDetail() {
                             <span>posted by {problem.author.name}</span>
                             <TierBadge tier={problem.author.tier} />
                         </>
+                    )}
+                    {user && user.id !== problem.user_id && (
+                        <div className="ml-auto">
+                            <ReportButton problemId={problem.id} />
+                        </div>
                     )}
                 </div>
 
@@ -249,6 +269,17 @@ function ProblemDetail() {
                             <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                                 {submitError}
                             </p>
+                        )}
+
+                        {solutionGate && (
+                            <div className="mt-2">
+                                <ModerationNotice
+                                    gate={solutionGate}
+                                    busy={submitting}
+                                    onUseSuggestion={(s) => { setText(s); setSolutionGate(null) }}
+                                    onPostAnyway={() => postSolution(true)}
+                                />
+                            </div>
                         )}
                         <button
                             type="submit"

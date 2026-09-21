@@ -45,6 +45,14 @@ export function getErrorMessage(data, status) {
     return detail;
   }
 
+  // The moderation gate returns a whole object rather than a string, because
+  // the UI needs the suggested rewrite and the acknowledgeable flag as well as
+  // the message. Without this branch it would fall through to the generic
+  // "Request failed (422)" and the user would never see why.
+  if (detail && typeof detail === "object" && !Array.isArray(detail) && detail.message) {
+    return detail.message;
+  }
+
   if (Array.isArray(detail)) {
     return detail
       .map((item) => {
@@ -60,10 +68,14 @@ export function getErrorMessage(data, status) {
 }
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, detail = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    // The raw `detail` the server sent, when it was structured. Callers that
+    // understand a particular shape (the moderation gate) read this; everyone
+    // else keeps using .message and is unaffected.
+    this.detail = detail;
   }
 }
 
@@ -121,7 +133,7 @@ export async function api(path, options = {}) {
   }
 
   if (!response.ok) {
-    throw new ApiError(getErrorMessage(data, response.status), response.status);
+    throw new ApiError(getErrorMessage(data, response.status), response.status, data?.detail ?? null);
   }
 
   return data;

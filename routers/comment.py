@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from Models.database import get_db
-from Security.utils import get_current_user
+from Security.utils import get_current_user, get_active_poster
 from Models import user,solution,comment
 from Schemas.comment import CommentIn,CommentResponse
 
@@ -22,7 +22,7 @@ def get_comments(solution_id: int, db: Session = Depends(get_db)):
     )
 
 @router.post("/comment/{solution_id}", response_model=CommentResponse)
-def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
     if not fnd_solution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Solution Not Found!")

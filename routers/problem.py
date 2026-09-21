@@ -3,11 +3,33 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
 from Schemas.problem import ProblemCreate, ProblemResponse
+from Schemas.moderation import ContentCheckRequest, ContentCheckResponse
 from Models.database import get_db
-from Security.utils import get_current_user, get_verified_user
+from Security.utils import get_current_user, get_verified_user, get_active_poster
 from Models import problem, user, solution
+from Services.moderation import run_pre_post_gate
 
 router = APIRouter()
+
+
+def _gate_to_response(result) -> dict:
+    return ContentCheckResponse(
+        verdict=result.verdict,
+        blocked=result.blocked,
+        acknowledgeable=result.acknowledgeable,
+        message=result.message,
+        matched_terms=result.matched_terms,
+        suggestion=result.suggestion,
+    ).model_dump()
+
+
+def _visible(query):
+    """Removed content disappears from every public listing.
+
+    It is a soft delete - the row is still there for the audit trail - so the
+    filter has to be applied deliberately everywhere the public reads.
+    """
+    return query.filter(problem.Problem.moderation_status != "removed")
 
 def _attach_solution_counts(problems, db):
     """Set .solution_count on each problem using one grouped query.
@@ -36,7 +58,7 @@ def get_problems(
     user_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(problem.Problem)
+    query = _visible(db.query(problem.Problem))
 
     if category:
         query = query.filter(problem.Problem.category == category)
@@ -54,7 +76,7 @@ def get_problems(
 
 @router.get("/problems/{problem_id}", response_model=ProblemResponse)
 def get_problem(problem_id: int, db: Session = Depends(get_db)):
-    fnd_prob = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
+    fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
 
     if not fnd_prob:
         raise HTTPException(
@@ -64,13 +86,41 @@ def get_problem(problem_id: int, db: Session = Depends(get_db)):
     _attach_solution_counts([fnd_prob], db)
     return fnd_prob
 
+@router.post("/problems/check", response_model=ContentCheckResponse)
+def check_problem_text(
+    body: ContentCheckRequest,
+    current_user: user.User = Depends(get_active_poster),
+):
+    """Run the pre-post gate without creating anything.
+
+    Objective 3 says the AI evaluates posts "before they are submitted by the
+    user", so the form can call this and show the result while they are still
+    editing. POST /problems runs the same gate again server-side - this
+    endpoint is a convenience for the UI, never the enforcement point.
+    """
+    return _gate_to_response(run_pre_post_gate(body.title, body.text))
+
+
 @router.post("/problems", status_code=status.HTTP_201_CREATED)
-def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_verified_user)):
+def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
+    gate = run_pre_post_gate(prob.title, prob.description or "", acknowledged=prob.acknowledged)
+
+    if gate.blocked:
+        # 422: the request was understood and is well-formed, but its content
+        # is not acceptable. The body carries the reason and the suggested
+        # rewrite so the user can fix it and try again.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_gate_to_response(gate),
+        )
+
     new_problem = problem.Problem(
         user_id=current_user.id,
         title=prob.title,
         description=prob.description,
-        category=prob.category
+        category=prob.category,
+        ai_status=gate.verdict,
+        moderation_status=gate.moderation_status,
     )
     try:
         db.add(new_problem)

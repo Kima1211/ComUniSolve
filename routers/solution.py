@@ -3,13 +3,15 @@ from sqlalchemy.orm import Session
 from Schemas.solution import SolutionCreate, SolutionResponse, SolutionAccept
 from Models.database import get_db
 from Models import solution,problem,user
-from Security.utils import get_current_user, get_verified_user
+from Security.utils import get_current_user, get_verified_user, get_active_poster
 from Services.reputation import award_points
+from Services.moderation import run_pre_post_gate
+from Schemas.moderation import ContentCheckResponse
 
 router = APIRouter()
 
 @router.post("/solutions", status_code=status.HTTP_201_CREATED)
-def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_verified_user)):
+def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == solution_create.problem_id).first()
      
     if not fnd_problem:
@@ -17,6 +19,23 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
 
     existing_solution = db.query(solution.Solution).filter(solution.Solution.user_id == current_user.id, solution.Solution.problem_id == fnd_problem.id).first()
     
+    # Same gate as posting a problem. A solution is user-generated content on
+    # the same platform, so it gets the same Layer 1 and Layer 2 treatment.
+    gate = run_pre_post_gate(None, solution_create.solution_text,
+                             acknowledged=solution_create.acknowledged)
+    if gate.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=ContentCheckResponse(
+                verdict=gate.verdict,
+                blocked=gate.blocked,
+                acknowledgeable=gate.acknowledgeable,
+                message=gate.message,
+                matched_terms=gate.matched_terms,
+                suggestion=gate.suggestion,
+            ).model_dump(),
+        )
+
     is_self_solution = (
         fnd_problem.user_id == current_user.id
     )
@@ -24,6 +43,8 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
         user_id = current_user.id,
         problem_id = solution_create.problem_id,
         solution_text = solution_create.solution_text,
+        ai_status = gate.verdict,
+        moderation_status = gate.moderation_status,
     )
     if not is_self_solution and not existing_solution:
         award_points(current_user, 2)
@@ -57,6 +78,7 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
     return (
         db.query(solution.Solution)
         .filter(solution.Solution.problem_id == problem_id)
+        .filter(solution.Solution.moderation_status != "removed")
         .order_by(
             (solution.Solution.status == "accepted").desc(),
             solution.Solution.upvote_count.desc(),
@@ -66,7 +88,7 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
     )
 
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
-def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
     if not fnd_solution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
@@ -118,7 +140,7 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
     }
     
 @router.patch("/solutions/{solution_id}/unaccept", response_model=SolutionAccept)
-def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
     if not fnd_solution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
@@ -159,7 +181,7 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
         }
 
 @router.post("/solutions/{solution_id}/upvote")
-def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user: user.User=Depends(get_current_user)):
+def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user: user.User=Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
     if not fnd_solution: 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")

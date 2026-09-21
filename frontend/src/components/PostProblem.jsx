@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiPost } from "../api";
 import Layout from "./Layout";
 import SimilarProblems from "./SimilarProblems";
+import ModerationNotice from "./ModerationNotice";
 
 const CATEGORIES = ["Household", "School", "Public", "Health", "Livelihood", "Other"]
 
@@ -17,6 +18,7 @@ function PostProblem() {
     const [description, setDescription] = useState("")
     const [category, setCategory] = useState(CATEGORIES[0])
     const [error, setError] = useState("")
+    const [gate, setGate] = useState(null)
     const [submitting, setSubmitting] = useState(false)
     const [matches, setMatches] = useState([])
     const [aiUsed, setAiUsed] = useState(false)
@@ -60,19 +62,39 @@ function PostProblem() {
         return () => { cancelled = true; clearTimeout(timer) }
     }, [title, description])
 
-    async function handleSubmit(e) {
-        e.preventDefault()
+    // Moderation Layers 1 and 2. `acknowledged` is only ever set by the user
+    // pressing "Post it as I wrote it" after seeing the warning, and the server
+    // honours it for an unclear verdict only.
+    async function submitProblem(acknowledged) {
         try {
             setError("")
+            setGate(null)
             setSubmitting(true)
-            const data = await apiPost("/problems", { title, description, category })
+            const data = await apiPost("/problems", { title, description, category, acknowledged })
             navigate(`/problems/${data.id}`)
         } catch (e) {
             if (e.status === 401) { navigate('/login'); return }
+            // A 422 whose detail carries a verdict is the moderation gate, not
+            // an ordinary validation error - it gets its own panel because it
+            // has a suggestion and possibly a way forward.
+            if (e.status === 422 && e.detail?.verdict) {
+                setGate(e.detail)
+                return
+            }
             setError(e.message || "Something went wrong! Please try again.")
         } finally {
             setSubmitting(false)
         }
+    }
+
+    function handleSubmit(e) {
+        e.preventDefault()
+        submitProblem(false)
+    }
+
+    function useSuggestion(text) {
+        setDescription(text)
+        setGate(null)
     }
 
     return (
@@ -117,6 +139,13 @@ function PostProblem() {
                             {error}
                         </div>
                     )}
+
+                    <ModerationNotice
+                        gate={gate}
+                        busy={submitting}
+                        onUseSuggestion={useSuggestion}
+                        onPostAnyway={() => submitProblem(true)}
+                    />
 
                     <button
                         type="submit"
