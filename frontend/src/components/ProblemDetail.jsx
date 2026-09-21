@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import { useAuth } from "../auth-context";
@@ -20,30 +20,56 @@ function ProblemDetail() {
     const [submitError, setSubmitError] = useState("")
     const [matches, setMatches] = useState([])
     const [matchesAiUsed, setMatchesAiUsed] = useState(false)
+    const [checkingAi, setCheckingAi] = useState(false)
+    const [aiFailed, setAiFailed] = useState(false)
 
-    // Similar problems for this one. Separate from the main load because a
-    // failure here must not stop the problem itself from rendering.
+    // StrictMode mounts twice in dev; without this the AI is asked twice.
+    const aiAskedFor = useRef(null)
+
+    const askAI = useCallback(async () => {
+        try {
+            setAiFailed(false)
+            setCheckingAi(true)
+            const data = await apiGet(`/problems/${id}/similar/ai`)
+            setMatches(data.matches || [])
+            setMatchesAiUsed(Boolean(data.ai_used))
+            if (!data.ai_used) setAiFailed(true)
+        } catch {
+            setAiFailed(true)
+        } finally {
+            setCheckingAi(false)
+        }
+    }, [id])
+
+    // Word overlap renders first so the page is never blank, then the AI
+    // answer replaces it.
     useEffect(() => {
         let cancelled = false
+        setMatches([])
+        setMatchesAiUsed(false)
+        setAiFailed(false)
+
         apiGet(`/problems/${id}/similar`)
             .then((data) => {
                 if (cancelled) return
                 setMatches(data.matches || [])
                 setMatchesAiUsed(Boolean(data.ai_used))
+                if (data.ai_used) return
+                if (aiAskedFor.current === id) return
+                aiAskedFor.current = id
+                return askAI()
             })
             .catch(() => { if (!cancelled) setMatches([]) })
         return () => { cancelled = true }
-    }, [id])
+    }, [id, askAI])
 
-    // Two endpoints, one load. Promise.all runs them at the same time rather
-    // than waiting for the first to finish before starting the second.
+    // Promise.all so both requests run at the same time.
     const fetchAll = useCallback(
         () => Promise.all([apiGet(`/problems/${id}`), apiGet(`/solutions/problem/${id}`)]),
         [id]
     )
 
-    // Used after any action (accept, upvote, comment) so the page reflects
-    // what the server actually says rather than a guess made locally.
+    // Refetch after any action, so the page shows what the server says.
     const load = useCallback(async () => {
         const [p, s] = await fetchAll()
         setProblem(p)
@@ -128,16 +154,51 @@ function ProblemDetail() {
                 )}
             </article>
 
-            {matches.length > 0 && (
-                <div className="mt-6">
-                    <SimilarProblems
-                        matches={matches}
-                        aiUsed={matchesAiUsed}
-                        title="Related problems"
-                        hint="Matched by comparing the wording of every problem on the platform."
-                    />
-                </div>
-            )}
+            <div className="mt-6">
+                <SimilarProblems
+                    matches={matches}
+                    aiUsed={matchesAiUsed}
+                    title="Related problems"
+                    hint={
+                        matchesAiUsed
+                            ? "Word overlap gathered the candidates; the AI judged which describe the same issue, including across English and Tagalog."
+                            : "Matched by comparing the wording of every problem on the platform."
+                    }
+                />
+
+                {checkingAi && (
+                    <p className="mt-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50
+                                  px-4 py-2 text-sm text-purple-800">
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
+                        Checking with AI for problems worded differently...
+                    </p>
+                )}
+
+                {!checkingAi && matchesAiUsed && matches.length === 0 && (
+                    <p className="mt-3 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500">
+                        The AI read every other problem on the platform and found none describing this issue.
+                    </p>
+                )}
+
+                {!checkingAi && aiFailed && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg
+                                    border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                        <span>
+                            {matches.length > 0
+                                ? "The AI layer could not be reached, so these are word matches only."
+                                : "The AI layer could not be reached, and word matching found nothing."}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={askAI}
+                            className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs
+                                       font-medium text-amber-900 hover:bg-amber-100"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                )}
+            </div>
 
             <section className="mt-8">
                 <h2 className="text-lg font-semibold text-slate-900">

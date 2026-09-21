@@ -194,21 +194,32 @@ check("A problem's own page can list related problems, excluding itself",
       f"ids={[m['id'] for m in r.json()['matches']]}")
 
 # --- the AI layer degrades safely -------------------------------------------
+# Forced off, so these pass whether or not real API keys are present.
 from Services import gemini as _gemini
-check("Gemini layer reports itself disabled without an API key",
+
+_saved_keys = (_gemini.GEMINI_API_KEY, _gemini.GROQ_API_KEY)
+_gemini.GEMINI_API_KEY = None
+_gemini.GROQ_API_KEY = None
+
+check("The AI layer reports itself disabled when no provider has a key",
       _gemini.is_enabled() is False, f"is_enabled={_gemini.is_enabled()}")
+
+check("No provider is attempted when no key is configured",
+      _gemini._active_providers() == [], f"{_gemini._active_providers()}")
 
 r = asker.post("/problems/match/ai", json={
     "title": "Our street light is broken",
     "description": "The lamp outside our house has been dark for a month."})
 body = r.json()
-check("The AI endpoint still returns TF-IDF results when Gemini is unavailable",
+check("The AI endpoint still returns TF-IDF results when no AI is available",
       r.status_code == 200 and len(body["matches"]) >= 1 and body["ai_used"] is False,
       f"ai_used={body['ai_used']}, matches={len(body['matches'])}")
 
 check("Results are honest about which layers ran",
       all(m["reason"] is None for m in body["matches"]),
       "no AI reason is invented when the AI did not run")
+
+_gemini.GEMINI_API_KEY, _gemini.GROQ_API_KEY = _saved_keys
 
 print("=" * 70)
 print(f"{sum(results)}/{len(results)} checks passed")
