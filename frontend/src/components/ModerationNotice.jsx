@@ -20,7 +20,7 @@ function ModerationNotice({ gate, onUseSuggestion, onPostAnyway, busy }) {
     return (
         <div className={`rounded-lg border px-4 py-3 ${tone.box}`}>
             <p className={`text-sm font-semibold ${tone.head}`}>
-                {canOverride ? "This may be hard for neighbours to act on" : "This post cannot be submitted"}
+                {canOverride ? "This may be hard for others to act on" : "This post cannot be submitted"}
             </p>
 
             <p className={`mt-1 text-sm ${tone.body}`}>{gate.message}</p>

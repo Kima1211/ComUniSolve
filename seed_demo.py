@@ -9,7 +9,7 @@ running it twice is safe.
 What it creates:
   * 4 verified demo users with different reputation tiers, so every tier badge
     is visible on screen
-  * 8 community problems across your categories, in English and Tagalog
+  * 10 problems across your categories, in English, Tagalog and Waray
   * Solutions on several, with two accepted - which is what makes Solution
     Matching worth demonstrating, since a match carries its accepted answer
 
@@ -107,6 +107,29 @@ PROBLEMS = [
         "The water reaches the doorstep within an hour of heavy rain. The drainage at the end "
         "of the street looks blocked but nobody seems to be clearing it.",
         "Public", 1, [],
+    ),
+    # These two are a deliberate pair: the same problem, one in Waray and one in
+    # English, in a non-barangay category. They are what proves two things on
+    # screen - that a school problem can be posted at all, and that matching
+    # crosses languages. Post the Waray one through the UI during the demo
+    # rather than seeding it, because seeding inserts straight into the database
+    # and skips the pre-post gate entirely.
+    (
+        "Tutdu-e daw ako if-else ha C++",
+        "Diri ko maintindihan an if-else ha C++. Ano an kaibahan han if ngan else if? "
+        "May exam kami ha Biyernes.",
+        "School", 0,
+        [
+            ("Isipin mo na parang checkpoint. Ang if ang unang tanong - kapag totoo, doon "
+             "papasok at hindi na titingnan ang iba. Ang else if ay susunod na tanong lang "
+             "kapag mali ang una. Ang else naman ay kapag walang tumama sa lahat.", 2, True),
+        ],
+    ),
+    (
+        "How do I use if-else statements in C++?",
+        "We just started conditionals in our programming subject and I keep getting the "
+        "logic wrong when there is more than one condition to check.",
+        "School", 1, [],
     ),
 ]
 

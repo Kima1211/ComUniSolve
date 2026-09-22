@@ -1,0 +1,71 @@
+diff --git a/Services/moderation_ai.py b/Services/moderation_ai.py
+index 6550f93..ea412ba 100644
+--- a/Services/moderation_ai.py
++++ b/Services/moderation_ai.py
+@@ -34,21 +34,35 @@ _STRICT_SCHEMA = {
+ 
+ def _build_prompt(title: Optional[str], text: str) -> str:
+     return (
+-        "You check posts on ComUniSolve, a platform where residents of Filipino "
+-        "barangays report local community problems and suggest solutions.\n"
++        "You check posts on ComUniSolve, a platform where people post problems "
++        "they are facing and other members suggest solutions. A problem can be "
++        "about anything - a barangay concern, schoolwork, a job, a device, a "
++        "personal situation.\n"
++        "\n"
++        "You are judging SAFETY and CLARITY only. What the post is about is "
++        "never your concern: an on-topic post and an off-topic post are both "
++        '"ok" as long as they are safe and a reader could tell what help is '
++        "wanted.\n"
+         "\n"
+         "Classify the post below into exactly one verdict:\n"
+-        '  "inappropriate" - abusive, harassing, hateful, sexual, a scam, or '
+-        "plainly not a community problem at all.\n"
+-        '  "unclear" - a real attempt, but so vague that no neighbour could act '
+-        'on it. Example: "tulong po" with nothing else.\n'
++        '  "inappropriate" - abusive, harassing, hateful, sexual, a scam, '
++        "spam, or advertising.\n"
++        '  "unclear" - a real attempt, but so vague that nobody reading it '
++        'could tell what help is wanted. Example: "tulong po" with nothing '
++        "else.\n"
+         '  "ok" - everything else.\n'
+         "\n"
+-        "IMPORTANT - these are NOT reasons to say unclear:\n"
+-        "- written in Tagalog, Bisaya, or mixed with English (Taglish)\n"
++        "IMPORTANT - these are NOT reasons to say unclear OR inappropriate:\n"
++        "- written in any Philippine language or dialect, or mixed with "
++        "English (Waray, Tagalog, Bisaya/Cebuano, Ilocano and others)\n"
+         "- informal spelling, txt-speak, missing punctuation, typos\n"
+-        "- short, as long as it names a specific thing, place or problem\n"
++        "- short, as long as it names a specific thing, place, subject or "
++        "problem\n"
+         "- poor grammar\n"
++        "- about school, work, money, technology or any other subject that is "
++        "not a barangay concern\n"
++        "- asking to be taught or shown how to do something, instead of "
++        "reporting something broken\n"
+         "Most users are not writing formally and must not be penalised for it. "
+         'When genuinely unsure, answer "ok".\n'
+         "\n"
+@@ -74,7 +88,7 @@ def check_content(title: Optional[str], text: str) -> Optional[dict]:
+     Returns {"verdict", "reason", "suggestion"} or None when the AI could not
+     be reached. None is not a failure the user should ever see - the caller
+     records ai_status="unchecked" and lets the post through, because an API
+-    outage must not stop a barangay reporting a broken streetlight.
++    outage must not stop anyone posting a real problem.
+     """
+     if not is_enabled():
+         return None
+diff --git a/frontend/src/components/ModerationNotice.jsx b/frontend/src/components/ModerationNotice.jsx
+index db018cb..3cadb34 100644
+--- a/frontend/src/components/ModerationNotice.jsx
++++ b/frontend/src/components/ModerationNotice.jsx
+@@ -20,7 +20,7 @@ function ModerationNotice({ gate, onUseSuggestion, onPostAnyway, busy }) {
+     return (
+         <div className={`rounded-lg border px-4 py-3 ${tone.box}`}>
+             <p className={`text-sm font-semibold ${tone.head}`}>
+-                {canOverride ? "This may be hard for neighbours to act on" : "This post cannot be submitted"}
++                {canOverride ? "This may be hard for others to act on" : "This post cannot be submitted"}
+             </p>
+ 
+             <p className={`mt-1 text-sm ${tone.body}`}>{gate.message}</p>
