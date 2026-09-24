@@ -26,6 +26,8 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY is not set in environment!")
 
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 30
@@ -70,7 +72,7 @@ def issue_auth_cookie(response: Response, user) -> None:
             value=access_token,
             httponly=True,
             samesite="lax",
-            secure=False,
+            secure=COOKIE_SECURE,
             max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
         )
 
@@ -90,7 +92,7 @@ def issue_refresh_token(response: Response, user, db: Session) -> str:
         key="refresh_token",
         value=token,
         httponly=True,
-        secure=False, 
+        secure=COOKIE_SECURE,
         samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
     )
@@ -120,8 +122,8 @@ def clear_auth_cookies(response: Response) -> None:
     issue_auth_cookie / issue_refresh_token, or the browser treats them as
     different cookies and silently keeps the originals.
     """
-    response.delete_cookie(key="access_token", httponly=True, samesite="lax", secure=False)
-    response.delete_cookie(key="refresh_token", httponly=True, samesite="lax", secure=False)
+    response.delete_cookie(key="access_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
+    response.delete_cookie(key="refresh_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
 
 def issue_verification_token(user, db:Session) -> str:
     token = secrets.token_urlsafe(32)
@@ -215,13 +217,3 @@ def get_active_poster(current_user: db_models.User = Depends(get_verified_user))
         )
     return current_user
 
-
-#not for good practice avoid this
-"""def hash_password(password: str) -> str:
-    # SHA-256 produces 64 hex chars (always under 72 bytes)
-    pwd = hashlib.sha256(password.encode("utf-8")).hexdigest()
-    return bcrypt.hashpw(pwd.encode("utf-8"),bcrypt.gensalt(rounds=12)).decode("utf-8")
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    pwd_verify = hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
-    return bcrypt.checkpw(pwd_verify.encode("utf-8"), hashed_password.encode("utf-8"))"""
