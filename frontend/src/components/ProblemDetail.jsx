@@ -11,7 +11,6 @@ import ReportButton from "./ReportButton";
 function ProblemDetail() {
     const { id } = useParams()
     const { user } = useAuth()
-    // Set by PostProblem when the problem was posted but its photo failed.
     const imageError = useLocation().state?.imageError
 
     const [problem, setProblem] = useState(null)
@@ -28,7 +27,6 @@ function ProblemDetail() {
     const [checkingAi, setCheckingAi] = useState(false)
     const [aiFailed, setAiFailed] = useState(false)
 
-    // StrictMode mounts twice in dev; without this the AI is asked twice.
     const aiAskedFor = useRef(null)
 
     const askAI = useCallback(async () => {
@@ -46,8 +44,6 @@ function ProblemDetail() {
         }
     }, [id])
 
-    // Word overlap renders first so the page is never blank, then the AI
-    // answer replaces it.
     useEffect(() => {
         let cancelled = false
         setMatches([])
@@ -68,13 +64,11 @@ function ProblemDetail() {
         return () => { cancelled = true }
     }, [id, askAI])
 
-    // Promise.all so both requests run at the same time.
     const fetchAll = useCallback(
         () => Promise.all([apiGet(`/problems/${id}`), apiGet(`/solutions/problem/${id}`)]),
         [id]
     )
 
-    // Refetch after any action, so the page shows what the server says.
     const load = useCallback(async () => {
         const [p, s] = await fetchAll()
         setProblem(p)
@@ -90,7 +84,6 @@ function ProblemDetail() {
         return () => { cancelled = true }
     }, [fetchAll])
 
-    // Solutions go through the same moderation gate as problems.
     async function postSolution(acknowledged) {
         try {
             setSubmitError("")
@@ -182,7 +175,6 @@ function ProblemDetail() {
                 )}
 
                 {problem.image_url && (
-                    // Links to the original so people can see full detail.
                     <a href={problem.image_url} target="_blank" rel="noreferrer" className="mt-4 block">
                         <img
                             src={imageUrl(problem.image_url, 1000)}

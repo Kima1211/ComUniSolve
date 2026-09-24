@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { apiPost } from "../api";
 
-// Layer 3. Reporting hides nothing and costs the author nothing - it only puts
-// the content in front of an admin. The wording below says so on purpose, so
-// people report things instead of assuming a report is an accusation.
-
 const REASONS = [
     { value: "spam", label: "Spam or advertising" },
     { value: "inappropriate", label: "Inappropriate content" },
@@ -34,8 +30,6 @@ function ReportButton({ problemId, solutionId }) {
             setStatus("Reported. An admin will review it.")
             setOpen(false)
         } catch (e) {
-            // 409 is the one-report-per-user-per-item constraint doing its job.
-            // It is not really an error from the user's point of view.
             if (e.status === 409) {
                 setStatus("You have already reported this.")
                 setOpen(false)

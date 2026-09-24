@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from datetime import timedelta
 from Security.utils import (
     issue_auth_cookie,
+    issue_refresh_token,
     revoke_refresh_token,
     clear_auth_cookies,
     issue_verification_token,
@@ -19,13 +20,13 @@ from Security.utils import (
 from Models.user import User
 from Schemas.user import ForgotPassword, ResetPassword
 from Services.email import send_verification_email, send_password_reset_email
+from Security.rate_limit import FORGOT_PASSWORD_PER_IP, client_ip, enforce
 
 router = APIRouter()
 
-# A verification token lasts 24 hours, so "issued at" is expires_at minus 24h.
-# Refusing a resend within this window stops the button being used to spam
-# someone's inbox - or to burn through the free email quota in one afternoon.
 RESEND_COOLDOWN = timedelta(seconds=60)
+
+ROTATION_GRACE = timedelta(seconds=30)
 
 
 @router.post("/resend-verification")
@@ -45,13 +46,8 @@ def resend_verification(current_user: User = Depends(get_current_user), db: Sess
                 detail="Please wait a minute before requesting another email",
             )
 
-    # Issuing a new token overwrites the old one, so any previously emailed
-    # link stops working from this moment. That is the intended behaviour -
-    # only the most recent link should ever be valid.
     token = issue_verification_token(current_user, db)
     if not send_verification_email(current_user.email, current_user.name, token):
-        # 502 Bad Gateway: our server is fine, the service it depends on
-        # (Brevo) is not. The user asked for this email, so say it failed.
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="We couldn't send the email right now. Please try again in a minute.",
@@ -89,6 +85,20 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
             detail="Refresh token has expired",
         )
     
+    # A replaced token coming back means it was copied: end every session (30s grace for two tabs).
+    if db_token.revoked_at is not None:
+        if current_time - db_token.revoked_at <= ROTATION_GRACE:
+            return {"message": "Token Refreshed"}
+
+        revoke_all_refresh_tokens(db_token.user_id, db)
+        db.commit()
+        clear_auth_cookies(response)
+        print(f"[AUTH] reused refresh token for user_id={db_token.user_id} - all sessions revoked")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has ended for security reasons. Please sign in again.",
+        )
+
     user = db.query(User).filter(User.id == db_token.user_id).first()
     if not user:
         raise HTTPException(
@@ -104,6 +114,14 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
             detail="Account is inactive",
         )
 
+    db_token.revoked_at = current_time
+    
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.expires_at < current_time,
+    ).delete()
+
+    issue_refresh_token(response, user, db)
     issue_auth_cookie(response, user)
 
     return {"message": "Token Refreshed"}
@@ -128,12 +146,6 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     if db_user is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail = "Invalid verification token")
 
-    # Clicking the same link twice must not look like a failure. This check
-    # comes BEFORE the expiry check, so an old link for an already-verified
-    # account still gets a friendly answer instead of "expired".
-    # It also makes the endpoint idempotent (calling it twice has the same
-    # effect as calling it once), which is what React StrictMode's double
-    # request in development needs.
     if db_user.is_verified:
         return {"message": "Email verified successfully"}
 
@@ -141,9 +153,6 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     if db_user.verification_token_expires_at is None or current_time >= db_user.verification_token_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification token has expired")
 
-    # The hash is kept on purpose, so a second click can still find this user
-    # and land on the is_verified branch above. It is safe to keep: the only
-    # thing this token can do is verify, and that is already done.
     db_user.is_verified=True
 
     try:
@@ -155,22 +164,20 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     return {"message": "Email verified successfully"}
 
 
-# Every request gets this exact answer, whether the email is registered or not.
-# If the reply differed, anyone could type in emails to find out who has an
-# account here (called "user enumeration").
+# Same answer for every email, so nobody can check which emails have accounts.
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, we sent a link to reset the password."
 
 
 @router.post("/forgot-password")
-def forgot_password(body: ForgotPassword, db: Session = Depends(get_db)):
+def forgot_password(body: ForgotPassword, request: Request, db: Session = Depends(get_db)):
+    enforce(FORGOT_PASSWORD_PER_IP, client_ip(request),
+            "Too many reset requests from your network. Please try again in 15 minutes.")
+
     db_user = db.query(User).filter(User.email == body.email).first()
 
     if db_user is None or not db_user.is_active:
         return {"message": FORGOT_PASSWORD_MESSAGE}
 
-    # Same cooldown idea as resend-verification. It is silent here on purpose:
-    # a 429 would only happen for real accounts, which would leak the same
-    # "this email exists" fact the generic message is hiding.
     expires_at = db_user.password_reset_expires_at
     if expires_at is not None:
         issued_at = expires_at - timedelta(minutes=PASSWORD_RESET_EXPIRE_MINUTES)
@@ -178,8 +185,6 @@ def forgot_password(body: ForgotPassword, db: Session = Depends(get_db)):
             return {"message": FORGOT_PASSWORD_MESSAGE}
 
     token = issue_password_reset_token(db_user, db)
-    # A failed send is only logged (inside send_password_reset_email). Telling
-    # the user would reveal the account exists; they can simply ask again.
     send_password_reset_email(db_user.email, db_user.name, token)
 
     return {"message": FORGOT_PASSWORD_MESSAGE}
@@ -206,18 +211,14 @@ def reset_password(body: ResetPassword, response: Response, db: Session = Depend
 
     db_user.password = hash_password(body.new_password)
 
-    # Single-use: unlike verification, the token is cleared. A reset link that
-    # still worked after use would let whoever saw it change the password again.
+    # Single-use: unlike verification, a reset link must stop working once used.
     db_user.password_reset_token_hash = None
     db_user.password_reset_expires_at = None
 
-    # The link reached this person's inbox, which proves they own the email -
-    # the same thing clicking a verification link proves.
     db_user.is_verified = True
 
-    # Log out every device. If someone else was signed in to this account,
-    # the reset is what kicks them out.
     revoke_all_refresh_tokens(db_user.id, db)
+    db_user.session_version += 1
 
     try:
         db.commit()
@@ -225,9 +226,7 @@ def reset_password(body: ResetPassword, response: Response, db: Session = Depend
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password")
 
-    # This browser too: the user signs in again with the new password.
     clear_auth_cookies(response)
 
     return {"message": "Your password has been reset. You can now sign in."}
 
-    

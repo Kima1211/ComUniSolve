@@ -3,19 +3,11 @@ import { apiGet, apiPost, apiPatch } from "../api";
 import { TierBadge } from "./Layout";
 import ReportButton from "./ReportButton";
 
-/**
- * One solution: its author, the text, and every action the backend allows -
- * accept/unaccept (problem owner), upvote (anyone signed in), rate (problem
- * owner) and comments (anyone signed in).
- *
- * onChanged() tells the parent page to refetch, so counts and statuses stay
- * truthful instead of being guessed at locally.
- */
 function SolutionCard({ solution, problem, currentUser, onChanged }) {
     const [error, setError] = useState("")
     const [busy, setBusy] = useState(false)
 
-    const [comments, setComments] = useState(null)   // null = not loaded yet
+    const [comments, setComments] = useState(null)
     const [commentText, setCommentText] = useState("")
     const [ratingOpen, setRatingOpen] = useState(false)
 

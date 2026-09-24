@@ -42,3 +42,4 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit rating")
     
     return new_rating
+

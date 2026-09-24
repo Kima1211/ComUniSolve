@@ -26,6 +26,7 @@ class User(Base):
     verification_token_expires_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     password_reset_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     password_reset_expires_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     suspended_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     suspended_until: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -37,8 +38,5 @@ class User(Base):
 
     @property
     def tier(self) -> str:
-        """Title derived from points. Computed, never stored, so it cannot
-        drift out of sync with the points column it describes."""
         return get_tier(self.points)
-    
-    
+

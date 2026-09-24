@@ -10,9 +10,6 @@ function AuthPanel() {
         navigate("/")
     }
 
-    // Three states, not two. Showing "Log In / Register" while the check is
-    // still running makes the panel flicker on every page load for someone
-    // who is actually signed in.
     if (loading) {
         return <div><p>...</p></div>
     }

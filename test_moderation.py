@@ -1,14 +1,3 @@
-"""End-to-end checks for the five-layer moderation system.
-
-Run against a THROWAWAY database, never the real one:
-
-    set DATABASE_URL=postgresql+psycopg2://postgres:pw@localhost/comunisolve_modtest
-    python test_moderation.py
-
-Every check prints PASS or FAIL and the script exits non-zero if anything
-failed, so it is usable as a pre-defense sanity run.
-"""
-
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -23,6 +12,10 @@ from Models.moderation_log import ModerationLog
 from Security.utils import hash_password
 from Services import moderation as moderation_service
 from Services.reputation import REMOVAL_PENALTY_POINTS, REMOVALS_BEFORE_SUSPENSION
+from Security import rate_limit
+
+for _limiter in (rate_limit.LOGIN_PER_IP, rate_limit.LOGIN_FAILURES_PER_EMAIL):
+    _limiter.max_events = 10_000
 
 PASSED = 0
 FAILED = 0
@@ -60,6 +53,7 @@ def main_test():
               "contains 'modtest'. This script deletes every table.")
         sys.exit(2)
 
+    # DROPS EVERY TABLE in DATABASE_URL. Never run this against the real database.
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
@@ -70,7 +64,6 @@ def main_test():
 
     client = TestClient(main.app)
 
-    # ---------------------------------------------------------------- Layer 2
     print("\nLayer 2 - keyword filter")
     login(client, "poster@test.local")
 
@@ -115,7 +108,6 @@ def main_test():
         check("flag-tier word marks it flagged", p.moderation_status == "flagged",
               p.moderation_status)
 
-    # ---------------------------------------------------------------- Layer 1
     print("\nLayer 1 - AI pre-post check (AI stubbed, no API calls)")
     real_check = moderation_service.check_content
 
@@ -148,7 +140,7 @@ def main_test():
         "acknowledged": True})
     check("inappropriate cannot be acknowledged past", r.status_code == 422, f"-> {r.status_code}")
 
-    moderation_service.check_content = lambda t, x: None  # API unreachable
+    moderation_service.check_content = lambda t, x: None
     r = client.post("/problems", json={
         "title": "Clogged canal near the school",
         "description": "Water rises fast when it rains.", "category": "Public"})
@@ -160,7 +152,6 @@ def main_test():
 
     moderation_service.check_content = real_check
 
-    # ---------------------------------------------------------------- Layer 3
     print("\nLayer 3 - community reporting")
     login(client, "reporter@test.local")
 
@@ -177,7 +168,6 @@ def main_test():
     r = client.post("/reports", json={"reason": "spam"})
     check("a report with no target is rejected", r.status_code == 422, f"-> {r.status_code}")
 
-    # ---------------------------------------------------------------- Layer 5
     print("\nLayer 5 - admin review")
     login(client, "poster@test.local")
     r = client.get("/admin/queue")
@@ -195,7 +185,6 @@ def main_test():
     check("the most-reported item sorts first",
           queue and queue[0]["report_count"] >= queue[-1]["report_count"])
 
-    # ------------------------------------------------------- Layers 4 and 5
     print("\nLayer 4 - reputation penalties")
     db.expire_all()
     points_before = db.get(user_models.User, poster.id).points
@@ -262,7 +251,6 @@ def main_test():
     r = client.get("/problems")
     check("a suspended user can still read", r.status_code == 200, f"-> {r.status_code}")
 
-    # Lazy expiry: move the end date into the past, change nothing else.
     suspended.suspended_until = datetime.now(timezone.utc) - timedelta(minutes=1)
     db.commit()
     r = client.post("/problems", json={
@@ -279,3 +267,4 @@ def main_test():
 
 if __name__ == "__main__":
     main_test()
+

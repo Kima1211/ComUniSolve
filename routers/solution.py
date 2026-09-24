@@ -19,8 +19,6 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
 
     existing_solution = db.query(solution.Solution).filter(solution.Solution.user_id == current_user.id, solution.Solution.problem_id == fnd_problem.id).first()
     
-    # Same gate as posting a problem. A solution is user-generated content on
-    # the same platform, so it gets the same Layer 1 and Layer 2 treatment.
     gate = run_pre_post_gate(None, solution_create.solution_text,
                              acknowledged=solution_create.acknowledged)
     if gate.blocked:
@@ -72,9 +70,6 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
-    # Accepted answer first, then most upvoted, then newest. Reputation
-    # deliberately does not affect this order - that was considered and
-    # rejected, to avoid burying good answers from new contributors.
     return (
         db.query(solution.Solution)
         .filter(solution.Solution.problem_id == problem_id)

@@ -7,8 +7,6 @@ import ModerationNotice from "./ModerationNotice";
 
 const CATEGORIES = ["Household", "School", "Public", "Health", "Livelihood", "Other"]
 
-// Mirrors the backend rules so the user hears about a bad file immediately.
-// The backend still checks both - this is a courtesy, not the validation.
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
@@ -30,15 +28,12 @@ function PostProblem() {
     const [checkingAi, setCheckingAi] = useState(false)
     const [image, setImage] = useState(null)
 
-    // A temporary local address for the chosen file, so it can be previewed
-    // before anything is uploaded. It is released when the file changes or the
-    // page closes; otherwise the browser keeps the whole file in memory.
     const preview = useMemo(() => (image ? URL.createObjectURL(image) : ""), [image])
     useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
 
     function chooseImage(e) {
         const file = e.target.files[0]
-        e.target.value = ""   // lets the same file be picked again after removing it
+        e.target.value = ""
         if (!file) return
 
         if (!IMAGE_TYPES.includes(file.type)) {
@@ -53,8 +48,6 @@ function PostProblem() {
         setImage(file)
     }
 
-    // Layer 2 is user-triggered, never automatic. One deliberate click costs
-    // one API call; firing it while someone types would cost dozens.
     async function checkWithAI() {
         try {
             setCheckingAi(true)
@@ -62,19 +55,15 @@ function PostProblem() {
             setMatches(data.matches || [])
             setAiUsed(Boolean(data.ai_used))
         } catch {
-            // The TF-IDF results already on screen stay - a failed second
-            // opinion should never take away the first one.
+            // Keep the TF-IDF results already on screen.
         } finally {
             setCheckingAi(false)
         }
     }
 
-    // Solution Matching, live. Debounced by 600ms: without it, every keystroke
-    // would fire a request and the answers would arrive out of order.
     useEffect(() => {
         let cancelled = false
         const timer = setTimeout(() => {
-            // Too short to say anything useful about - clear and stop.
             if (title.trim().length < 6) {
                 if (!cancelled) setMatches([])
                 return
@@ -83,7 +72,7 @@ function PostProblem() {
                 .then((data) => {
                     if (cancelled) return
                     setMatches(data.matches || [])
-                    setAiUsed(false)   // typing again invalidates the AI pass
+                    setAiUsed(false)
                 })
                 .catch(() => { if (!cancelled) setMatches([]) })
         }, 600)
@@ -91,9 +80,6 @@ function PostProblem() {
         return () => { cancelled = true; clearTimeout(timer) }
     }, [title, description])
 
-    // Moderation Layers 1 and 2. `acknowledged` is only ever set by the user
-    // pressing "Post it as I wrote it" after seeing the warning, and the server
-    // honours it for an unclear verdict only.
     async function submitProblem(acknowledged) {
         try {
             setError("")
@@ -101,10 +87,6 @@ function PostProblem() {
             setSubmitting(true)
             const data = await apiPost("/problems", { title, description, category, acknowledged })
 
-            // Step 2: the image, only once the problem exists. If this fails
-            // the problem is still posted - so go to it anyway and say why the
-            // photo is missing, rather than staying here where pressing "Post"
-            // again would create a duplicate.
             let imageError = ""
             if (image) {
                 try {
@@ -118,9 +100,6 @@ function PostProblem() {
             navigate(`/problems/${data.id}`, { state: { imageError } })
         } catch (e) {
             if (e.status === 401) { navigate('/login'); return }
-            // A 422 whose detail carries a verdict is the moderation gate, not
-            // an ordinary validation error - it gets its own panel because it
-            // has a suggestion and possibly a way forward.
             if (e.status === 422 && e.detail?.verdict) {
                 setGate(e.detail)
                 return

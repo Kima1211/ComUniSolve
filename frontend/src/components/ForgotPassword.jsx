@@ -23,8 +23,6 @@ function ForgotPassword() {
             setMessage("")
             setSubmitting(true)
 
-            // The backend answers the same way whether or not the email has an
-            // account, so this page never learns (or shows) which it was.
             const data = await apiPost("/forgot-password", { email: email })
             setMessage(data.message)
         } catch (e) {

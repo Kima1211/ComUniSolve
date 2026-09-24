@@ -15,22 +15,16 @@ import RequireVerified from './components/RequireVerified'
 function App() {
   return (
     <Routes>
-      {/* Always reachable. /verify/:token must be, or the emailed link could
-          never be clicked; /verify-email is the gate itself. */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify/:token" element={<VerifyEmail />} />
       <Route path="/verify-email" element={<VerifyNotice />} />
-      {/* Also outside RequireVerified: someone locked out of an unverified
-          account must still be able to reset its password. */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
 
-      {/* Public to guests, closed to signed-in-but-unverified accounts. */}
       <Route path="/" element={<RequireVerified><Home /></RequireVerified>} />
       <Route path="/problems/:id" element={<RequireVerified><ProblemDetail /></RequireVerified>} />
 
-      {/* Signed in only. RequireAuth also sends unverified users to the gate. */}
       <Route
         path="/postproblem"
         element={

@@ -1,20 +1,10 @@
 import { Link } from "react-router-dom";
 import CommunityPreview from "./CommunityPreview";
 
-/**
- * Split-screen shell shared by Login and Register: the form on the left, a
- * live snippet of the community feed on the right.
- *
- * On a phone the right panel is hidden entirely and the form fills the screen -
- * see CommunityPreview. That is the whole responsive strategy for these pages.
- */
 function AuthLayout({ title, subtitle, children, footer }) {
     return (
-        // One column by default, two equal columns from lg up. min-h-screen on
-        // the grid makes both panels full height regardless of which is taller.
         <div className="min-h-screen grid lg:grid-cols-2">
 
-            {/* Left: the form */}
             <div className="flex flex-col justify-center px-6 py-12 sm:px-12">
                 <div className="mx-auto w-full max-w-sm">
 
@@ -42,7 +32,6 @@ function AuthLayout({ title, subtitle, children, footer }) {
                 </div>
             </div>
 
-            {/* Right: what the visitor is signing up for */}
             <CommunityPreview />
         </div>
     )

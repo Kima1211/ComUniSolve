@@ -3,22 +3,12 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
 
-/**
- * The wall an unverified account sits behind.
- *
- * Two escapes are deliberate, not decoration: resend (in case the email never
- * arrived) and log out (so nobody is trapped on a dead end). Without them, a
- * hard verification gate plus a slow mail provider means a real user simply
- * cannot use the app and has no way to say so.
- */
 function VerifyNotice() {
     const { user, loading, refreshUser, logout } = useAuth()
     const navigate = useNavigate()
     const location = useLocation()
 
     const [message, setMessage] = useState("")
-    // Registration still succeeds when the email fails, so start with the
-    // error showing instead of claiming a link was sent.
     const [error, setError] = useState(
         location.state?.emailFailed
             ? "We couldn't send your verification email. Please use the resend button below."
@@ -27,9 +17,6 @@ function VerifyNotice() {
     const [sending, setSending] = useState(false)
     const [cooldown, setCooldown] = useState(0)
 
-    // The backend refuses a resend within 60s of the last one. Registration
-    // already sent an email, so without this the button would fail the moment
-    // someone arrives. Counting down is honest; an error would look broken.
     const expiresAt = user?.verification_expires_at
     useEffect(() => {
         if (!expiresAt) return
@@ -43,9 +30,6 @@ function VerifyNotice() {
         return () => clearInterval(timer)
     }, [expiresAt])
 
-    // People click the link in a different tab. Re-asking the server every few
-    // seconds means this page notices on its own, instead of leaving them
-    // staring at a screen that is already out of date.
     useEffect(() => {
         const timer = setInterval(() => { refreshUser() }, 5000)
         return () => clearInterval(timer)

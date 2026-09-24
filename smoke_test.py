@@ -1,13 +1,7 @@
-"""End-to-end smoke test for ComUniSolve.
-
-!! DROPS AND RECREATES EVERY TABLE. !! Point it at a throwaway database only:
-
-    set TEST_DATABASE_URL=postgresql+psycopg2://postgres:pw@localhost/comunisolve_test
-    python smoke_test.py
-"""
 import os
 import sys
 
+# DROPS EVERY TABLE. Only ever point TEST_DATABASE_URL at a throwaway database.
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 if not TEST_DATABASE_URL or "test" not in TEST_DATABASE_URL.lower():
     sys.exit("Refusing to run: set TEST_DATABASE_URL to a throwaway database whose name contains 'test'.")
@@ -21,6 +15,11 @@ for k, v in [("PASSWORD_PEPPER", "test-pepper"), ("SECRET_KEY", "test-secret"),
 from fastapi.testclient import TestClient
 import routers.user as user_router
 user_router.send_verification_email = lambda *a, **k: True
+
+from Security import rate_limit
+for _limiter in (rate_limit.LOGIN_PER_IP, rate_limit.LOGIN_FAILURES_PER_EMAIL,
+                 rate_limit.REGISTER_PER_IP, rate_limit.FORGOT_PASSWORD_PER_IP):
+    _limiter.max_events = 10_000
 
 from Models.database import engine, Base, SessionLocal
 from Models import user, problem, solution, comment, rating, refresh_token
@@ -124,7 +123,6 @@ check("Empty-but-valid problems still return a list, not 404",
       asker.get("/solutions/problem/999999").status_code == 404 and r.status_code == 200)
 
 
-# --- verification gate -------------------------------------------------------
 unverified = TestClient(app)
 r = unverified.post("/register", json={"name": "Nena Lim", "email": "nena@example.com", "password": "password123"})
 check("Registration succeeds without verifying", r.status_code == 201)
@@ -141,8 +139,6 @@ r = unverified.post("/resend-verification")
 check("Resend is refused inside the cooldown (registration just sent one)",
       r.status_code == 429, f"status={r.status_code}")
 
-# Age the token by two minutes so the cooldown has passed, without the test
-# having to sit and wait for it.
 from datetime import timedelta as _td
 db = SessionLocal()
 nena = db.query(user.User).filter(user.User.email == "nena@example.com").first()
@@ -160,7 +156,6 @@ r = asker.post("/resend-verification")
 check("An already-verified account cannot resend", r.status_code == 400, f"status={r.status_code}")
 
 
-# --- solution matching -------------------------------------------------------
 asker.post("/problems", json={
     "title": "Barangay streetlight not working near the basketball court",
     "description": "Another dark corner at night. Who do we report a broken street light to?",
@@ -193,8 +188,53 @@ check("A problem's own page can list related problems, excluding itself",
       r.status_code == 200 and all(m["id"] != pid for m in r.json()["matches"]),
       f"ids={[m['id'] for m in r.json()['matches']]}")
 
-# --- the AI layer degrades safely -------------------------------------------
-# Forced off, so these pass whether or not real API keys are present.
+import hashlib
+from datetime import datetime, timedelta, timezone
+from Models.refresh_token import RefreshToken
+
+
+def replay_refresh(token):
+    c = TestClient(app)
+    c.cookies.set("refresh_token", token)
+    return c.post("/refresh")
+
+
+rico, rico_id = verified_client("Rico Dela Paz", "rico@example.com")
+old_refresh = rico.cookies.get("refresh_token")
+r = rico.post("/refresh")
+new_refresh = rico.cookies.get("refresh_token")
+check("Refresh rotates the refresh token",
+      r.status_code == 200 and bool(new_refresh) and new_refresh != old_refresh)
+
+check("The token just replaced is tolerated for a moment (two tabs refreshing at once)",
+      replay_refresh(old_refresh).status_code == 200)
+
+db = SessionLocal()
+db.query(RefreshToken).filter(
+    RefreshToken.token_hash == hashlib.sha256(old_refresh.encode()).hexdigest()
+).update({"revoked_at": datetime.now(timezone.utc) - timedelta(minutes=5)})
+db.commit()
+r = replay_refresh(old_refresh)
+left = db.query(RefreshToken).filter(RefreshToken.user_id == rico_id).count()
+db.close()
+check("Reusing an old refresh token counts as theft: 401 and every session revoked",
+      r.status_code == 401 and left == 0, f"status={r.status_code}, tokens left={left}")
+check("...so even the newest refresh token stops working",
+      replay_refresh(new_refresh).status_code == 401)
+
+ana, ana_id = verified_client("Ana Reyes", "ana@example.com")
+check("A fresh access token works", ana.get("/users/me").status_code == 200)
+db = SessionLocal()
+db.get(user.User, ana_id).session_version += 1
+db.commit()
+db.close()
+check("Raising session_version ends existing access tokens at once",
+      ana.get("/users/me").status_code == 401)
+r = ana.post("/refresh")
+check("...while a session that is still valid recovers through /refresh",
+      r.status_code == 200 and ana.get("/users/me").status_code == 200)
+
+
 from Services import gemini as _gemini
 
 _saved_key = _gemini.GEMINI_API_KEY
@@ -224,3 +264,4 @@ print("=" * 70)
 print(f"{sum(results)}/{len(results)} checks passed")
 print("=" * 70)
 sys.exit(0 if all(results) else 1)
+

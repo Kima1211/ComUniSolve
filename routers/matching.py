@@ -14,8 +14,6 @@ router = APIRouter()
 
 _RELEVANCE_ORDER = {"high": 3, "medium": 2, "low": 1, "none": 0}
 
-# Off by default to keep the page fast: the frontend loads this endpoint for an
-# instant word-overlap answer, then calls the /ai endpoint in the background.
 AUTO_AI_ON_DETAIL = os.getenv("GEMINI_AUTO_ON_DETAIL", "false").lower() in {"1", "true", "yes"}
 
 
@@ -32,7 +30,6 @@ def _fetch_candidates(db: Session, exclude_id: Optional[int]):
 
 
 def _accepted_solutions(db: Session, problem_ids):
-    """One query for every accepted solution, not one per match."""
     if not problem_ids:
         return {}
     rows = (
@@ -59,18 +56,13 @@ def _build_matches(
 
     by_id = {p.id: p for p in rows}
 
-    # Layer 1: TF-IDF. Always runs, and is the fallback if layer 2 fails.
     tfidf_scores = dict(build_candidate_pool(query_title, query_description, candidates))
 
     ai_ranked = None
     if use_ai and gemini.is_enabled():
-        # The pool deliberately includes candidates scoring near zero - the
-        # paraphrases and Tagalog posts word-overlap cannot see.
         pool = [c for c in candidates if c["id"] in tfidf_scores]
         ai_ranked = gemini.rerank(query_title, query_description, pool)
 
-    # None = the AI could not be consulted. {} = it ran and found nothing,
-    # which is a real answer, not a reason to fall back.
     if ai_ranked is not None:
         chosen = [
             (pid, tfidf_scores.get(pid, 0.0), info)
@@ -109,14 +101,12 @@ def _build_matches(
 
 @router.post("/problems/match", response_model=MatchResponse)
 def match_before_posting(body: MatchRequest, db: Session = Depends(get_db)):
-    """TF-IDF only - this fires every 600ms while the user types."""
     matches, ai_used = _build_matches(body.title, body.description, db, use_ai=False)
     return MatchResponse(matches=matches, ai_used=ai_used)
 
 
 @router.post("/problems/match/ai", response_model=MatchResponse)
 def match_with_ai(body: MatchRequest, db: Session = Depends(get_db)):
-    """The same search with the AI layer, triggered by the user."""
     matches, ai_used = _build_matches(body.title, body.description, db, use_ai=True)
     return MatchResponse(matches=matches, ai_used=ai_used)
 
@@ -143,3 +133,4 @@ def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
         fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True
     )
     return MatchResponse(matches=matches, ai_used=ai_used)
+

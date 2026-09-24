@@ -7,9 +7,6 @@ class ProblemCreate(BaseModel) :
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=5000)
     category: str = Field(..., min_length=1, max_length=100)
-    # Set by the frontend when the user has already been shown an "unclear"
-    # warning and chose to post anyway. It can ONLY clear an "unclear" verdict -
-    # a banned keyword or an "inappropriate" verdict ignores it completely.
     acknowledged: bool = False
     
 class ProblemResponse(BaseModel):
@@ -27,7 +24,6 @@ class ProblemResponse(BaseModel):
     image_url: Optional[str] = None
 
 class ProblemOverview(BaseModel):
-
     total_users: int
     total_problems: int
     total_solutions: int

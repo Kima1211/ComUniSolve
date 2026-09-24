@@ -14,10 +14,6 @@ class ReportCreate(BaseModel):
 
     @model_validator(mode="after")
     def exactly_one_target(self):
-        # The database enforces this too. This copy exists so the user gets a
-        # clear 422 naming the problem, instead of a 500 from a raw constraint
-        # violation — validate in the application for the message, constrain in
-        # the database for the guarantee.
         if (self.problem_id is None) == (self.solution_id is None):
             raise ValueError("Provide exactly one of problem_id or solution_id.")
         return self
@@ -34,3 +30,4 @@ class ReportResponse(BaseModel):
     details: Optional[str] = None
     status: str
     created_at: datetime
+

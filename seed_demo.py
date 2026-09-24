@@ -1,21 +1,3 @@
-"""Add realistic demo content to ComUniSolve.
-
-Run this against your REAL database. Unlike smoke_test.py it drops nothing and
-deletes nothing - it only inserts, and it skips anything already present, so
-running it twice is safe.
-
-    python seed_demo.py
-
-What it creates:
-  * 4 verified demo users with different reputation tiers, so every tier badge
-    is visible on screen
-  * 10 problems across your categories, in English, Tagalog and Waray
-  * Solutions on several, with two accepted - which is what makes Solution
-    Matching worth demonstrating, since a match carries its accepted answer
-
-To remove it later, delete the users whose email ends in @demo.comunisolve -
-problems and solutions cascade with them.
-"""
 import sys
 
 from Models.database import SessionLocal
@@ -25,14 +7,12 @@ from Security.utils import hash_password
 DEMO_DOMAIN = "@demo.comunisolve"
 
 USERS = [
-    # (name, email, points) - points chosen to land in each tier
     ("Maria Santos", "maria" + DEMO_DOMAIN, 8),
     ("Ben Cruz", "ben" + DEMO_DOMAIN, 35),
     ("Lita Reyes", "lita" + DEMO_DOMAIN, 66),
     ("Nena Lim", "nena" + DEMO_DOMAIN, 92),
 ]
 
-# (title, description, category, author_index, [(solution_text, author_index, accepted)])
 PROBLEMS = [
     (
         "Street light on Rizal St. has been out for weeks",
@@ -108,12 +88,6 @@ PROBLEMS = [
         "of the street looks blocked but nobody seems to be clearing it.",
         "Public", 1, [],
     ),
-    # These two are a deliberate pair: the same problem, one in Waray and one in
-    # English, in a non-barangay category. They are what proves two things on
-    # screen - that a school problem can be posted at all, and that matching
-    # crosses languages. Post the Waray one through the UI during the demo
-    # rather than seeding it, because seeding inserts straight into the database
-    # and skips the pre-post gate entirely.
     (
         "Tutdu-e daw ako if-else ha C++",
         "Diri ko maintindihan an if-else ha C++. Ano an kaibahan han if ngan else if? "
@@ -137,7 +111,6 @@ PROBLEMS = [
 def main():
     db = SessionLocal()
     try:
-        # --- users -----------------------------------------------------------
         users = []
         created_users = 0
         for name, email, points in USERS:
@@ -158,7 +131,6 @@ def main():
             users.append(u)
             created_users += 1
 
-        # --- problems and solutions ------------------------------------------
         created_problems = 0
         created_solutions = 0
         for title, description, category, author_idx, sols in PROBLEMS:
@@ -203,3 +175,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

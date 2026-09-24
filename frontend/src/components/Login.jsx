@@ -4,8 +4,6 @@ import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import AuthLayout from "./AuthLayout";
 
-// One string reused by every input, so the fields cannot drift apart visually.
-// Plain JavaScript - no Tailwind feature involved, just a variable.
 const inputClass =
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
     "placeholder-slate-400 outline-none transition " +
@@ -23,7 +21,7 @@ function Login() {
     const [submitting, setSubmitting] = useState(false)
 
     async function handleSubmit(e) {
-        e.preventDefault()   // stop the browser's own full-page form reload
+        e.preventDefault()
 
         try {
             setError("")
@@ -31,12 +29,8 @@ function Login() {
 
             await apiPost("/login", { email: email, password: password })
 
-            // The login response only sets cookies. The app still does not know
-            // who you are until it asks - so ask, and wait for the answer before
-            // navigating, or the next page renders as a guest for a moment.
             await refreshUser()
 
-            // RequireAuth stores where the user was heading when it bounced them.
             const goingTo = location.state?.from || "/"
             navigate(goingTo, { replace: true })
         } catch (e) {
@@ -61,8 +55,6 @@ function Login() {
         >
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    {/* htmlFor ties the label to the input's id: clicking the
-                        label focuses the field, and screen readers announce it. */}
                     <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
                         Email
                     </label>

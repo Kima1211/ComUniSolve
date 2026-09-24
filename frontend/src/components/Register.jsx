@@ -29,10 +29,6 @@ function Register() {
 
             const data = await apiPost("/register", { name: name, email: email, password: password })
             await refreshUser()
-            // Straight to the gate rather than to "/", which would only bounce
-            // them here anyway now that unverified accounts are held back.
-            // Router state carries one fact across the navigation: whether the
-            // first email actually went out.
             navigate("/verify-email", { replace: true, state: { emailFailed: data.email_sent === false } })
         } catch (e) {
             setError(e.message || "Something went wrong! Please try again.")
@@ -101,9 +97,6 @@ function Register() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
-                    {/* Tells the user the rule before the server rejects them.
-                        The backend still enforces min_length=8 - this is a
-                        courtesy, not the validation. */}
                     <p className="mt-1 text-xs text-slate-500">Must be at least 8 characters.</p>
                 </div>
 

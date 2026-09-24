@@ -6,7 +6,7 @@ from sqlalchemy import (
     DateTime)
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from Models.database import Base
-from Models.user import User  # noqa: F401  - see the note in Models/problem.py
+from Models.user import User  # noqa: F401
 
 class Comment(Base):
     __tablename__ = "comments"

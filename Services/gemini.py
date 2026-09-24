@@ -1,8 +1,3 @@
-"""AI re-ranking for Solution Matching.
-
-Gemini is the only AI provider. Any failure returns None, and the caller falls
-back to TF-IDF - the platform keeps working when the API does not.
-"""
 import json
 import os
 import time
@@ -17,7 +12,6 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
-# Best model first. The chain is for resilience, not budget.
 DEFAULT_GEMINI_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.6-flash",
@@ -37,13 +31,10 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", MODEL_CHAIN[0] if MODEL_CHAIN else "")
 
 TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT", "25"))
 
-# Wall-clock budget across every provider and model.
 DEADLINE_SECONDS = int(os.getenv("AI_DEADLINE", "45"))
 
 MAX_CANDIDATES = 20
 
-# Retry only when the SERVER is at fault. 429 means your own quota is spent,
-# so retrying makes it worse; 400 and 401 fail identically twice.
 RETRYABLE_STATUSES = {500, 502, 503, 504}
 RATE_LIMITED_STATUS = 429
 RETRY_DELAY_SECONDS = 1.5
@@ -80,13 +71,6 @@ _RESPONSE_SCHEMA = {
 
 
 def _flatten(value: Optional[str]) -> str:
-    """Collapse user text onto a single line.
-
-    Every field here is user-controlled, and this listing is line-oriented: one
-    candidate per line. A title or category containing a line break could end
-    its own line early and forge a second "- id ..." entry, which the model
-    would read as a real candidate. Stripping the breaks removes that route.
-    """
     return " ".join((value or "").split())
 
 
@@ -143,7 +127,6 @@ def _build_prompt(query_title: str, query_description: Optional[str], candidates
 
 
 def _cache_key(query_title: str, query_description: Optional[str], candidates: List[dict]) -> str:
-    """Includes candidate ids, so the answer expires when a new problem is posted."""
     ids = ",".join(str(c["id"]) for c in sorted(candidates, key=lambda c: c["id"]))
     return f"{query_title}|{query_description or ''}|{ids}"
 
@@ -173,13 +156,8 @@ def _gemini_text(body: dict) -> Optional[str]:
 
 
 def _ask_gemini(prompt: str, schema: dict, deadline: float) -> Tuple[Optional[str], Optional[int]]:
-    """Walk the Gemini model chain until one model answers.
-
-    Returns (json_text, last_status). json_text is None when every model
-    failed or the deadline ran out; last_status lets the caller tell "out of
-    quota" (429) apart from "down".
-    """
     last_status: Optional[int] = None
+
     headers = _gemini_headers()
 
     for index, model in enumerate(MODEL_CHAIN):
@@ -242,10 +220,6 @@ def _ask_gemini(prompt: str, schema: dict, deadline: float) -> Tuple[Optional[st
 
 
 def rerank(query_title: str, query_description: Optional[str], candidates: List[dict]) -> Optional[dict]:
-    """Return {problem_id: {"relevance", "reason"}}.
-
-    None means the AI was unavailable; {} means it ran and found nothing.
-    """
     if not is_enabled() or not candidates:
         return None
 
@@ -284,7 +258,6 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
         if not isinstance(m, dict):
             continue
         pid = m.get("id")
-        # Only ids we actually sent - the reply is data, never trusted.
         if pid in valid_ids and m.get("relevance") in {"high", "medium", "low"}:
             ranked[pid] = {
                 "relevance": m["relevance"],
@@ -296,7 +269,6 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
         titles = ", ".join(f'#{c["id"]} "{c["title"][:50]}"' for c in candidates[:MAX_CANDIDATES])
         print(f"[AI] nothing matched. query={query_title!r} | candidates were: {titles}")
 
-    # Cache successes only.
     if len(_CACHE) >= CACHE_MAX_ENTRIES:
         oldest = min(_CACHE, key=lambda k: _CACHE[k][0])
         del _CACHE[oldest]
@@ -306,16 +278,6 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
 
 
 def ask_json(prompt: str, schema: dict, label: str = "ai_task") -> Optional[dict]:
-    """Send one prompt to Gemini and return parsed JSON.
-
-    This is the generic half of rerank(): the model chain, retries, timeouts
-    and the overall deadline. A second AI feature (moderation) reuses it
-    instead of growing a second copy that can drift out of sync with this one.
-
-    Returns None whenever no model produced usable JSON. Every caller must
-    have a path that still works in that case - the platform has to run when
-    the API does not.
-    """
     if not is_enabled():
         return None
 
@@ -345,3 +307,4 @@ def ask_json(prompt: str, schema: dict, label: str = "ai_task") -> Optional[dict
 
     print(f"[AI:{label}] Gemini answered in {elapsed:.1f}s")
     return parsed
+

@@ -6,14 +6,6 @@ const RELEVANCE_STYLES = {
     low: "bg-slate-100 text-slate-600",
 }
 
-/**
- * Renders matches from Solution Matching.
- *
- * Both layers are shown for what they are: the percentage is TF-IDF word
- * overlap, reproducible by hand; the sentence is Gemini's judgement. Labelling
- * them separately is honest, and it makes the two-stage design visible rather
- * than something you have to take on trust.
- */
 function SimilarProblems({ matches, title = "Similar problems already posted", hint, aiUsed = false }) {
     if (!matches || matches.length === 0) return null
 

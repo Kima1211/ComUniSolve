@@ -9,7 +9,6 @@ router = APIRouter()
 
 @router.get("/solutions/{solution_id}/comments", response_model=list[CommentResponse])
 def get_comments(solution_id: int, db: Session = Depends(get_db)):
-    """Comments on one solution, oldest first so a thread reads top to bottom."""
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
     if not fnd_solution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")

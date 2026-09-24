@@ -1,19 +1,5 @@
-// One place that knows how to talk to the ComUniSolve backend.
-//
-// Every component used to repeat the same four things: the base URL, the
-// headers, credentials: "include", and its own way of reading errors. Four
-// copies means four places to change when one of them is wrong - and they were
-// already drifting apart. This file holds that knowledge once.
-
-// import.meta.env is Vite's way of reading environment variables at build time.
-// Variables must start with VITE_ to be exposed to browser code. The fallback
-// keeps local development working with no .env file at all.
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// While a refresh is already in flight, every other 401 waits on that same
-// promise instead of starting its own. Without this, two components mounting at
-// once (React StrictMode mounts everything twice in development) would fire two
-// /refresh calls and write two rows into refresh_tokens for one real refresh.
 let refreshInFlight = null;
 
 function refreshSession() {
@@ -31,13 +17,6 @@ function refreshSession() {
   return refreshInFlight;
 }
 
-// FastAPI returns errors in two different shapes, and the frontend has to
-// survive both:
-//   HTTPException  -> {"detail": "Invalid email or password"}        (a string)
-//   Pydantic 422   -> {"detail": [{"loc": [...], "msg": "..."}, ...]} (an array)
-// Passing that array straight into JSX crashes React with "Objects are not
-// valid as a React child", so the whole page goes blank instead of showing a
-// validation message. This function always returns a plain string.
 export function getErrorMessage(data, status) {
   const detail = data?.detail;
 
@@ -45,10 +24,6 @@ export function getErrorMessage(data, status) {
     return detail;
   }
 
-  // The moderation gate returns a whole object rather than a string, because
-  // the UI needs the suggested rewrite and the acknowledgeable flag as well as
-  // the message. Without this branch it would fall through to the generic
-  // "Request failed (422)" and the user would never see why.
   if (detail && typeof detail === "object" && !Array.isArray(detail) && detail.message) {
     return detail.message;
   }
@@ -56,8 +31,6 @@ export function getErrorMessage(data, status) {
   if (Array.isArray(detail)) {
     return detail
       .map((item) => {
-        // loc is like ["body", "password"]; the first entry is always the
-        // request part, so the useful field name is whatever comes after it.
         const field = Array.isArray(item.loc) ? item.loc.slice(1).join(".") : "";
         return field ? `${field}: ${item.msg}` : item.msg;
       })
@@ -72,9 +45,6 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
     this.status = status;
-    // The raw `detail` the server sent, when it was structured. Callers that
-    // understand a particular shape (the moderation gate) read this; everyone
-    // else keeps using .message and is unaffected.
     this.detail = detail;
   }
 }
@@ -82,13 +52,7 @@ export class ApiError extends Error {
 async function send(path, options) {
   const headers = { ...(options.headers || {}) };
 
-  // Only declare a JSON body when there actually is one. Sending
-  // Content-Type on a plain GET forces the browser into a CORS preflight
-  // (an extra OPTIONS round trip) for no reason.
-  //
-  // A FormData body (a file upload) is the exception: the browser must set
-  // Content-Type itself, because the header includes a generated "boundary"
-  // that marks where each part of the upload starts and ends.
+  // File uploads (FormData) must let the browser set Content-Type itself.
   if (options.body !== undefined && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
@@ -96,24 +60,11 @@ async function send(path, options) {
   return fetch(`${API_URL}${path}`, {
     ...options,
     headers,
-    credentials: "include", // the auth cookies are httpOnly; without this the
-    // browser will not attach them at all
+    credentials: "include",
   });
 }
 
-/**
- * Make a request to the backend.
- *
- * Returns the parsed JSON body on success. Throws an ApiError carrying a
- * human-readable message and the HTTP status on failure.
- *
- * On a 401 it calls /refresh once and replays the original request. That single
- * behaviour is what stops a tester from being silently logged out every 15
- * minutes when the access token expires.
- */
 export async function api(path, options = {}) {
-  // retryOn401 defaults to true. Pass false for calls where a 401 is a normal
-  // answer rather than an expired session - /users/me for a guest, say.
   const { retryOn401 = true, ...fetchOptions } = options;
 
   let response = await send(path, fetchOptions);
@@ -121,14 +72,10 @@ export async function api(path, options = {}) {
   if (retryOn401 && response.status === 401 && path !== "/refresh" && path !== "/login") {
     const refreshed = await refreshSession();
     if (refreshed) {
-      // Replay exactly once. If this attempt is also a 401, the session is
-      // genuinely gone and retrying again would loop forever.
       response = await send(path, fetchOptions);
     }
   }
 
-  // A 204 or an empty body has nothing to parse, so never let JSON.parse
-  // failure masquerade as a request failure.
   let data;
   try {
     data = await response.json();
@@ -154,15 +101,10 @@ export function apiPost(path, body) {
   });
 }
 
-// For file uploads. formData is a FormData object, sent as-is (no JSON).
 export function apiPostForm(path, formData) {
   return api(path, { method: "POST", body: formData });
 }
 
-// Cloudinary can resize and compress an image on the fly: the instructions go
-// into the URL itself, right after "/upload/". f_auto picks the lightest format
-// the browser supports, q_auto compresses, w_<n> caps the width. The original
-// stays untouched on Cloudinary; this only changes what the browser downloads.
 export function imageUrl(url, width) {
   if (!url || !url.includes("/upload/")) return url;
   return url.replace("/upload/", `/upload/f_auto,q_auto,w_${width}/`);

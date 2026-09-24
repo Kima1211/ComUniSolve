@@ -1,10 +1,3 @@
-"""The moderation system's decision logic.
-
-Layers 1 and 2 run here as one pre-post gate. Layers 4 and 5 run here as the
-admin actions and their reputation consequences. The routers call into this
-module; none of these rules live in an endpoint.
-"""
-
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -24,12 +17,7 @@ from Services.reputation import (
 
 @dataclass
 class GateResult:
-    """What the pre-post gate decided about one piece of content."""
-
     blocked: bool = False
-    # True only for "unclear". A keyword block or an "inappropriate" verdict is
-    # never acknowledgeable - if they were, "post anyway" would be a bypass for
-    # everything and the gate would be decorative.
     acknowledgeable: bool = False
     verdict: str = "unchecked"
     moderation_status: str = "visible"
@@ -39,15 +27,6 @@ class GateResult:
 
 
 def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = False) -> GateResult:
-    """Layers 2 then 1, in that order.
-
-    Layer 2 first because it is free, instant and works with no network. If it
-    blocks, no API call is made at all.
-
-    This is what satisfies Panel Chair Tan's Required Revision #3: inappropriate
-    input is flagged and assisted or corrected, while appropriate input is
-    allowed to be posted.
-    """
     keywords = check_text(title or "", text)
 
     if keywords.is_blocked:
@@ -65,9 +44,6 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
 
     ai = check_content(title, text)
 
-    # The AI could not be reached. The post goes through, recorded honestly as
-    # unchecked. An outage must never stop someone reporting a real problem,
-    # and Layers 2 to 5 all still apply.
     if ai is None:
         return GateResult(
             blocked=False,
@@ -88,8 +64,6 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
 
     if ai["verdict"] == "unclear":
         if not acknowledged:
-            # First attempt: not posted, but the user is told why and handed a
-            # clearer version to use. This is the "assisted or corrected" half.
             return GateResult(
                 blocked=True,
                 acknowledgeable=True,
@@ -98,9 +72,6 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
                 suggestion=ai["suggestion"],
                 matched_terms=keywords.flagged,
             )
-        # Second attempt: the user has seen the feedback and stands by their
-        # wording. It publishes, flagged for review. Nobody gets locked out of
-        # the platform by an AI judgement about their writing.
         return GateResult(
             blocked=False,
             verdict="unclear",
@@ -114,9 +85,6 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
         moderation_status="flagged" if keywords.is_flagged else "visible",
         matched_terms=keywords.flagged,
     )
-
-
-# --- Layers 4 and 5 ---------------------------------------------------------
 
 
 def _count_actions(db: Session, user_id: int, action: str) -> int:
@@ -136,9 +104,6 @@ def _log(db: Session, admin_id: Optional[int], action: str, target_type: str,
         target_type=target_type,
         problem_id=problem_id,
         solution_id=solution_id,
-        # Set even for content actions, so "how many of this person's posts
-        # were removed" is one indexed query and survives the content itself
-        # being deleted later.
         target_user_id=target_user_id,
         action=action,
         reason=reason,
@@ -150,11 +115,6 @@ def _log(db: Session, admin_id: Optional[int], action: str, target_type: str,
 
 def suspend_user(db: Session, admin_id: Optional[int], target_user,
                  reason: Optional[str] = None) -> Optional[int]:
-    """Suspend a user, escalating by how many times they have been suspended
-    before. Returns the number of days, or None for permanent.
-
-    Does not commit - the caller owns the transaction.
-    """
     prior = _count_actions(db, target_user.id, "suspended")
     days = next_suspension_days(prior)
 
@@ -180,14 +140,6 @@ def unsuspend_user(db: Session, admin_id: Optional[int], target_user,
 
 def remove_content(db: Session, admin_id: Optional[int], target, target_type: str,
                    author, reason: Optional[str] = None) -> dict:
-    """Layer 5's remove action, with Layer 4's consequence attached.
-
-    A soft delete: the row stays, moderation_status becomes "removed". You
-    cannot audit a deletion you deleted, and the reputation penalty needs
-    something to point at.
-
-    Does not commit - the caller owns the transaction.
-    """
     target.moderation_status = "removed"
 
     snapshot = getattr(target, "title", None) or ""
@@ -202,7 +154,6 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
 
     award_points(author, REMOVAL_PENALTY_POINTS)
 
-    # Count after writing this removal, so the current one is included.
     db.flush()
     removals = _count_actions(db, author.id, "removed")
 
@@ -225,8 +176,6 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
 
 def restore_content(db: Session, admin_id: Optional[int], target, target_type: str,
                     author, reason: Optional[str] = None) -> None:
-    """Undo a removal, including the points. An admin mistake should cost the
-    user nothing once it is noticed."""
     target.moderation_status = "visible"
     award_points(author, -REMOVAL_PENALTY_POINTS)
     _log(
@@ -234,3 +183,4 @@ def restore_content(db: Session, admin_id: Optional[int], target, target_type: s
         problem_id=target.id if target_type == "problem" else None,
         solution_id=target.id if target_type == "solution" else None,
     )
+

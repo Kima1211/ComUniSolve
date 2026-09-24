@@ -2,8 +2,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth-context";
 
 function TierBadge({ tier }) {
-    // Gold is reserved for accepted solutions, so the top tier uses purple -
-    // two signals that must never look like each other.
     const colours = {
         "Newcomer": "bg-slate-100 text-slate-600",
         "Contributor": "bg-sky-100 text-sky-700",
@@ -77,10 +75,6 @@ function Layout({ children }) {
                     )}
                 </div>
             </header>
-
-            {/* No "unverified" banner here any more: an unverified account
-                never reaches a page wrapped in Layout - RequireVerified sends
-                it to /verify-email first. */}
 
             <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
         </div>

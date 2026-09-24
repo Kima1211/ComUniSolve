@@ -1,9 +1,3 @@
-"""Layer 2 of the moderation system: a local keyword filter.
-
-No API, no network, no cost, and it still works when Gemini is unreachable —
-which is the whole reason it runs before the AI layer rather than after it.
-"""
-
 import os
 import re
 import unicodedata
@@ -29,11 +23,6 @@ class KeywordResult:
 
 
 def normalize(text: str) -> str:
-    """Fold text down to lowercase letters, digits and single spaces.
-
-    Accents are stripped so "putañgina" matches "putangina", and every
-    punctuation mark becomes a space so "f.u.c.k" cannot hide behind dots.
-    """
     if not text:
         return ""
     text = unicodedata.normalize("NFKD", text)
@@ -44,19 +33,10 @@ def normalize(text: str) -> str:
 
 
 def _collapse_runs(text: str) -> str:
-    """"putanginaaaa" -> "putangina". Three or more identical letters in a row
-    does not occur in real English or Tagalog words, so collapsing them is safe."""
     return re.sub(r"(.)\1{2,}", r"\1", text)
 
 
 def _join_spaced_letters(text: str) -> str:
-    """"p u t a n g i n a" -> "putangina".
-
-    After normalization, "p.u.t.a.n.g.i.n.a" is nine single-letter words, and
-    the phrase no longer matches anything. Only runs of three or more
-    consecutive single-letter words are joined — real writing does not produce
-    those, so this cannot swallow ordinary words like the "a" in "a new roof".
-    """
     tokens = text.split()
     out: list[str] = []
     run: list[str] = []
@@ -78,12 +58,9 @@ def _join_spaced_letters(text: str) -> str:
 
 
 def _load() -> tuple[list[str], list[str]]:
-    """Read the word list, re-reading only when the file has actually changed."""
     try:
         mtime = os.path.getmtime(_WORDLIST_PATH)
     except OSError:
-        # A missing word list must not take the platform down. Layer 2 simply
-        # passes everything through and the other four layers still apply.
         return [], []
 
     if _cache["mtime"] == mtime:
@@ -116,23 +93,17 @@ def _load() -> tuple[list[str], list[str]]:
 def _matches(haystack: str, terms: list[str]) -> list[str]:
     found = []
     for term in terms:
-        # Whole words only. Without the boundaries, "ass" matches "class",
-        # "assign" and "passenger" — the classic false-positive that makes
-        # naive keyword filters unusable.
         if re.search(rf"(?<!\w){re.escape(term)}(?!\w)", haystack):
             found.append(term)
     return found
 
 
 def check_text(*parts: str) -> KeywordResult:
-    """Check one or more pieces of user text (title, description, ...) together."""
     block_terms, flag_terms = _load()
     if not block_terms and not flag_terms:
         return KeywordResult()
 
     haystack = normalize(" ".join(p for p in parts if p))
-    # Three views of the same text, each closing one evasion route. A term only
-    # has to match in one of them.
     variants = {haystack, _collapse_runs(haystack), _join_spaced_letters(haystack)}
 
     blocked = _first_match(variants, block_terms)
@@ -147,3 +118,4 @@ def _first_match(variants: set[str], terms: list[str]) -> list[str]:
         if found:
             return found
     return []
+

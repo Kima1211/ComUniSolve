@@ -22,7 +22,6 @@ router = APIRouter()
 
 @router.get("/admin/overview", response_model=ProblemOverview)
 def get_problem_overview(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_admin)):
-
     total_users = db.query(user.User).count()
     total_problems = db.query(problem.Problem).count()
     total_solutions = db.query(solution.Solution).count()
@@ -43,12 +42,6 @@ def get_problem_overview(db: Session = Depends(get_db), current_user: user.User 
 
 @router.get("/admin/queue", response_model=list[QueueItem])
 def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_admin)):
-    """Everything waiting for a human decision, problems and solutions in one list.
-
-    Two ways in: the content was flagged automatically (Layer 1 or 2), or a
-    user reported it (Layer 3). Both land here, because both mean the same
-    thing - a person needs to look.
-    """
     pending = db.query(Report).filter(Report.status == "pending").all()
 
     problem_reports: dict[int, list[str]] = {}
@@ -110,8 +103,6 @@ def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User 
             created_at=s.created_at,
         ))
 
-    # Most-reported first, then newest. What the community complained about
-    # loudest should not be buried under what an AI merely found unclear.
     items.sort(key=lambda i: (i.report_count, i.created_at), reverse=True)
     return items
 
@@ -160,7 +151,7 @@ def _moderate(db: Session, admin, target_type: str, target_id: int, body: Modera
             target.moderation_status = "visible"
             outcome["reports_closed"] = _close_reports(db, target_type, target_id, "dismissed")
 
-        else:  # dismissed - the reports are handled, the content is left as it is
+        else:
             outcome["reports_closed"] = _close_reports(db, target_type, target_id, "dismissed")
 
         db.commit()
@@ -204,8 +195,6 @@ def set_user_suspension(
     db: Session = Depends(get_db),
     current_user: user.User = Depends(get_current_admin),
 ):
-    """Suspend or lift a suspension by hand, alongside the automatic one that
-    Layer 4 applies after repeated removals."""
     target = db.query(user.User).filter(user.User.id == user_id).first()
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -248,3 +237,4 @@ def get_moderation_logs(
     if target_user_id:
         query = query.filter(ModerationLog.target_user_id == target_user_id)
     return query.order_by(ModerationLog.created_at.desc()).limit(min(limit, 500)).all()
+

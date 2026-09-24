@@ -10,7 +10,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 from Models.database import Base
-from Models.user import User  # noqa: F401  - see the note in Models/problem.py
+from Models.user import User 
 from Models.moderation_log import AI_STATUSES, MODERATION_STATUSES
 
 class Solution(Base):
@@ -26,10 +26,6 @@ class Solution(Base):
     moderation_status: Mapped[str] = mapped_column(String(20), default="visible", nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime,server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime,server_default=func.now(), onupdate=func.now())
-
-    # A relationship adds no column and needs no migration - it just tells
-    # SQLAlchemy how to follow the user_id foreign key to the User row, so
-    # response schemas can include the author.
     author = relationship("User", lazy="joined")
 
     __table_args__ = (
@@ -46,4 +42,4 @@ class Upvote(Base):
     solution_id: Mapped[int] = mapped_column(Integer,ForeignKey("solutions.id", ondelete="CASCADE"),nullable=False,index=True)
     
     __table_args__ = (UniqueConstraint("user_id", "solution_id", name="one_upvote_per_user"),)
-    
+

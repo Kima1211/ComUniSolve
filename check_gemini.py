@@ -1,10 +1,3 @@
-"""Check which AI models actually answer right now.
-
-    python check_gemini.py
-
-One tiny real request per model. 200 = works, 429 = limit spent,
-404 = no such model for your key.
-"""
 import os
 import sys
 
@@ -80,3 +73,4 @@ print()
 print("Any model that printed 200 is working. To change the order the app tries")
 print("them in, put the good ones first in .env:")
 print("   GEMINI_MODELS=gemini-3.8-flash,gemini-3.6-flash")
+

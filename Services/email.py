@@ -20,17 +20,8 @@ if not FRONTEND_URL:
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 def send_verification_email(to_email: str, to_name: str, token: str) -> bool:
-    """Send the verification link. Returns True only if Brevo accepted it.
-
-    It returns instead of raising so each caller can decide what a failure
-    means: registration still succeeds (the account exists, the user can
-    resend), while an explicit resend reports the failure to the user.
-    """
     verification_link = f"{FRONTEND_URL}/verify/{token}"
 
-    # to_name is whatever the user typed at registration. Anything that ends up
-    # inside an HTML document has to be escaped first, or a name like
-    # '<b>Rojan' becomes real markup in the email instead of text.
     safe_name = html.escape(to_name)
 
     return _send_email(
@@ -46,7 +37,6 @@ def send_verification_email(to_email: str, to_name: str, token: str) -> bool:
 
 
 def send_password_reset_email(to_email: str, to_name: str, token: str) -> bool:
-    """Send the password reset link. Returns True only if Brevo accepted it."""
     reset_link = f"{FRONTEND_URL}/reset-password/{token}"
     safe_name = html.escape(to_name)
 
@@ -65,8 +55,6 @@ def send_password_reset_email(to_email: str, to_name: str, token: str) -> bool:
 
 
 def _send_email(to_email: str, to_name: str, subject: str, html_content: str) -> bool:
-    """The one place that talks to Brevo. Both emails above go through here,
-    so a fix to sending or logging only ever has to be made once."""
     payload = {
         "sender": {"name": "ComUniSolve", "email": SENDER_EMAIL},
         "to": [{"email": to_email, "name": to_name}],
@@ -83,20 +71,12 @@ def _send_email(to_email: str, to_name: str, subject: str, html_content: str) ->
     try:
         response = requests.post(BREVO_API_URL, json=payload, headers=headers, timeout=10)
     except requests.exceptions.RequestException as e:
-        # Nothing answered: no network, DNS failure, Brevo unreachable.
         print(f"[EMAIL] to={to_email} FAILED to reach Brevo: {e}")
         return False
 
     if response.status_code >= 400:
-        # Brevo answered and said no. response.text carries the reason;
-        # raise_for_status() would have thrown it away.
         print(f"[EMAIL] to={to_email} REJECTED {response.status_code}: {response.text}")
         return False
 
-    # Logging success matters as much as logging failure. Without this line,
-    # "no output" means either "sent fine" or "this code never ran", and you
-    # cannot tell which.
-    # The link is deliberately NOT logged: it contains the token, and anyone
-    # who can read the server logs (Render keeps them) could use it.
     print(f"[EMAIL] to={to_email} subject={subject!r} accepted by Brevo ({response.status_code})")
     return True

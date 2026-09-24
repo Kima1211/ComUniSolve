@@ -23,8 +23,6 @@ function ResetPassword() {
     async function handleSubmit(e) {
         e.preventDefault()
 
-        // Checked here only because the server never sees the second field.
-        // The length rule is still enforced by the backend.
         if (password !== confirm) {
             setError("The two passwords don't match.")
             return
@@ -34,13 +32,8 @@ function ResetPassword() {
             setError("")
             setSubmitting(true)
 
-            // Unlike VerifyEmail, this runs on a button click, not in a
-            // useEffect - so StrictMode can't send it twice. That matters here:
-            // the token is single-use, and a second request would fail.
             await apiPost("/reset-password", { token: token, new_password: password })
 
-            // The backend logged this browser out. Ask again so the app stops
-            // showing whoever was signed in before.
             await refreshUser()
             setDone(true)
         } catch (e) {

@@ -17,13 +17,6 @@ def create_report(
     db: Session = Depends(get_db),
     current_user: user_models.User = Depends(get_active_poster),
 ):
-    """Layer 3. Filing a report hides nothing and punishes nobody.
-
-    It only puts the content in front of an admin. That separation is
-    deliberate: if reports alone cost the author points or visibility, a
-    handful of coordinated users could bury anyone without a human ever
-    looking - which is how you would attack this system.
-    """
     if body.problem_id is not None:
         target = (
             db.query(problem_models.Problem)
@@ -54,10 +47,6 @@ def create_report(
         db.commit()
         db.refresh(new_report)
     except IntegrityError:
-        # The "one report per user per item" unique constraint. Checking first
-        # with a SELECT would still leave a race between the check and the
-        # insert; the constraint cannot be raced, so the right place to handle
-        # a duplicate is here, after the database has refused it.
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -71,3 +60,4 @@ def create_report(
         )
 
     return new_report
+

@@ -27,8 +27,6 @@ function Badge({ children, tone = "slate" }) {
 }
 
 function QueueRow({ item, onAction, busy }) {
-    // Why is this here? Answering that is the admin's first question, so it is
-    // the first thing on the row.
     const reported = item.report_count > 0
 
     return (
@@ -99,9 +97,6 @@ function AdminDashboard() {
     const [loading, setLoading] = useState(true)
     const [busy, setBusy] = useState(false)
 
-    // Fetching and state-setting are kept apart on purpose: this returns data
-    // and touches no state, so it is safe to call from an effect without
-    // triggering a cascading render.
     const fetchAll = useCallback(
         () => Promise.all([apiGet("/admin/overview"), apiGet("/admin/queue")]),
         [],
@@ -153,9 +148,6 @@ function AdminDashboard() {
                 setNotice("Done.")
             }
 
-            // Refetch rather than editing the list locally - the server decides
-            // what is still in the queue, and a removal can change more than
-            // the one row that was clicked.
             await reload()
         } catch (e) {
             setError(e.message || "Could not apply that action.")

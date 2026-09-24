@@ -21,4 +21,4 @@ class CommentIn(BaseModel):
 
 class CommentEdit(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
-    
+

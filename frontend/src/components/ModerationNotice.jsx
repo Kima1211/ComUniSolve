@@ -1,16 +1,6 @@
-// What the user sees when the pre-post gate stops their post.
-//
-// The panel has to do two jobs, because Required Revision #3 asks for both:
-// say clearly what is wrong (flagged), and help them fix it (assisted or
-// corrected). A bare "your post was rejected" would satisfy neither.
-
 function ModerationNotice({ gate, onUseSuggestion, onPostAnyway, busy }) {
     if (!gate) return null
 
-    // "unclear" is the only verdict the user can clear by confirming. A banned
-    // keyword or an "inappropriate" verdict never shows a Post anyway button -
-    // and the server ignores the flag for those cases regardless, so this is
-    // presentation, not enforcement.
     const canOverride = Boolean(gate.acknowledgeable)
 
     const tone = canOverride

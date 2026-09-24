@@ -18,6 +18,7 @@ from Services.reputation import is_currently_suspended
 
 load_dotenv()
 
+# Never change the pepper on a live site: every stored password was hashed with it.
 PEPPER = os.getenv("PASSWORD_PEPPER")
 if not PEPPER: 
     raise RuntimeError("PASSWORD_PEPPER is not set in environment!")
@@ -31,15 +32,12 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 30
-# Much shorter than verification's 24 hours: a reset link opens the account,
-# so a leaked or forwarded one must stop working quickly.
 PASSWORD_RESET_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 def hash_password(password: str) -> str:
-    
     peppered = password + PEPPER
     pre_hashed = hashlib.sha256(peppered.encode("utf-8")).hexdigest()
     
@@ -67,7 +65,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def issue_auth_cookie(response: Response, user) -> None:
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-            data={"sub":  user.email},
+            data={"sub":  user.email, "ver": user.session_version},
             expires_delta=access_token_expires
         )
     response.set_cookie(
@@ -102,12 +100,6 @@ def issue_refresh_token(response: Response, user, db: Session) -> str:
     return token
 
 def revoke_refresh_token(raw_token: str, db: Session) -> bool:
-    """Delete the refresh_tokens row matching this raw cookie value.
-
-    Returns True if a row was actually deleted. Mirrors issue_refresh_token:
-    the hashing rule lives in exactly one place, next to the function that
-    created the hash in the first place.
-    """
     hashed_token = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
     db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed_token).first()
 
@@ -119,12 +111,6 @@ def revoke_refresh_token(raw_token: str, db: Session) -> bool:
     return True
 
 def clear_auth_cookies(response: Response) -> None:
-    """Remove both session cookies from the browser.
-
-    The delete_cookie arguments must match how the cookies were set in
-    issue_auth_cookie / issue_refresh_token, or the browser treats them as
-    different cookies and silently keeps the originals.
-    """
     response.delete_cookie(key="access_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
     response.delete_cookie(key="refresh_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
 
@@ -140,9 +126,6 @@ def issue_verification_token(user, db:Session) -> str:
     return token
 
 def issue_password_reset_token(user, db: Session) -> str:
-    """Same pattern as issue_verification_token: the raw token goes in the
-    email, only its hash is stored. A new token overwrites the old one, so
-    only the most recent reset link ever works."""
     token = secrets.token_urlsafe(32)
     hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
 
@@ -154,23 +137,15 @@ def issue_password_reset_token(user, db: Session) -> str:
     return token
 
 def revoke_all_refresh_tokens(user_id: int, db: Session) -> None:
-    """Log this user out on every device. Does not commit - the caller commits
-    it together with whatever change made it necessary."""
     db.query(RefreshToken).filter(RefreshToken.user_id == user_id).delete()
 
-def decode_token(token: str) -> str:
-    """Return the email stored in the token's `sub` claim.
-
-    Raises ExpiredSignatureError if the token is past its `exp`, and JWTError
-    for anything else wrong with it (bad signature, malformed, missing `sub`).
-    Callers decide what HTTP status those mean - this function only knows tokens.
-    """
+def decode_token(token: str) -> tuple[str, Optional[int]]:
     payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     email = payload.get("sub")
 
     if email is None:
         raise JWTError("Token has no 'sub' claim")
-    return email
+    return email, payload.get("ver")
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
@@ -183,7 +158,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
             )
 
     try:
-        email = decode_token(token)
+        email, token_version = decode_token(token)
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -199,6 +174,11 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found")
+
+    if token_version != user.session_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has ended")
 
     if not user.is_active:
         raise HTTPException(
@@ -218,17 +198,6 @@ def get_verified_user(current_user: db_models.User = Depends(get_current_user)):
 
 
 def get_active_poster(current_user: db_models.User = Depends(get_verified_user)):
-    """A verified user who is not currently suspended.
-
-    Every endpoint that WRITES something - posting, solving, commenting,
-    upvoting, rating, reporting - depends on this. Reading is deliberately
-    left alone: a suspended user can still browse and still see why they were
-    suspended, which is kinder and easier to explain than a blanket lockout.
-
-    Note it calls is_currently_suspended() rather than reading is_suspended.
-    Suspensions expire lazily, so the flag alone goes stale the moment an end
-    date passes.
-    """
     if is_currently_suspended(current_user):
         until = current_user.suspended_until
         when = f" until {until:%d %b %Y}" if until else ""

@@ -1,14 +1,6 @@
-"""Layer 1 of the moderation system: the AI pre-post content check.
-
-Separate from Services/gemini.py, which owns the matching feature. This module
-owns only the moderation prompt and how its answer is validated; the model
-chain, retries and deadline are reused from gemini.ask_json rather than
-copied.
-"""
-
 from typing import Optional
 
-from Services.gemini import ask_json, is_enabled  # noqa: F401  (re-exported)
+from Services.gemini import ask_json, is_enabled  # noqa: F401
 
 VERDICTS = {"ok", "unclear", "inappropriate"}
 
@@ -76,13 +68,6 @@ def _build_prompt(title: Optional[str], text: str) -> str:
 
 
 def check_content(title: Optional[str], text: str) -> Optional[dict]:
-    """Ask the AI to judge one post.
-
-    Returns {"verdict", "reason", "suggestion"} or None when the AI could not
-    be reached. None is not a failure the user should ever see - the caller
-    records ai_status="unchecked" and lets the post through, because an API
-    outage must not stop anyone posting a real problem.
-    """
     if not is_enabled():
         return None
 
@@ -107,3 +92,4 @@ def check_content(title: Optional[str], text: str) -> Optional[dict]:
         "reason": str(parsed.get("reason") or "").strip()[:300],
         "suggestion": suggestion[:1000] or None,
     }
+

@@ -24,20 +24,11 @@ def _gate_to_response(result) -> dict:
     ).model_dump()
 
 
+# Removal is a soft delete: every public query must go through this filter.
 def _visible(query):
-    """Removed content disappears from every public listing.
-
-    It is a soft delete - the row is still there for the audit trail - so the
-    filter has to be applied deliberately everywhere the public reads.
-    """
     return query.filter(problem.Problem.moderation_status != "removed")
 
 def _attach_solution_counts(problems, db):
-    """Set .solution_count on each problem using one grouped query.
-
-    Counting inside a loop would fire one query per problem (the N+1 problem);
-    this fires exactly one no matter how many problems there are.
-    """
     if not problems:
         return problems
 
@@ -67,9 +58,6 @@ def get_problems(
     if user_id:
         query = query.filter(problem.Problem.user_id == user_id)
 
-    # Without an explicit ORDER BY, SQL makes no promise about row order, and
-    # Postgres physically moves a row when it is updated - so accepting a
-    # solution used to shuffle that problem's position in the feed.
     query = query.order_by(problem.Problem.created_at.desc())
 
     return _attach_solution_counts(query.all(), db)
@@ -92,13 +80,6 @@ def check_problem_text(
     body: ContentCheckRequest,
     current_user: user.User = Depends(get_active_poster),
 ):
-    """Run the pre-post gate without creating anything.
-
-    Objective 3 says the AI evaluates posts "before they are submitted by the
-    user", so the form can call this and show the result while they are still
-    editing. POST /problems runs the same gate again server-side - this
-    endpoint is a convenience for the UI, never the enforcement point.
-    """
     return _gate_to_response(run_pre_post_gate(body.title, body.text))
 
 
@@ -107,9 +88,6 @@ def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_u
     gate = run_pre_post_gate(prob.title, prob.description or "", acknowledged=prob.acknowledged)
 
     if gate.blocked:
-        # 422: the request was understood and is well-formed, but its content
-        # is not acceptable. The body carries the reason and the suggested
-        # rewrite so the user can fix it and try again.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=_gate_to_response(gate),
@@ -149,13 +127,6 @@ def upload_problem_image(
     db: Session = Depends(get_db),
     current_user: user.User = Depends(get_active_poster),
 ):
-    """Attach the one supporting image to a problem the user just posted.
-
-    A separate step from POST /problems on purpose: that endpoint carries the
-    moderation gate and its "post anyway" flow, and mixing a file into it would
-    mean rewriting working code. The frontend calls this right after a
-    successful post.
-    """
     if not images.is_configured():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Image upload is not available right now")
 
@@ -166,13 +137,9 @@ def upload_problem_image(
     if fnd_prob.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only add an image to your own problem")
 
-    # One image per problem (scope). Replacing one belongs to editing posts,
-    # which is not built yet.
     if fnd_prob.image_url:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This problem already has an image")
 
-    # Read one byte past the limit: if that byte exists, the file is too big.
-    # This way an oversized file is never held in memory in full.
     data = image.file.read(images.MAX_IMAGE_BYTES + 1)
     if len(data) > images.MAX_IMAGE_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image must be 5 MB or smaller")
