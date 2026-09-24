@@ -18,7 +18,7 @@ function RequireAuth({ children, adminOnly = false }) {
     }
 
     if (adminOnly && user.role !== "admin") {
-        return <p className="p-8 text-sm text-slate-600">You do not have permission to view this page.</p>;
+        return <Navigate to="/" replace />;
     }
 
     return children;

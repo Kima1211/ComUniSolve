@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Literal, Optional, List
 
 
 class MatchRequest(BaseModel):
@@ -23,4 +23,9 @@ class MatchedProblem(BaseModel):
 class MatchResponse(BaseModel):
     matches: List[MatchedProblem] = []
     ai_used: bool = False
+
+
+class AiSuggestionResponse(BaseModel):
+    status: Literal["shown", "has_solutions", "similar_solution_exists", "unavailable"]
+    suggestion: Optional[str] = None
 

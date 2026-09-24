@@ -29,6 +29,9 @@ function ProblemDetail() {
 
     const aiAskedFor = useRef(null)
 
+    const [aiSuggestion, setAiSuggestion] = useState(null)
+    const suggestionAskedFor = useRef(null)
+
     const askAI = useCallback(async () => {
         try {
             setAiFailed(false)
@@ -83,6 +86,19 @@ function ProblemDetail() {
             .finally(() => { if (!cancelled) setLoading(false) })
         return () => { cancelled = true }
     }, [fetchAll])
+
+    useEffect(() => {
+        if (loading || !problem || solutions.length > 0) return
+        if (suggestionAskedFor.current === id) return
+        suggestionAskedFor.current = id
+
+        apiGet(`/problems/${id}/ai-suggestion`)
+            .then((data) => setAiSuggestion({ ...data, forId: id }))
+            .catch(() => setAiSuggestion({ status: "unavailable", forId: id }))
+    }, [id, loading, problem, solutions.length])
+
+    const suggestionPending = !loading && problem && solutions.length === 0 && aiSuggestion?.forId !== id
+    const showSuggestion = solutions.length === 0 && aiSuggestion?.forId === id && aiSuggestion.status === "shown"
 
     async function postSolution(acknowledged) {
         try {
@@ -237,9 +253,36 @@ function ProblemDetail() {
                 </h2>
 
                 <div className="mt-4 space-y-3">
+                    {suggestionPending && (
+                        <p className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50
+                                      px-4 py-2 text-sm text-purple-800">
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
+                            Checking whether the AI can suggest a first step...
+                        </p>
+                    )}
+
+                    {showSuggestion && (
+                        <div className="rounded-xl border border-purple-200 bg-white p-5">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800">
+                                    AI Suggestion
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                    Not from a community member
+                                </span>
+                            </div>
+                            <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{aiSuggestion.suggestion}</p>
+                            <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                                Written by AI because nobody has answered yet and no similar problem has been
+                                solved. It may be wrong, so use your judgment. It disappears as soon as a
+                                community member posts a solution.
+                            </p>
+                        </div>
+                    )}
+
                     {solutions.length === 0 && (
                         <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                            No solutions yet. If you know the answer, share it below.
+                            No community solutions yet. If you know the answer, share it below.
                         </p>
                     )}
                     {solutions.map((s) => (

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -6,9 +7,10 @@ from typing import Optional
 
 from Models.database import get_db
 from Models import problem, solution
-from Schemas.matching import MatchRequest, MatchResponse, MatchedProblem
+from Schemas.matching import AiSuggestionResponse, MatchRequest, MatchResponse, MatchedProblem
 from Services.matching import find_similar, build_candidate_pool, SIMILARITY_THRESHOLD, MAX_MATCHES
 from Services import gemini
+from Services.ai_suggestion import generate_suggestion
 
 router = APIRouter()
 
@@ -134,3 +136,44 @@ def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
     )
     return MatchResponse(matches=matches, ai_used=ai_used)
 
+
+
+@router.get("/problems/{problem_id}/ai-suggestion", response_model=AiSuggestionResponse)
+def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
+    fnd = (
+        db.query(problem.Problem)
+        .filter(problem.Problem.id == problem_id, problem.Problem.moderation_status != "removed")
+        .first()
+    )
+    if not fnd:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+
+    # A real answer always replaces the AI one. The stored suggestion is kept,
+    # so it comes back if every community solution is later removed.
+    has_solution = (
+        db.query(solution.Solution.id)
+        .filter(solution.Solution.problem_id == problem_id, solution.Solution.moderation_status != "removed")
+        .first()
+        is not None
+    )
+    if has_solution:
+        return AiSuggestionResponse(status="has_solutions")
+
+    if fnd.ai_suggestion:
+        return AiSuggestionResponse(status="shown", suggestion=fnd.ai_suggestion)
+
+    matches, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=False)
+    if any(m.accepted_solution for m in matches):
+        return AiSuggestionResponse(status="similar_solution_exists")
+
+    text = generate_suggestion(fnd.title, fnd.description, fnd.category)
+    if not text:
+        return AiSuggestionResponse(status="unavailable")
+
+    # Two viewers can arrive at once; keep whichever suggestion was saved first.
+    db.refresh(fnd)
+    if not fnd.ai_suggestion:
+        fnd.ai_suggestion = text
+        fnd.ai_suggestion_at = datetime.now(timezone.utc)
+        db.commit()
+    return AiSuggestionResponse(status="shown", suggestion=fnd.ai_suggestion)
