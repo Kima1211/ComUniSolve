@@ -40,10 +40,14 @@ def reg_body(register: Register, response: Response, db: Session = Depends(get_d
     issue_auth_cookie(response,new_user)
     issue_refresh_token(response, new_user,db)
     token = issue_verification_token(new_user, db)
-    send_verification_email(new_user.email, new_user.name, token)
-    
+    # A failed send must not fail registration: the account is already saved,
+    # and the user can use the resend button. But the frontend has to know, or
+    # it tells them "we sent you a link" when nothing was sent.
+    email_sent = send_verification_email(new_user.email, new_user.name, token)
+
     return {
         "message": "Account successfully registered",
+        "email_sent": email_sent,
         "data": {
             "id": new_user.id,
             "name": new_user.name,

@@ -27,11 +27,13 @@ function Register() {
             setError("")
             setSubmitting(true)
 
-            await apiPost("/register", { name: name, email: email, password: password })
+            const data = await apiPost("/register", { name: name, email: email, password: password })
             await refreshUser()
             // Straight to the gate rather than to "/", which would only bounce
             // them here anyway now that unverified accounts are held back.
-            navigate("/verify-email", { replace: true })
+            // Router state carries one fact across the navigation: whether the
+            // first email actually went out.
+            navigate("/verify-email", { replace: true, state: { emailFailed: data.email_sent === false } })
         } catch (e) {
             setError(e.message || "Something went wrong! Please try again.")
         } finally {

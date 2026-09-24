@@ -44,7 +44,13 @@ def resend_verification(current_user: User = Depends(get_current_user), db: Sess
     # link stops working from this moment. That is the intended behaviour -
     # only the most recent link should ever be valid.
     token = issue_verification_token(current_user, db)
-    send_verification_email(current_user.email, current_user.name, token)
+    if not send_verification_email(current_user.email, current_user.name, token):
+        # 502 Bad Gateway: our server is fine, the service it depends on
+        # (Brevo) is not. The user asked for this email, so say it failed.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="We couldn't send the email right now. Please try again in a minute.",
+        )
 
     return {"message": f"Verification email sent to {current_user.email}"}
 
@@ -116,15 +122,25 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     
     if db_user is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail = "Invalid verification token")
-    
+
+    # Clicking the same link twice must not look like a failure. This check
+    # comes BEFORE the expiry check, so an old link for an already-verified
+    # account still gets a friendly answer instead of "expired".
+    # It also makes the endpoint idempotent (calling it twice has the same
+    # effect as calling it once), which is what React StrictMode's double
+    # request in development needs.
+    if db_user.is_verified:
+        return {"message": "Email verified successfully"}
+
     current_time = datetime.now(timezone.utc)
     if db_user.verification_token_expires_at is None or current_time >= db_user.verification_token_expires_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification token has expired")
-    
+
+    # The hash is kept on purpose, so a second click can still find this user
+    # and land on the is_verified branch above. It is safe to keep: the only
+    # thing this token can do is verify, and that is already done.
     db_user.is_verified=True
-    db_user.verification_token_hash = None
-    db_user.verification_token_expires_at = None
-    
+
     try:
         db.commit()
     except Exception:

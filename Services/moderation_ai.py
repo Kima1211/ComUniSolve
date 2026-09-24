@@ -103,9 +103,7 @@ def check_content(title: Optional[str], text: str) -> Optional[dict]:
         return None
 
     verdict = parsed.get("verdict")
-    # The reply is data, never trusted. An answer outside the three allowed
-    # verdicts is discarded entirely rather than guessed at - the same rule
-    # rerank() applies when it only accepts problem ids it actually sent.
+
     if verdict not in VERDICTS:
         print(f"[AI:content_check] discarding unrecognised verdict {verdict!r}")
         return None

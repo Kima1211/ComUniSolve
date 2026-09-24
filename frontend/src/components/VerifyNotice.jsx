@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
 
@@ -14,9 +14,16 @@ import { useAuth } from "../auth-context";
 function VerifyNotice() {
     const { user, loading, refreshUser, logout } = useAuth()
     const navigate = useNavigate()
+    const location = useLocation()
 
     const [message, setMessage] = useState("")
-    const [error, setError] = useState("")
+    // Registration still succeeds when the email fails, so start with the
+    // error showing instead of claiming a link was sent.
+    const [error, setError] = useState(
+        location.state?.emailFailed
+            ? "We couldn't send your verification email. Please use the resend button below."
+            : ""
+    )
     const [sending, setSending] = useState(false)
     const [cooldown, setCooldown] = useState(0)
 

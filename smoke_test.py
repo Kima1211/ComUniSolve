@@ -20,7 +20,7 @@ for k, v in [("PASSWORD_PEPPER", "test-pepper"), ("SECRET_KEY", "test-secret"),
 
 from fastapi.testclient import TestClient
 import routers.user as user_router
-user_router.send_verification_email = lambda *a, **k: None
+user_router.send_verification_email = lambda *a, **k: True
 
 from Models.database import engine, Base, SessionLocal
 from Models import user, problem, solution, comment, rating, refresh_token

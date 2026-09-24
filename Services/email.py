@@ -19,7 +19,13 @@ if not FRONTEND_URL:
 
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
-def send_verification_email(to_email: str, to_name: str, token: str) -> None:
+def send_verification_email(to_email: str, to_name: str, token: str) -> bool:
+    """Send the verification link. Returns True only if Brevo accepted it.
+
+    It returns instead of raising so each caller can decide what a failure
+    means: registration still succeeds (the account exists, the user can
+    resend), while an explicit resend reports the failure to the user.
+    """
     verification_link = f"{FRONTEND_URL}/verify/{token}"
 
     # to_name is whatever the user typed at registration. Anything that ends up
@@ -50,15 +56,16 @@ def send_verification_email(to_email: str, to_name: str, token: str) -> None:
     except requests.exceptions.RequestException as e:
         # Nothing answered: no network, DNS failure, Brevo unreachable.
         print(f"[EMAIL] to={to_email} FAILED to reach Brevo: {e}")
-        return
+        return False
 
     if response.status_code >= 400:
         # Brevo answered and said no. response.text carries the reason;
         # raise_for_status() would have thrown it away.
         print(f"[EMAIL] to={to_email} REJECTED {response.status_code}: {response.text}")
-        return
+        return False
 
     # Logging success matters as much as logging failure. Without this line,
     # "no output" means either "sent fine" or "this code never ran", and you
     # cannot tell which.
     print(f"[EMAIL] to={to_email} accepted by Brevo ({response.status_code}) link={verification_link}")
+    return True
