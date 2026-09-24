@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+from typing import Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from typing import Optional
 
 from Schemas.problem import ProblemOverview
 from Schemas.moderation import (
@@ -9,15 +12,92 @@ from Schemas.moderation import (
     QueueItem,
     SuspendUserIn,
 )
+from Schemas.user import AdminUserList, AdminUserRow
 from Models.database import get_db
 from Models.report import Report
 from Models.moderation_log import ModerationLog
 from Security.utils import get_current_admin
 from Models import problem, user, solution
 from Services.moderation import remove_content, restore_content, suspend_user, unsuspend_user
-from Services.reputation import is_currently_suspended
+from Services.reputation import is_currently_suspended, get_tier
 
 router = APIRouter()
+
+
+def _count_per_user(db: Session, column, user_ids: list[int], *filters) -> dict[int, int]:
+    if not user_ids:
+        return {}
+    rows = (
+        db.query(column, func.count())
+        .filter(column.in_(user_ids), *filters)
+        .group_by(column)
+        .all()
+    )
+    return dict(rows)
+
+
+@router.get("/admin/users", response_model=AdminUserList)
+def list_users(
+    search: str = Query("", max_length=100),
+    show: Literal["all", "suspended", "unverified", "admins"] = "all",
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_current_admin),
+):
+    query = db.query(user.User)
+
+    term = search.strip().lower()
+    if term:
+        # autoescape: a search for "50%" means the text "50%", not a wildcard.
+        query = query.filter(or_(
+            func.lower(user.User.name).contains(term, autoescape=True),
+            func.lower(user.User.email).contains(term, autoescape=True),
+        ))
+
+    if show == "suspended":
+        query = query.filter(
+            user.User.is_suspended.is_(True),
+            or_(user.User.suspended_until.is_(None),
+                user.User.suspended_until > datetime.now(timezone.utc)),
+        )
+    elif show == "unverified":
+        query = query.filter(user.User.is_verified.is_(False))
+    elif show == "admins":
+        query = query.filter(user.User.role == "admin")
+
+    total = query.count()
+    rows = (
+        query.order_by(user.User.created_at.desc(), user.User.id.desc())
+        .offset(offset).limit(limit).all()
+    )
+
+    ids = [u.id for u in rows]
+    problem_counts = _count_per_user(db, problem.Problem.user_id, ids)
+    solution_counts = _count_per_user(db, solution.Solution.user_id, ids)
+    removal_counts = _count_per_user(db, ModerationLog.target_user_id, ids,
+                                     ModerationLog.action == "removed")
+
+    return AdminUserList(total=total, users=[
+        AdminUserRow(
+            id=u.id,
+            name=u.name,
+            email=u.email,
+            role=u.role,
+            points=u.points,
+            tier=get_tier(u.points),
+            is_verified=u.is_verified,
+            is_active=u.is_active,
+            is_suspended=is_currently_suspended(u),
+            suspended_until=u.suspended_until,
+            suspension_reason=u.suspension_reason,
+            created_at=u.created_at,
+            problem_count=problem_counts.get(u.id, 0),
+            solution_count=solution_counts.get(u.id, 0),
+            removal_count=removal_counts.get(u.id, 0),
+        )
+        for u in rows
+    ])
 
 
 @router.get("/admin/overview", response_model=ProblemOverview)
@@ -202,6 +282,17 @@ def set_user_suspension(
     if target.id == current_user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="You cannot suspend yourself")
 
+    if target.role == "admin":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Admins cannot be suspended")
+
+    # Each suspension moves the user one step up the ladder (1, 3, 7 days,
+    # then permanent), so suspending someone twice by accident must not count.
+    currently_suspended = is_currently_suspended(target)
+    if body.suspend and currently_suspended:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="This user is already suspended")
+    if not body.suspend and not currently_suspended:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="This user is not suspended")
+
     try:
         if body.suspend:
             days = suspend_user(db, current_user.id, target, body.reason)
@@ -228,13 +319,46 @@ def set_user_suspension(
 
 @router.get("/admin/logs", response_model=list[ModerationLogResponse])
 def get_moderation_logs(
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=500),
     target_user_id: Optional[int] = None,
+    action: Optional[Literal["removed", "restored", "suspended", "unsuspended"]] = None,
     db: Session = Depends(get_db),
     current_user: user.User = Depends(get_current_admin),
 ):
     query = db.query(ModerationLog)
     if target_user_id:
         query = query.filter(ModerationLog.target_user_id == target_user_id)
-    return query.order_by(ModerationLog.created_at.desc()).limit(min(limit, 500)).all()
+    if action:
+        query = query.filter(ModerationLog.action == action)
+    logs = query.order_by(ModerationLog.created_at.desc()).limit(limit).all()
+
+    # Names instead of bare ids, and each post's CURRENT status, so the page
+    # only offers "Restore" for content that is still removed.
+    people = {l.admin_id for l in logs} | {l.target_user_id for l in logs}
+    people.discard(None)
+    names = dict(db.query(user.User.id, user.User.name).filter(user.User.id.in_(people)).all()) if people else {}
+
+    problem_ids = {l.problem_id for l in logs if l.problem_id}
+    solution_ids = {l.solution_id for l in logs if l.solution_id}
+    problem_status = dict(
+        db.query(problem.Problem.id, problem.Problem.moderation_status)
+        .filter(problem.Problem.id.in_(problem_ids)).all()
+    ) if problem_ids else {}
+    solution_status = dict(
+        db.query(solution.Solution.id, solution.Solution.moderation_status)
+        .filter(solution.Solution.id.in_(solution_ids)).all()
+    ) if solution_ids else {}
+
+    return [
+        ModerationLogResponse.model_validate(l).model_copy(update={
+            "admin_name": names.get(l.admin_id),
+            "target_user_name": names.get(l.target_user_id),
+            "target_status": (
+                problem_status.get(l.problem_id) if l.problem_id
+                else solution_status.get(l.solution_id) if l.solution_id
+                else None
+            ),
+        })
+        for l in logs
+    ]
 

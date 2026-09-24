@@ -43,6 +43,9 @@ class ModerationLogResponse(BaseModel):
     reason: Optional[str] = None
     content_snapshot: Optional[str] = None
     created_at: datetime
+    admin_name: Optional[str] = None
+    target_user_name: Optional[str] = None
+    target_status: Optional[str] = None
 
 
 class QueueItem(BaseModel):
