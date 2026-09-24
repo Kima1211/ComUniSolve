@@ -8,7 +8,7 @@ DEMO_DOMAIN = "@demo.comunisolve"
 
 USERS = [
     ("Maria Santos", "maria" + DEMO_DOMAIN, 8),
-    ("Ben Cruz", "ben" + DEMO_DOMAIN, 35),
+    ("Ben Cruz", "ben" + DEMO_DOMAIN, 20),
     ("Lita Reyes", "lita" + DEMO_DOMAIN, 66),
     ("Nena Lim", "nena" + DEMO_DOMAIN, 92),
 ]

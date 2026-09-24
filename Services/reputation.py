@@ -9,12 +9,13 @@ SUSPENSION_LADDER = [1, 3, 7]
 def award_points(user, amount: int) -> None:
     user.points =max (0, user.points + amount)
 
+# Must match the tier table in the manuscript.
 def get_tier(points: int) -> str:
-    if points >=80:
+    if points >= 70:
         return "Community Expert"
-    elif points >= 60:
-        return "Trusted Helper"
     elif points >= 30:
+        return "Trusted Helper"
+    elif points >= 10:
         return "Contributor"
     return "Newcomer"
 
