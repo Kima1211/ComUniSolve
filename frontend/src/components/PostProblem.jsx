@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiPost } from "../api";
+import { apiPost, apiPostForm } from "../api";
 import Layout from "./Layout";
 import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
 
 const CATEGORIES = ["Household", "School", "Public", "Health", "Livelihood", "Other"]
+
+// Mirrors the backend rules so the user hears about a bad file immediately.
+// The backend still checks both - this is a courtesy, not the validation.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
 const inputClass =
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 " +
@@ -23,6 +28,30 @@ function PostProblem() {
     const [matches, setMatches] = useState([])
     const [aiUsed, setAiUsed] = useState(false)
     const [checkingAi, setCheckingAi] = useState(false)
+    const [image, setImage] = useState(null)
+
+    // A temporary local address for the chosen file, so it can be previewed
+    // before anything is uploaded. It is released when the file changes or the
+    // page closes; otherwise the browser keeps the whole file in memory.
+    const preview = useMemo(() => (image ? URL.createObjectURL(image) : ""), [image])
+    useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
+
+    function chooseImage(e) {
+        const file = e.target.files[0]
+        e.target.value = ""   // lets the same file be picked again after removing it
+        if (!file) return
+
+        if (!IMAGE_TYPES.includes(file.type)) {
+            setError("Image must be a JPG, PNG or WebP file.")
+            return
+        }
+        if (file.size > MAX_IMAGE_BYTES) {
+            setError("Image must be 5 MB or smaller.")
+            return
+        }
+        setError("")
+        setImage(file)
+    }
 
     // Layer 2 is user-triggered, never automatic. One deliberate click costs
     // one API call; firing it while someone types would cost dozens.
@@ -71,7 +100,22 @@ function PostProblem() {
             setGate(null)
             setSubmitting(true)
             const data = await apiPost("/problems", { title, description, category, acknowledged })
-            navigate(`/problems/${data.id}`)
+
+            // Step 2: the image, only once the problem exists. If this fails
+            // the problem is still posted - so go to it anyway and say why the
+            // photo is missing, rather than staying here where pressing "Post"
+            // again would create a duplicate.
+            let imageError = ""
+            if (image) {
+                try {
+                    const form = new FormData()
+                    form.append("image", image)
+                    await apiPostForm(`/problems/${data.id}/image`, form)
+                } catch (e) {
+                    imageError = e.message || "The image could not be uploaded."
+                }
+            }
+            navigate(`/problems/${data.id}`, { state: { imageError } })
         } catch (e) {
             if (e.status === 401) { navigate('/login'); return }
             // A 422 whose detail carries a verdict is the moderation gate, not
@@ -132,6 +176,41 @@ function PostProblem() {
                         >
                             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                         </select>
+                    </div>
+
+                    <div>
+                        <span className="block text-sm font-medium text-slate-700 mb-1">
+                            Photo <span className="font-normal text-slate-400">(optional, one image, max 5 MB)</span>
+                        </span>
+
+                        {image ? (
+                            <div className="flex items-center gap-3">
+                                <img src={preview} alt="Selected" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" />
+                                <div className="min-w-0 text-sm">
+                                    <p className="truncate text-slate-700">{image.name}</p>
+                                    <button
+                                        type="button"
+                                        disabled={submitting}
+                                        onClick={() => setImage(null)}
+                                        className="font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <label
+                                htmlFor="image"
+                                className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed
+                                           border-slate-300 px-3 py-4 text-sm text-slate-500 hover:border-brand-400 hover:text-brand-700"
+                            >
+                                Choose a photo (JPG, PNG or WebP)
+                            </label>
+                        )}
+                        <input
+                            id="image" type="file" accept="image/jpeg,image/png,image/webp"
+                            className="hidden" disabled={submitting} onChange={chooseImage}
+                        />
                     </div>
 
                     {error && (

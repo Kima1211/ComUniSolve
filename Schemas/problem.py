@@ -24,6 +24,7 @@ class ProblemResponse(BaseModel):
     user_id: int
     author: Optional[AuthorOut] = None
     solution_count: int = 0
+    image_url: Optional[str] = None
 
 class ProblemOverview(BaseModel):
 

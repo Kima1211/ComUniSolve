@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { apiGet, apiPost, imageUrl } from "../api";
 import { useAuth } from "../auth-context";
 import Layout, { TierBadge } from "./Layout";
 import SolutionCard from "./SolutionCard";
@@ -11,6 +11,8 @@ import ReportButton from "./ReportButton";
 function ProblemDetail() {
     const { id } = useParams()
     const { user } = useAuth()
+    // Set by PostProblem when the problem was posted but its photo failed.
+    const imageError = useLocation().state?.imageError
 
     const [problem, setProblem] = useState(null)
     const [solutions, setSolutions] = useState([])
@@ -138,6 +140,12 @@ function ProblemDetail() {
                 ← Back to the feed
             </Link>
 
+            {imageError && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Your problem was posted, but the photo wasn't added: {imageError}
+                </div>
+            )}
+
             <article className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
                 <div className="flex items-start justify-between gap-3">
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">{problem.title}</h1>
@@ -171,6 +179,17 @@ function ProblemDetail() {
 
                 {problem.description && (
                     <p className="mt-4 whitespace-pre-wrap text-slate-700">{problem.description}</p>
+                )}
+
+                {problem.image_url && (
+                    // Links to the original so people can see full detail.
+                    <a href={problem.image_url} target="_blank" rel="noreferrer" className="mt-4 block">
+                        <img
+                            src={imageUrl(problem.image_url, 1000)}
+                            alt={`Photo for: ${problem.title}`}
+                            className="max-h-[28rem] w-full rounded-lg border border-slate-200 bg-slate-50 object-contain"
+                        />
+                    </a>
                 )}
             </article>
 

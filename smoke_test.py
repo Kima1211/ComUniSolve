@@ -197,15 +197,14 @@ check("A problem's own page can list related problems, excluding itself",
 # Forced off, so these pass whether or not real API keys are present.
 from Services import gemini as _gemini
 
-_saved_keys = (_gemini.GEMINI_API_KEY, _gemini.GROQ_API_KEY)
+_saved_key = _gemini.GEMINI_API_KEY
 _gemini.GEMINI_API_KEY = None
-_gemini.GROQ_API_KEY = None
 
-check("The AI layer reports itself disabled when no provider has a key",
+check("The AI layer reports itself disabled when there is no Gemini key",
       _gemini.is_enabled() is False, f"is_enabled={_gemini.is_enabled()}")
 
-check("No provider is attempted when no key is configured",
-      _gemini._active_providers() == [], f"{_gemini._active_providers()}")
+check("ask_json gives up at once, without calling the API, when there is no key",
+      _gemini.ask_json("anything", {"type": "object"}) is None)
 
 r = asker.post("/problems/match/ai", json={
     "title": "Our street light is broken",
@@ -219,7 +218,7 @@ check("Results are honest about which layers ran",
       all(m["reason"] is None for m in body["matches"]),
       "no AI reason is invented when the AI did not run")
 
-_gemini.GEMINI_API_KEY, _gemini.GROQ_API_KEY = _saved_keys
+_gemini.GEMINI_API_KEY = _saved_key
 
 print("=" * 70)
 print(f"{sum(results)}/{len(results)} checks passed")

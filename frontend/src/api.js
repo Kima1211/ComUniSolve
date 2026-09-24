@@ -85,7 +85,11 @@ async function send(path, options) {
   // Only declare a JSON body when there actually is one. Sending
   // Content-Type on a plain GET forces the browser into a CORS preflight
   // (an extra OPTIONS round trip) for no reason.
-  if (options.body !== undefined) {
+  //
+  // A FormData body (a file upload) is the exception: the browser must set
+  // Content-Type itself, because the header includes a generated "boundary"
+  // that marks where each part of the upload starts and ends.
+  if (options.body !== undefined && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
 
@@ -148,6 +152,20 @@ export function apiPost(path, body) {
     method: "POST",
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+}
+
+// For file uploads. formData is a FormData object, sent as-is (no JSON).
+export function apiPostForm(path, formData) {
+  return api(path, { method: "POST", body: formData });
+}
+
+// Cloudinary can resize and compress an image on the fly: the instructions go
+// into the URL itself, right after "/upload/". f_auto picks the lightest format
+// the browser supports, q_auto compresses, w_<n> caps the width. The original
+// stays untouched on Cloudinary; this only changes what the browser downloads.
+export function imageUrl(url, width) {
+  if (!url || !url.includes("/upload/")) return url;
+  return url.replace("/upload/", `/upload/f_auto,q_auto,w_${width}/`);
 }
 
 export function apiPatch(path, body) {

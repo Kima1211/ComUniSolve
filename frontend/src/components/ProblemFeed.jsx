@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { apiGet } from "../api"
+import { apiGet, imageUrl } from "../api"
 
 export function ProblemCard({ problem }) {
     return (
@@ -23,6 +23,15 @@ export function ProblemCard({ problem }) {
 
             {problem.description && (
                 <p className="mt-2 text-sm text-slate-600 line-clamp-2">{problem.description}</p>
+            )}
+
+            {problem.image_url && (
+                <img
+                    src={imageUrl(problem.image_url, 600)}
+                    alt=""
+                    loading="lazy"
+                    className="mt-3 h-40 w-full rounded-lg bg-slate-100 object-cover"
+                />
             )}
 
             <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">

@@ -1,13 +1,12 @@
 """AI re-ranking for Solution Matching.
 
-Gemini is the provider. A second provider (Groq) is supported but dormant -
-it activates only if GROQ_API_KEY is set. Any failure returns None, and the
-caller falls back to TF-IDF.
+Gemini is the only AI provider. Any failure returns None, and the caller falls
+back to TF-IDF - the platform keeps working when the API does not.
 """
 import json
 import os
 import time
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import requests
 from dotenv import load_dotenv
@@ -15,22 +14,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Best model first. The chain is for resilience, not budget.
 DEFAULT_GEMINI_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.6-flash",
     "gemini-2.5-flash",
-]
-
-DEFAULT_GROQ_MODELS = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b",
 ]
 
 
@@ -42,7 +33,6 @@ def _chain_from_env(var: str, default: List[str]) -> List[str]:
 
 
 MODEL_CHAIN = _chain_from_env("GEMINI_MODELS", DEFAULT_GEMINI_MODELS)
-GROQ_MODEL_CHAIN = _chain_from_env("GROQ_MODELS", DEFAULT_GROQ_MODELS)
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", MODEL_CHAIN[0] if MODEL_CHAIN else "")
 
 TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT", "25"))
@@ -64,7 +54,7 @@ CACHE_MAX_ENTRIES = 200
 
 
 def is_enabled() -> bool:
-    return bool(GEMINI_API_KEY or GROQ_API_KEY)
+    return bool(GEMINI_API_KEY and MODEL_CHAIN)
 
 
 _MATCH_PROPERTIES = {
@@ -86,24 +76,6 @@ _RESPONSE_SCHEMA = {
         }
     },
     "required": ["matches"],
-}
-
-# Groq's strict mode additionally requires additionalProperties: false.
-_STRICT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "matches": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": _MATCH_PROPERTIES,
-                "required": ["id", "relevance", "reason"],
-                "additionalProperties": False,
-            },
-        }
-    },
-    "required": ["matches"],
-    "additionalProperties": False,
 }
 
 
@@ -176,14 +148,14 @@ def _cache_key(query_title: str, query_description: Optional[str], candidates: L
     return f"{query_title}|{query_description or ''}|{ids}"
 
 
-def _gemini_body(model: str, prompt: str) -> dict:
+def _gemini_body(model: str, prompt: str, schema: dict = _RESPONSE_SCHEMA) -> dict:
     return {
         "model": model,
         "input": prompt,
         "response_format": {
             "type": "text",
             "mime_type": "application/json",
-            "schema": _RESPONSE_SCHEMA,
+            "schema": schema,
         },
     }
 
@@ -200,122 +172,71 @@ def _gemini_text(body: dict) -> Optional[str]:
     return None
 
 
-def _groq_body(model: str, prompt: str) -> dict:
-    return {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0,
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "related_problems",
-                "strict": True,
-                "schema": _STRICT_SCHEMA,
-            },
-        },
-    }
+def _ask_gemini(prompt: str, schema: dict, deadline: float) -> Tuple[Optional[str], Optional[int]]:
+    """Walk the Gemini model chain until one model answers.
 
-
-def _groq_headers() -> dict:
-    return {"content-type": "application/json", "authorization": f"Bearer {GROQ_API_KEY}"}
-
-
-def _groq_text(body: dict) -> Optional[str]:
-    for choice in body.get("choices", []):
-        content = (choice.get("message") or {}).get("content")
-        if content:
-            return content
-    return None
-
-
-class _Provider:
-    def __init__(self, name: str, url: str, models: List[str],
-                 build_body: Callable[[str, str], dict],
-                 build_headers: Callable[[], dict],
-                 extract: Callable[[dict], Optional[str]]):
-        self.name = name
-        self.url = url
-        self.models = models
-        self.build_body = build_body
-        self.build_headers = build_headers
-        self.extract = extract
-
-
-def _active_providers() -> List[_Provider]:
-    providers = []
-    if GEMINI_API_KEY and MODEL_CHAIN:
-        providers.append(_Provider(
-            "gemini", GEMINI_API_URL, MODEL_CHAIN,
-            _gemini_body, _gemini_headers, _gemini_text,
-        ))
-    if GROQ_API_KEY and GROQ_MODEL_CHAIN:
-        providers.append(_Provider(
-            "groq", GROQ_API_URL, GROQ_MODEL_CHAIN,
-            _groq_body, _groq_headers, _groq_text,
-        ))
-    return providers
-
-
-def _ask_provider(provider: _Provider, prompt: str, deadline: float) -> Tuple[Optional[str], Optional[int]]:
-    """Walk one provider's model chain. Returns (json_text, last_status)."""
+    Returns (json_text, last_status). json_text is None when every model
+    failed or the deadline ran out; last_status lets the caller tell "out of
+    quota" (429) apart from "down".
+    """
     last_status: Optional[int] = None
-    headers = provider.build_headers()
+    headers = _gemini_headers()
 
-    for index, model in enumerate(provider.models):
+    for index, model in enumerate(MODEL_CHAIN):
         if time.monotonic() > deadline:
-            print(f"[AI] out of time before trying {provider.name}/{model}")
+            print(f"[AI] out of time before trying {model}")
             return None, last_status
 
-        body = provider.build_body(model, prompt)
+        body = _gemini_body(model, prompt, schema)
         response = None
 
         for attempt in (1, 2):
             remaining = max(1, int(deadline - time.monotonic()))
             try:
                 response = requests.post(
-                    provider.url, json=body, headers=headers,
+                    GEMINI_API_URL, json=body, headers=headers,
                     timeout=min(TIMEOUT_SECONDS, remaining),
                 )
             except requests.exceptions.Timeout:
-                print(f"[AI] {provider.name}/{model} timed out - moving on")
+                print(f"[AI] {model} timed out - moving on")
                 response = None
                 break
             except requests.exceptions.RequestException as e:
-                print(f"[AI] {provider.name}/{model} could not be reached: {e}")
+                print(f"[AI] {model} could not be reached: {e}")
                 response = None
                 break
 
             last_status = response.status_code
 
             if response.status_code == RATE_LIMITED_STATUS:
-                print(f"[AI] {provider.name}/{model}: rate limited (429)")
+                print(f"[AI] {model}: rate limited (429)")
                 break
 
             if response.status_code not in RETRYABLE_STATUSES:
                 if response.status_code >= 400:
-                    print(f"[AI] {provider.name}/{model} failed "
+                    print(f"[AI] {model} failed "
                           f"{response.status_code}: {response.text[:200]}")
                 break
 
-            print(f"[AI] {provider.name}/{model} returned {response.status_code} "
+            print(f"[AI] {model} returned {response.status_code} "
                   f"(attempt {attempt}/2, server busy)")
             if attempt == 1:
                 time.sleep(RETRY_DELAY_SECONDS)
 
         if response is not None and response.status_code < 400:
             try:
-                text = provider.extract(response.json())
+                text = _gemini_text(response.json())
             except ValueError as e:
-                print(f"[AI] {provider.name}/{model} sent something that is not JSON: {e}")
+                print(f"[AI] {model} sent something that is not JSON: {e}")
                 text = None
 
             if text:
                 if index > 0:
-                    print(f"[AI] {provider.name}/{model} answered "
-                          f"(model {index + 1} of {len(provider.models)})")
+                    print(f"[AI] {model} answered "
+                          f"(model {index + 1} of {len(MODEL_CHAIN)})")
                 return text, last_status
 
-            print(f"[AI] {provider.name}/{model} answered with no usable text")
+            print(f"[AI] {model} answered with no usable text")
 
     return None, last_status
 
@@ -339,19 +260,7 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
     started = time.monotonic()
     deadline = started + DEADLINE_SECONDS
 
-    text = None
-    used = None
-    last_status = None
-
-    providers = _active_providers()
-    for position, provider in enumerate(providers):
-        if position > 0:
-            print(f"[AI] {providers[position - 1].name} had nothing left - "
-                  f"falling back to {provider.name}")
-        text, last_status = _ask_provider(provider, prompt, deadline)
-        if text:
-            used = provider.name
-            break
+    text, last_status = _ask_gemini(prompt, _RESPONSE_SCHEMA, deadline)
 
     elapsed = time.monotonic() - started
 
@@ -360,13 +269,13 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
             print(f"[AI] every model is rate limited ({elapsed:.1f}s). On a paid tier this "
                   f"is usually the per-minute limit, or spent credit. Showing TF-IDF results.")
         else:
-            print(f"[AI] no provider answered after {elapsed:.1f}s - showing TF-IDF results.")
+            print(f"[AI] no model answered after {elapsed:.1f}s - showing TF-IDF results.")
         return None
 
     try:
         parsed = json.loads(text)
     except ValueError as e:
-        print(f"[AI] {used} returned text that is not valid JSON: {e} | {text[:200]}")
+        print(f"[AI] Gemini returned text that is not valid JSON: {e} | {text[:200]}")
         return None
 
     valid_ids = {c["id"] for c in candidates}
@@ -382,7 +291,7 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
                 "reason": str(m.get("reason", ""))[:300],
             }
 
-    print(f"[AI] {used}: {len(ranked)} related of {len(candidates)} candidates in {elapsed:.1f}s")
+    print(f"[AI] Gemini: {len(ranked)} related of {len(candidates)} candidates in {elapsed:.1f}s")
     if not ranked:
         titles = ", ".join(f'#{c["id"]} "{c["title"][:50]}"' for c in candidates[:MAX_CANDIDATES])
         print(f"[AI] nothing matched. query={query_title!r} | candidates were: {titles}")
@@ -396,68 +305,24 @@ def rerank(query_title: str, query_description: Optional[str], candidates: List[
     return ranked
 
 
-def ask_json(prompt: str, gemini_schema: dict, groq_schema: dict,
-             label: str = "ai_task") -> Optional[dict]:
-    """Send one prompt through the provider chain and return parsed JSON.
+def ask_json(prompt: str, schema: dict, label: str = "ai_task") -> Optional[dict]:
+    """Send one prompt to Gemini and return parsed JSON.
 
-    This is the generic half of rerank(): provider fallback, the model chain,
-    retries, timeouts and the overall deadline. A second AI feature reuses it
+    This is the generic half of rerank(): the model chain, retries, timeouts
+    and the overall deadline. A second AI feature (moderation) reuses it
     instead of growing a second copy that can drift out of sync with this one.
 
-    Returns None whenever no provider produced usable JSON. Every caller must
+    Returns None whenever no model produced usable JSON. Every caller must
     have a path that still works in that case - the platform has to run when
     the API does not.
     """
-    providers: List[_Provider] = []
-
-    if GEMINI_API_KEY and MODEL_CHAIN:
-        providers.append(_Provider(
-            "gemini", GEMINI_API_URL, MODEL_CHAIN,
-            lambda model, text: {
-                "model": model,
-                "input": text,
-                "response_format": {
-                    "type": "text",
-                    "mime_type": "application/json",
-                    "schema": gemini_schema,
-                },
-            },
-            _gemini_headers, _gemini_text,
-        ))
-
-    if GROQ_API_KEY and GROQ_MODEL_CHAIN:
-        providers.append(_Provider(
-            "groq", GROQ_API_URL, GROQ_MODEL_CHAIN,
-            lambda model, text: {
-                "model": model,
-                "messages": [{"role": "user", "content": text}],
-                "temperature": 0,
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {"name": label, "strict": True, "schema": groq_schema},
-                },
-            },
-            _groq_headers, _groq_text,
-        ))
-
-    if not providers:
+    if not is_enabled():
         return None
 
     started = time.monotonic()
     deadline = started + DEADLINE_SECONDS
 
-    text = None
-    used = None
-    last_status = None
-
-    for position, provider in enumerate(providers):
-        if position > 0:
-            print(f"[AI:{label}] {providers[position - 1].name} had nothing left - "
-                  f"falling back to {provider.name}")
-        text, last_status = _ask_provider(provider, prompt, deadline)
-        if text:
-            used = provider.name
-            break
+    text, last_status = _ask_gemini(prompt, schema, deadline)
 
     elapsed = time.monotonic() - started
 
@@ -465,18 +330,18 @@ def ask_json(prompt: str, gemini_schema: dict, groq_schema: dict,
         if last_status == RATE_LIMITED_STATUS:
             print(f"[AI:{label}] every model is rate limited ({elapsed:.1f}s)")
         else:
-            print(f"[AI:{label}] no provider answered after {elapsed:.1f}s")
+            print(f"[AI:{label}] no model answered after {elapsed:.1f}s")
         return None
 
     try:
         parsed = json.loads(text)
     except ValueError as e:
-        print(f"[AI:{label}] {used} returned text that is not valid JSON: {e} | {text[:200]}")
+        print(f"[AI:{label}] Gemini returned text that is not valid JSON: {e} | {text[:200]}")
         return None
 
     if not isinstance(parsed, dict):
-        print(f"[AI:{label}] {used} returned {type(parsed).__name__}, expected an object")
+        print(f"[AI:{label}] Gemini returned {type(parsed).__name__}, expected an object")
         return None
 
-    print(f"[AI:{label}] {used} answered in {elapsed:.1f}s")
+    print(f"[AI:{label}] Gemini answered in {elapsed:.1f}s")
     return parsed

@@ -16,15 +16,11 @@ load_dotenv()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from Services.gemini import (  # noqa: E402
     GEMINI_API_URL,
-    GROQ_API_URL,
     MODEL_CHAIN,
-    GROQ_MODEL_CHAIN,
     _gemini_body,
-    _groq_body,
 )
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_KEY = os.getenv("GROQ_API_KEY")
 
 PROBE = 'Reply with this JSON exactly: {"matches": []}'
 
@@ -73,30 +69,6 @@ else:
                 GEMINI_API_URL,
                 json=_gemini_body(model, PROBE),
                 headers={"content-type": "application/json", "x-goog-api-key": GEMINI_KEY},
-                timeout=30,
-            )
-        except requests.exceptions.RequestException as e:
-            print(f"   {model:<30} could not connect: {e}")
-            continue
-        report(model, r)
-
-print()
-print("=" * 72)
-print("GROQ (dormant fallback)")
-print("=" * 72)
-
-if not GROQ_KEY:
-    print("   GROQ_API_KEY is not set - the fallback is off, which is fine while")
-    print("   Gemini has credit. To arm it: get a free key at console.groq.com and")
-    print("   add GROQ_API_KEY=... to .env. Nothing else needs to change.")
-else:
-    for model in GROQ_MODEL_CHAIN:
-        try:
-            r = requests.post(
-                GROQ_API_URL,
-                json=_groq_body(model, PROBE),
-                headers={"content-type": "application/json",
-                         "authorization": f"Bearer {GROQ_KEY}"},
                 timeout=30,
             )
         except requests.exceptions.RequestException as e:

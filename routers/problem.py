@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
@@ -8,6 +8,7 @@ from Models.database import get_db
 from Security.utils import get_current_user, get_verified_user, get_active_poster
 from Models import problem, user, solution
 from Services.moderation import run_pre_post_gate
+from Services import images
 
 router = APIRouter()
 
@@ -139,4 +140,56 @@ def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_u
     "posted_by": current_user.name,
     "created_at": new_problem.created_at
 }
+
+
+@router.post("/problems/{problem_id}/image")
+def upload_problem_image(
+    problem_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_active_poster),
+):
+    """Attach the one supporting image to a problem the user just posted.
+
+    A separate step from POST /problems on purpose: that endpoint carries the
+    moderation gate and its "post anyway" flow, and mixing a file into it would
+    mean rewriting working code. The frontend calls this right after a
+    successful post.
+    """
+    if not images.is_configured():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Image upload is not available right now")
+
+    fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
+    if not fnd_prob:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Problem with id {problem_id} not found")
+
+    if fnd_prob.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only add an image to your own problem")
+
+    # One image per problem (scope). Replacing one belongs to editing posts,
+    # which is not built yet.
+    if fnd_prob.image_url:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This problem already has an image")
+
+    # Read one byte past the limit: if that byte exists, the file is too big.
+    # This way an oversized file is never held in memory in full.
+    data = image.file.read(images.MAX_IMAGE_BYTES + 1)
+    if len(data) > images.MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image must be 5 MB or smaller")
+
+    if images.detect_image_type(data) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image must be a JPG, PNG or WebP file")
+
+    url = images.upload_image(data, image.filename or "image")
+    if url is None:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not upload the image. Please try again.")
+
+    fnd_prob.image_url = url
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save the image")
+
+    return {"image_url": url}
 

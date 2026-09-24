@@ -1,8 +1,8 @@
 """Layer 1 of the moderation system: the AI pre-post content check.
 
 Separate from Services/gemini.py, which owns the matching feature. This module
-owns only the moderation prompt and how its answer is validated; the provider
-chain, fallbacks and deadline are reused from gemini.ask_json rather than
+owns only the moderation prompt and how its answer is validated; the model
+chain, retries and deadline are reused from gemini.ask_json rather than
 copied.
 """
 
@@ -22,13 +22,6 @@ _SCHEMA = {
     "type": "object",
     "properties": _PROPERTIES,
     "required": ["verdict", "reason"],
-}
-
-_STRICT_SCHEMA = {
-    "type": "object",
-    "properties": _PROPERTIES,
-    "required": ["verdict", "reason", "suggestion"],
-    "additionalProperties": False,
 }
 
 
@@ -96,7 +89,6 @@ def check_content(title: Optional[str], text: str) -> Optional[dict]:
     parsed = ask_json(
         _build_prompt(title, text),
         _SCHEMA,
-        _STRICT_SCHEMA,
         label="content_check",
     )
     if parsed is None:

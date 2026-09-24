@@ -29,6 +29,7 @@ typing_extensions==4.15.0
 uvicorn==0.40.0
 requests==2.33.1
 email-validator==2.3.0
+python-multipart==0.0.21
 scikit-learn==1.9.1
 numpy==2.4.6
 scipy==1.17.1
