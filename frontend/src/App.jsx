@@ -7,6 +7,8 @@ import ProblemDetail from './components/ProblemDetail'
 import AdminDashboard from './components/AdminDashboard'
 import VerifyEmail from './components/VerifyEmail'
 import VerifyNotice from './components/VerifyNotice'
+import ForgotPassword from './components/ForgotPassword'
+import ResetPassword from './components/ResetPassword'
 import RequireAuth from './components/RequireAuth'
 import RequireVerified from './components/RequireVerified'
 
@@ -19,6 +21,10 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/verify/:token" element={<VerifyEmail />} />
       <Route path="/verify-email" element={<VerifyNotice />} />
+      {/* Also outside RequireVerified: someone locked out of an unverified
+          account must still be able to reset its password. */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password/:token" element={<ResetPassword />} />
 
       {/* Public to guests, closed to signed-in-but-unverified accounts. */}
       <Route path="/" element={<RequireVerified><Home /></RequireVerified>} />

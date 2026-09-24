@@ -31,6 +31,9 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 30
+# Much shorter than verification's 24 hours: a reset link opens the account,
+# so a leaked or forwarded one must stop working quickly.
+PASSWORD_RESET_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -133,8 +136,27 @@ def issue_verification_token(user, db:Session) -> str:
     user.verification_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
     db.commit()
-    
+
     return token
+
+def issue_password_reset_token(user, db: Session) -> str:
+    """Same pattern as issue_verification_token: the raw token goes in the
+    email, only its hash is stored. A new token overwrites the old one, so
+    only the most recent reset link ever works."""
+    token = secrets.token_urlsafe(32)
+    hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+    user.password_reset_token_hash = hashed_token
+    user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(minutes=PASSWORD_RESET_EXPIRE_MINUTES)
+
+    db.commit()
+
+    return token
+
+def revoke_all_refresh_tokens(user_id: int, db: Session) -> None:
+    """Log this user out on every device. Does not commit - the caller commits
+    it together with whatever change made it necessary."""
+    db.query(RefreshToken).filter(RefreshToken.user_id == user_id).delete()
 
 def decode_token(token: str) -> str:
     """Return the email stored in the token's `sub` claim.

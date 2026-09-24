@@ -10,10 +10,15 @@ from Security.utils import (
     revoke_refresh_token,
     clear_auth_cookies,
     issue_verification_token,
+    issue_password_reset_token,
+    revoke_all_refresh_tokens,
+    hash_password,
     get_current_user,
+    PASSWORD_RESET_EXPIRE_MINUTES,
 )
 from Models.user import User
-from Services.email import send_verification_email
+from Schemas.user import ForgotPassword, ResetPassword
+from Services.email import send_verification_email, send_password_reset_email
 
 router = APIRouter()
 
@@ -147,6 +152,82 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to verify account")
     
-    return {"message": "Email verified successfully"}               
+    return {"message": "Email verified successfully"}
+
+
+# Every request gets this exact answer, whether the email is registered or not.
+# If the reply differed, anyone could type in emails to find out who has an
+# account here (called "user enumeration").
+FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, we sent a link to reset the password."
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPassword, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.email == body.email).first()
+
+    if db_user is None or not db_user.is_active:
+        return {"message": FORGOT_PASSWORD_MESSAGE}
+
+    # Same cooldown idea as resend-verification. It is silent here on purpose:
+    # a 429 would only happen for real accounts, which would leak the same
+    # "this email exists" fact the generic message is hiding.
+    expires_at = db_user.password_reset_expires_at
+    if expires_at is not None:
+        issued_at = expires_at - timedelta(minutes=PASSWORD_RESET_EXPIRE_MINUTES)
+        if datetime.now(timezone.utc) - issued_at < RESEND_COOLDOWN:
+            return {"message": FORGOT_PASSWORD_MESSAGE}
+
+    token = issue_password_reset_token(db_user, db)
+    # A failed send is only logged (inside send_password_reset_email). Telling
+    # the user would reveal the account exists; they can simply ask again.
+    send_password_reset_email(db_user.email, db_user.name, token)
+
+    return {"message": FORGOT_PASSWORD_MESSAGE}
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPassword, response: Response, db: Session = Depends(get_db)):
+    hashed_token = hashlib.sha256(body.token.encode('utf-8')).hexdigest()
+
+    db_user = db.query(User).filter(User.password_reset_token_hash == hashed_token).first()
+
+    if db_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has already been used",
+        )
+
+    current_time = datetime.now(timezone.utc)
+    if db_user.password_reset_expires_at is None or current_time >= db_user.password_reset_expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link has expired. Please request a new one.",
+        )
+
+    db_user.password = hash_password(body.new_password)
+
+    # Single-use: unlike verification, the token is cleared. A reset link that
+    # still worked after use would let whoever saw it change the password again.
+    db_user.password_reset_token_hash = None
+    db_user.password_reset_expires_at = None
+
+    # The link reached this person's inbox, which proves they own the email -
+    # the same thing clicking a verification link proves.
+    db_user.is_verified = True
+
+    # Log out every device. If someone else was signed in to this account,
+    # the reset is what kicks them out.
+    revoke_all_refresh_tokens(db_user.id, db)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password")
+
+    # This browser too: the user signs in again with the new password.
+    clear_auth_cookies(response)
+
+    return {"message": "Your password has been reset. You can now sign in."}
 
     

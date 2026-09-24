@@ -24,13 +24,8 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     verification_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     verification_token_expires_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Layer 4. Kept separate from is_active: that means "account switched on",
-    # this means "an admin acted against this person".
-    #
-    # suspended_until is what the code reads. A future timestamp lifts on its
-    # own; NULL while suspended means permanent. Nothing runs on a timer -
-    # suspensions expire when the user next tries to act, the same way refresh
-    # tokens and verification tokens already do.
+    password_reset_token_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    password_reset_expires_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     suspended_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     suspended_until: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)

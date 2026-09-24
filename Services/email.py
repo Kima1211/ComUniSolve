@@ -33,16 +33,45 @@ def send_verification_email(to_email: str, to_name: str, token: str) -> bool:
     # '<b>Rojan' becomes real markup in the email instead of text.
     safe_name = html.escape(to_name)
 
-    payload = {
-        "sender": {"name": "ComUniSolve", "email": SENDER_EMAIL},
-        "to": [{"email": to_email, "name": to_name}],
-        "subject": "Verify your ComUniSolve account",
-        "htmlContent": (
+    return _send_email(
+        to_email, to_name,
+        subject="Verify your ComUniSolve account",
+        html_content=(
             f"<p>Hi {safe_name},</p>"
             f"<p>Click the link below to verify your ComUniSolve account:</p>"
             f"<p><a href='{verification_link}'>{verification_link}</a></p>"
             f"<p>This link expires in 24 hours.</p>"
         ),
+    )
+
+
+def send_password_reset_email(to_email: str, to_name: str, token: str) -> bool:
+    """Send the password reset link. Returns True only if Brevo accepted it."""
+    reset_link = f"{FRONTEND_URL}/reset-password/{token}"
+    safe_name = html.escape(to_name)
+
+    return _send_email(
+        to_email, to_name,
+        subject="Reset your ComUniSolve password",
+        html_content=(
+            f"<p>Hi {safe_name},</p>"
+            f"<p>Someone asked to reset the password for your ComUniSolve account. "
+            f"Click the link below to reset password:</p>"
+            f"<p><a href='{reset_link}'>{reset_link}</a></p>"
+            f"<p>This link expires in 30 minutes and works once.</p>"
+            f"<p>If you didn't ask for this, ignore this email.</p>"
+        ),
+    )
+
+
+def _send_email(to_email: str, to_name: str, subject: str, html_content: str) -> bool:
+    """The one place that talks to Brevo. Both emails above go through here,
+    so a fix to sending or logging only ever has to be made once."""
+    payload = {
+        "sender": {"name": "ComUniSolve", "email": SENDER_EMAIL},
+        "to": [{"email": to_email, "name": to_name}],
+        "subject": subject,
+        "htmlContent": html_content,
     }
 
     headers = {
@@ -67,5 +96,7 @@ def send_verification_email(to_email: str, to_name: str, token: str) -> bool:
     # Logging success matters as much as logging failure. Without this line,
     # "no output" means either "sent fine" or "this code never ran", and you
     # cannot tell which.
-    print(f"[EMAIL] to={to_email} accepted by Brevo ({response.status_code}) link={verification_link}")
+    # The link is deliberately NOT logged: it contains the token, and anyone
+    # who can read the server logs (Render keeps them) could use it.
+    print(f"[EMAIL] to={to_email} subject={subject!r} accepted by Brevo ({response.status_code})")
     return True
