@@ -48,10 +48,13 @@ function Layout({ children }) {
                                     Admin
                                 </Link>
                             )}
-                            <div className="hidden sm:flex items-center gap-2">
+                            <Link to="/profile" className="text-sm font-medium text-slate-600 hover:text-slate-900 sm:hidden">
+                                My profile
+                            </Link>
+                            <Link to="/profile" title="My profile" className="hidden sm:flex items-center gap-2 hover:opacity-80">
                                 <span className="text-sm font-medium text-slate-700">{user.name}</span>
                                 <TierBadge tier={user.tier} />
-                            </div>
+                            </Link>
                             <button
                                 type="button"
                                 onClick={handleLogout}

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Request, Response, Depends
 from sqlalchemy.orm import Session
-from Schemas.user import Register, DeleteUser, Login
-from Models import user
+from Schemas.user import Register, DeleteUser, Login, UserProfile
+from Models import user, problem, solution
 from Models.database import get_db
 from Security.utils import (
     hash_password, 
@@ -106,6 +106,57 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
         "points": current_user.points,
         "tier": get_tier(current_user.points),
         "verification_expires_at": current_user.verification_token_expires_at,
+    }
+
+@router.get("/users/{user_id}/profile", response_model=UserProfile)
+def get_public_profile(user_id: int, db: Session = Depends(get_db)):
+    fnd_user = db.query(user.User).filter(user.User.id == user_id, user.User.is_active).first()
+    if not fnd_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    problems = (
+        db.query(problem.Problem)
+        .filter(problem.Problem.user_id == user_id, problem.Problem.moderation_status != "removed")
+        .order_by(problem.Problem.created_at.desc())
+        .all()
+    )
+
+    # Skip solutions whose problem was removed, so the list never links to a missing page.
+    solution_rows = (
+        db.query(solution.Solution, problem.Problem.title)
+        .join(problem.Problem, problem.Problem.id == solution.Solution.problem_id)
+        .filter(
+            solution.Solution.user_id == user_id,
+            solution.Solution.moderation_status != "removed",
+            problem.Problem.moderation_status != "removed",
+        )
+        .order_by(solution.Solution.created_at.desc())
+        .all()
+    )
+
+    solutions = [
+        {
+            "id": s.id,
+            "problem_id": s.problem_id,
+            "problem_title": title,
+            "solution_text": s.solution_text,
+            "status": s.status,
+            "created_at": s.created_at,
+        }
+        for s, title in solution_rows
+    ]
+
+    return {
+        "id": fnd_user.id,
+        "name": fnd_user.name,
+        "points": fnd_user.points,
+        "tier": fnd_user.tier,
+        "created_at": fnd_user.created_at,
+        "problem_count": len(problems),
+        "solution_count": len(solutions),
+        "accepted_count": sum(1 for s in solutions if s["status"] == "accepted"),
+        "problems": problems,
+        "solutions": solutions,
     }
 
 @router.delete("/users/{user_id}")

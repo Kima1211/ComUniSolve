@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, ConfigDict, Field, EmailStr
 
 class Register(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -42,4 +42,34 @@ class AdminUserRow(BaseModel):
 class AdminUserList(BaseModel):
     total: int
     users: list[AdminUserRow]
+
+class ProfileProblem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    category: str
+    status: str
+    created_at: Optional[datetime] = None
+
+class ProfileSolution(BaseModel):
+    id: int
+    problem_id: int
+    problem_title: str
+    solution_text: str
+    status: str
+    created_at: Optional[datetime] = None
+
+# Public on purpose: never add email, suspension or token fields here.
+class UserProfile(BaseModel):
+    id: int
+    name: str
+    points: int
+    tier: str
+    created_at: Optional[datetime] = None
+    problem_count: int
+    solution_count: int
+    accepted_count: int
+    problems: list[ProfileProblem]
+    solutions: list[ProfileSolution]
 

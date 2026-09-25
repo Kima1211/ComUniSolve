@@ -11,6 +11,7 @@ import ForgotPassword from './components/ForgotPassword'
 import ResetPassword from './components/ResetPassword'
 import RequireAuth from './components/RequireAuth'
 import RequireVerified from './components/RequireVerified'
+import UserProfile from './components/UserProfile'
 
 function App() {
   return (
@@ -24,6 +25,8 @@ function App() {
 
       <Route path="/" element={<RequireVerified><Home /></RequireVerified>} />
       <Route path="/problems/:id" element={<RequireVerified><ProblemDetail /></RequireVerified>} />
+      <Route path="/users/:id" element={<RequireVerified><UserProfile /></RequireVerified>} />
+      <Route path="/profile" element={<RequireAuth><UserProfile own /></RequireAuth>} />
 
       <Route
         path="/postproblem"

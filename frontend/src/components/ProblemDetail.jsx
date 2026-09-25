@@ -175,7 +175,12 @@ function ProblemDetail() {
                     </span>
                     {problem.author && (
                         <>
-                            <span>posted by {problem.author.name}</span>
+                            <span>
+                                posted by{" "}
+                                <Link to={`/users/${problem.author.id}`} className="font-medium text-slate-700 hover:underline">
+                                    {problem.author.name}
+                                </Link>
+                            </span>
                             <TierBadge tier={problem.author.tier} />
                         </>
                     )}

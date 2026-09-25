@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { apiGet, apiPost, apiPatch } from "../api";
 import { TierBadge } from "./Layout";
 import ReportButton from "./ReportButton";
@@ -68,9 +69,13 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
             )}
 
             <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-900">
-                    {solution.author ? solution.author.name : "Unknown"}
-                </span>
+                {solution.author ? (
+                    <Link to={`/users/${solution.author.id}`} className="text-sm font-semibold text-slate-900 hover:underline">
+                        {solution.author.name}
+                    </Link>
+                ) : (
+                    <span className="text-sm font-semibold text-slate-900">Unknown</span>
+                )}
                 {solution.author && <TierBadge tier={solution.author.tier} />}
             </div>
 
@@ -172,7 +177,9 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                         {comments.map((c) => (
                             <div key={c.id} className="rounded-lg bg-slate-50 px-3 py-2">
                                 <p className="text-xs font-semibold text-slate-700">
-                                    {c.author ? c.author.name : "Unknown"}
+                                    {c.author ? (
+                                        <Link to={`/users/${c.author.id}`} className="hover:underline">{c.author.name}</Link>
+                                    ) : "Unknown"}
                                 </p>
                                 <p className="text-sm text-slate-700">{c.content}</p>
                             </div>
