@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
-from Schemas.problem import ProblemCreate, ProblemResponse
+from datetime import datetime, timezone
+from Schemas.problem import ProblemCreate, ProblemEdit, ProblemResponse
 from Schemas.moderation import ContentCheckRequest, ContentCheckResponse
 from Models.database import get_db
 from Security.utils import get_current_user, get_verified_user, get_active_poster
@@ -24,9 +25,12 @@ def _gate_to_response(result) -> dict:
     ).model_dump()
 
 
-# Removal is a soft delete: every public query must go through this filter.
+# Admin removal and author deletion are both soft deletes: every public query must go through this filter.
 def _visible(query):
-    return query.filter(problem.Problem.moderation_status != "removed")
+    return query.filter(
+        problem.Problem.moderation_status != "removed",
+        problem.Problem.deleted_at.is_(None),
+    )
 
 def _attach_solution_counts(problems, db):
     if not problems:
@@ -35,7 +39,11 @@ def _attach_solution_counts(problems, db):
     ids = [p.id for p in problems]
     counts = dict(
         db.query(solution.Solution.problem_id, func.count(solution.Solution.id))
-        .filter(solution.Solution.problem_id.in_(ids))
+        .filter(
+            solution.Solution.problem_id.in_(ids),
+            solution.Solution.moderation_status != "removed",
+            solution.Solution.deleted_at.is_(None),
+        )
         .group_by(solution.Solution.problem_id)
         .all()
     )
@@ -160,3 +168,71 @@ def upload_problem_image(
 
     return {"image_url": url}
 
+
+def _own_problem(problem_id: int, db: Session, current_user):
+    fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
+    if not fnd_prob:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Problem with id {problem_id} not found")
+    if fnd_prob.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only change your own problem")
+    return fnd_prob
+
+
+@router.patch("/problems/{problem_id}", response_model=ProblemResponse)
+def edit_problem(
+    problem_id: int,
+    body: ProblemEdit,
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_active_poster),
+):
+    fnd_prob = _own_problem(problem_id, db, current_user)
+
+    # Edits go through the same gate as new posts, so a clean post can't be edited into a bad one.
+    gate = run_pre_post_gate(body.title, body.description or "", acknowledged=body.acknowledged)
+    if gate.blocked:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_gate_to_response(gate))
+
+    text_changed = fnd_prob.title != body.title or (fnd_prob.description or "") != (body.description or "")
+
+    fnd_prob.title = body.title
+    fnd_prob.description = body.description
+    fnd_prob.category = body.category
+    fnd_prob.ai_status = gate.verdict
+    # Never un-flag on edit, or a small edit would skip admin review.
+    if fnd_prob.moderation_status != "flagged":
+        fnd_prob.moderation_status = gate.moderation_status
+    fnd_prob.edited_at = datetime.now(timezone.utc)
+
+    # The old AI Suggestion answered the old text; a new one is generated on the next view.
+    if text_changed:
+        fnd_prob.ai_suggestion = None
+        fnd_prob.ai_suggestion_at = None
+
+    try:
+        db.commit()
+        db.refresh(fnd_prob)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update problem")
+
+    _attach_solution_counts([fnd_prob], db)
+    return fnd_prob
+
+
+# Owners may delete anytime; helpers keep the points they earned on it.
+@router.delete("/problems/{problem_id}")
+def delete_problem(
+    problem_id: int,
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_active_poster),
+):
+    fnd_prob = _own_problem(problem_id, db, current_user)
+    fnd_prob.deleted_at = datetime.now(timezone.utc)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete problem")
+
+    return {"message": "Problem deleted"}

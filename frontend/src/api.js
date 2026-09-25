@@ -116,3 +116,7 @@ export function apiPatch(path, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
+
+export function apiDelete(path) {
+  return api(path, { method: "DELETE" });
+}

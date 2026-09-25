@@ -13,6 +13,7 @@ class CommentResponse(BaseModel):
     content: str
     created_at: datetime
     updated_at: datetime
+    edited_at: Optional[datetime] = None
     author: Optional[AuthorOut] = None
 
 class CommentIn(BaseModel):

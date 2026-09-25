@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from fastapi import HTTPException, APIRouter, status, Depends
 from sqlalchemy.orm import Session
-from Schemas.solution import SolutionCreate, SolutionResponse, SolutionAccept
+from Schemas.solution import SolutionCreate, SolutionEdit, SolutionResponse, SolutionAccept
 from Models.database import get_db
 from Models import solution,problem,user
 from Security.utils import get_current_user, get_verified_user, get_active_poster
@@ -12,7 +13,9 @@ router = APIRouter()
 
 @router.post("/solutions", status_code=status.HTTP_201_CREATED)
 def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
-    fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == solution_create.problem_id).first()
+    fnd_problem = db.query(problem.Problem).filter(
+        problem.Problem.id == solution_create.problem_id, problem.Problem.deleted_at.is_(None)
+    ).first()
      
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
@@ -73,7 +76,7 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
     return (
         db.query(solution.Solution)
         .filter(solution.Solution.problem_id == problem_id)
-        .filter(solution.Solution.moderation_status != "removed")
+        .filter(solution.Solution.moderation_status != "removed", solution.Solution.deleted_at.is_(None))
         .order_by(
             (solution.Solution.status == "accepted").desc(),
             solution.Solution.upvote_count.desc(),
@@ -84,7 +87,9 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
 
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
 def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
-    fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
+    fnd_solution = db.query(solution.Solution).filter(
+        solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
+    ).first()
     if not fnd_solution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
 
@@ -177,7 +182,9 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
 
 @router.post("/solutions/{solution_id}/upvote")
 def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user: user.User=Depends(get_active_poster)):
-    fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
+    fnd_solution = db.query(solution.Solution).filter(
+        solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
+    ).first()
     if not fnd_solution: 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
     
@@ -212,3 +219,110 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
         "message": "Upvoted Successfully",
         "upvote_count": fnd_solution.upvote_count
     }
+
+
+def _own_solution(solution_id: int, db: Session, current_user):
+    fnd_solution = (
+        db.query(solution.Solution)
+        .filter(
+            solution.Solution.id == solution_id,
+            solution.Solution.moderation_status != "removed",
+            solution.Solution.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not fnd_solution:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+    if fnd_solution.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only change your own solution")
+    return fnd_solution
+
+
+@router.patch("/solutions/{solution_id}", response_model=SolutionResponse)
+def edit_solution(
+    solution_id: int,
+    body: SolutionEdit,
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_active_poster),
+):
+    fnd_solution = _own_solution(solution_id, db, current_user)
+
+    gate = run_pre_post_gate(None, body.solution_text, acknowledged=body.acknowledged)
+    if gate.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=ContentCheckResponse(
+                verdict=gate.verdict,
+                blocked=gate.blocked,
+                acknowledgeable=gate.acknowledgeable,
+                message=gate.message,
+                matched_terms=gate.matched_terms,
+                suggestion=gate.suggestion,
+            ).model_dump(),
+        )
+
+    fnd_solution.solution_text = body.solution_text
+    fnd_solution.ai_status = gate.verdict
+    # Never un-flag on edit, or a small edit would skip admin review.
+    if fnd_solution.moderation_status != "flagged":
+        fnd_solution.moderation_status = gate.moderation_status
+    fnd_solution.edited_at = datetime.now(timezone.utc)
+
+    try:
+        db.commit()
+        db.refresh(fnd_solution)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update solution")
+
+    return fnd_solution
+
+
+@router.delete("/solutions/{solution_id}")
+def delete_solution(
+    solution_id: int,
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_active_poster),
+):
+    fnd_solution = _own_solution(solution_id, db, current_user)
+
+    # The problem owner relied on it, so an accepted solution can only be edited.
+    if fnd_solution.status == "accepted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An accepted solution can't be deleted. You can still edit it.",
+        )
+
+    fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
+
+    # Take back exactly what create_solution and upvote_solution gave for this solution.
+    points_to_reverse = 0
+    earlier_solution = (
+        db.query(solution.Solution.id)
+        .filter(
+            solution.Solution.user_id == current_user.id,
+            solution.Solution.problem_id == fnd_solution.problem_id,
+            solution.Solution.id < fnd_solution.id,
+        )
+        .first()
+    )
+    is_self_solution = fnd_problem is not None and fnd_problem.user_id == current_user.id
+    if not is_self_solution and earlier_solution is None:
+        points_to_reverse += 2
+
+    points_to_reverse += (
+        db.query(solution.Upvote)
+        .filter(solution.Upvote.solution_id == fnd_solution.id, solution.Upvote.user_id != current_user.id)
+        .count()
+    )
+
+    award_points(current_user, -points_to_reverse)
+    fnd_solution.deleted_at = datetime.now(timezone.utc)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete solution")
+
+    return {"message": "Solution deleted", "points_reversed": points_to_reverse}

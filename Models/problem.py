@@ -25,6 +25,8 @@ class Problem(Base):
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     ai_suggestion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ai_suggestion_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

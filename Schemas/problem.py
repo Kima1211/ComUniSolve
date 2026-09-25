@@ -8,6 +8,12 @@ class ProblemCreate(BaseModel) :
     description: Optional[str] = Field(None, max_length=5000)
     category: str = Field(..., min_length=1, max_length=100)
     acknowledged: bool = False
+
+class ProblemEdit(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=5000)
+    category: str = Field(..., min_length=1, max_length=100)
+    acknowledged: bool = False
     
 class ProblemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -22,6 +28,7 @@ class ProblemResponse(BaseModel):
     author: Optional[AuthorOut] = None
     solution_count: int = 0
     image_url: Optional[str] = None
+    edited_at: Optional[datetime] = None
 
 class ProblemOverview(BaseModel):
     total_users: int

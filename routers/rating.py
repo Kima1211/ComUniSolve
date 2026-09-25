@@ -9,7 +9,9 @@ router = APIRouter()
 
 @router.post("/solutions/{solution_id}/rate", response_model=Rate)
 def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user: user.User=Depends(get_active_poster)):
-    fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
+    fnd_solution = db.query(solution.Solution).filter(
+        solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
+    ).first()
     if not fnd_solution:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
     

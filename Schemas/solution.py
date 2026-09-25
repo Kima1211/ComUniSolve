@@ -8,6 +8,10 @@ class SolutionCreate(BaseModel):
     solution_text: str = Field(..., min_length=1, max_length=5000)
     acknowledged: bool = False
 
+class SolutionEdit(BaseModel):
+    solution_text: str = Field(..., min_length=1, max_length=5000)
+    acknowledged: bool = False
+
 class SolutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
@@ -19,6 +23,7 @@ class SolutionResponse(BaseModel):
     updated_at: datetime
     user_id: int
     problem_id: int
+    edited_at: Optional[datetime] = None
     author: Optional[AuthorOut] = None
 
 class  SolutionAccept(BaseModel):

@@ -20,7 +20,11 @@ AUTO_AI_ON_DETAIL = os.getenv("GEMINI_AUTO_ON_DETAIL", "false").lower() in {"1",
 
 
 def _fetch_candidates(db: Session, exclude_id: Optional[int]):
-    query = db.query(problem.Problem)
+    # Only problems users can open; removed or deleted posts must never be suggested.
+    query = db.query(problem.Problem).filter(
+        problem.Problem.moderation_status != "removed",
+        problem.Problem.deleted_at.is_(None),
+    )
     if exclude_id is not None:
         query = query.filter(problem.Problem.id != exclude_id)
     rows = query.all()
@@ -39,6 +43,8 @@ def _accepted_solutions(db: Session, problem_ids):
         .filter(
             solution.Solution.problem_id.in_(problem_ids),
             solution.Solution.status == "accepted",
+            solution.Solution.moderation_status != "removed",
+            solution.Solution.deleted_at.is_(None),
         )
         .all()
     )
@@ -142,7 +148,11 @@ def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
 def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
     fnd = (
         db.query(problem.Problem)
-        .filter(problem.Problem.id == problem_id, problem.Problem.moderation_status != "removed")
+        .filter(
+            problem.Problem.id == problem_id,
+            problem.Problem.moderation_status != "removed",
+            problem.Problem.deleted_at.is_(None),
+        )
         .first()
     )
     if not fnd:
@@ -152,7 +162,11 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
     # so it comes back if every community solution is later removed.
     has_solution = (
         db.query(solution.Solution.id)
-        .filter(solution.Solution.problem_id == problem_id, solution.Solution.moderation_status != "removed")
+        .filter(
+            solution.Solution.problem_id == problem_id,
+            solution.Solution.moderation_status != "removed",
+            solution.Solution.deleted_at.is_(None),
+        )
         .first()
         is not None
     )

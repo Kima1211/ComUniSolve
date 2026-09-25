@@ -1,8 +1,94 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet, apiPost, apiPatch } from "../api";
+import { apiDelete, apiGet, apiPost, apiPatch } from "../api";
 import { TierBadge } from "./Layout";
 import ReportButton from "./ReportButton";
+import ModerationNotice from "./ModerationNotice";
+
+function CommentItem({ comment, currentUser, onChanged }) {
+    const [editing, setEditing] = useState(false)
+    const [text, setText] = useState(comment.content)
+    const [busy, setBusy] = useState(false)
+    const [error, setError] = useState("")
+
+    const isAuthor = currentUser && currentUser.id === comment.user_id
+
+    async function run(action) {
+        try {
+            setError("")
+            setBusy(true)
+            await action()
+            await onChanged()
+        } catch (e) {
+            setError(e.message || "Something went wrong")
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    function save(e) {
+        e.preventDefault()
+        if (!text.trim()) return
+        run(async () => {
+            await apiPatch(`/comments/${comment.id}`, { content: text })
+            setEditing(false)
+        })
+    }
+
+    function remove() {
+        if (!window.confirm("Delete this comment?")) return
+        run(() => apiDelete(`/comments/${comment.id}`))
+    }
+
+    return (
+        <div className="rounded-lg bg-slate-50 px-3 py-2">
+            <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-slate-700">
+                    {comment.author ? (
+                        <Link to={`/users/${comment.author.id}`} className="hover:underline">{comment.author.name}</Link>
+                    ) : "Unknown"}
+                </p>
+                {comment.edited_at && <span className="text-xs text-slate-400">edited</span>}
+                {isAuthor && !editing && (
+                    <div className="ml-auto flex gap-2 text-xs">
+                        <button type="button" onClick={() => setEditing(true)} className="text-slate-500 hover:text-slate-900">
+                            Edit
+                        </button>
+                        <button type="button" onClick={remove} disabled={busy} className="text-red-600 hover:text-red-800">
+                            Delete
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {editing ? (
+                <form onSubmit={save} className="mt-1 flex gap-2">
+                    <input
+                        type="text"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        maxLength={2000}
+                        className="flex-1 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-brand-500"
+                    />
+                    <button type="submit" disabled={busy || !text.trim()} className="text-xs font-medium text-brand-700 disabled:opacity-40">
+                        Save
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setEditing(false); setText(comment.content) }}
+                        className="text-xs text-slate-500"
+                    >
+                        Cancel
+                    </button>
+                </form>
+            ) : (
+                <p className="text-sm text-slate-700">{comment.content}</p>
+            )}
+
+            {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+        </div>
+    )
+}
 
 function SolutionCard({ solution, problem, currentUser, onChanged }) {
     const [error, setError] = useState("")
@@ -12,8 +98,13 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
     const [commentText, setCommentText] = useState("")
     const [ratingOpen, setRatingOpen] = useState(false)
 
+    const [editing, setEditing] = useState(false)
+    const [editText, setEditText] = useState(solution.solution_text)
+    const [editGate, setEditGate] = useState(null)
+
     const isAccepted = solution.status === "accepted"
     const isProblemOwner = currentUser && currentUser.id === problem.user_id
+    const isAuthor = currentUser && currentUser.id === solution.user_id
     const signedIn = Boolean(currentUser)
 
     async function run(action) {
@@ -27,6 +118,41 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
         } finally {
             setBusy(false)
         }
+    }
+
+    async function saveEdit(acknowledged) {
+        try {
+            setError("")
+            setEditGate(null)
+            setBusy(true)
+            await apiPatch(`/solutions/${solution.id}`, { solution_text: editText, acknowledged })
+            setEditing(false)
+            onChanged()
+        } catch (e) {
+            // Edits pass through the same moderation gate as new posts.
+            if (e.status === 422 && e.detail?.verdict) {
+                setEditGate(e.detail)
+                return
+            }
+            setError(e.message || "Could not save your changes")
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    function cancelEdit() {
+        setEditing(false)
+        setEditText(solution.solution_text)
+        setEditGate(null)
+    }
+
+    function deleteSolution() {
+        if (!window.confirm("Delete this solution? The points it earned you will be taken back.")) return
+        run(() => apiDelete(`/solutions/${solution.id}`))
+    }
+
+    async function reloadComments() {
+        setComments(await apiGet(`/solutions/${solution.id}/comments`))
     }
 
     async function toggleComments() {
@@ -48,7 +174,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
             setBusy(true)
             await apiPost(`/comment/${solution.id}`, { content: commentText, parent_id: null })
             setCommentText("")
-            setComments(await apiGet(`/solutions/${solution.id}/comments`))
+            await reloadComments()
         } catch (e) {
             setError(e.message || "Could not post comment")
         } finally {
@@ -77,9 +203,72 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     <span className="text-sm font-semibold text-slate-900">Unknown</span>
                 )}
                 {solution.author && <TierBadge tier={solution.author.tier} />}
+                {solution.edited_at && <span className="text-xs text-slate-400">edited</span>}
+                {isAuthor && !editing && (
+                    <div className="ml-auto flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setEditing(true)}
+                            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                            Edit
+                        </button>
+                        {!isAccepted && (
+                            <button
+                                type="button"
+                                onClick={deleteSolution}
+                                disabled={busy}
+                                className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            >
+                                Delete
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
-            <p className="mt-3 whitespace-pre-wrap text-slate-700">{solution.solution_text}</p>
+            {editing ? (
+                <div className="mt-3">
+                    <textarea
+                        rows={4}
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        maxLength={5000}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none
+                                   focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                    />
+                    {editGate && (
+                        <div className="mt-2">
+                            <ModerationNotice
+                                gate={editGate}
+                                busy={busy}
+                                onUseSuggestion={(s) => { setEditText(s); setEditGate(null) }}
+                                onPostAnyway={() => saveEdit(true)}
+                            />
+                        </div>
+                    )}
+                    <div className="mt-2 flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => saveEdit(false)}
+                            disabled={busy || !editText.trim()}
+                            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:bg-slate-300"
+                        >
+                            {busy ? "Saving..." : "Save changes"}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={cancelEdit}
+                            disabled={busy}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <p className="mt-3 whitespace-pre-wrap text-slate-700">{solution.solution_text}</p>
+            )}
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
                 <button
@@ -175,14 +364,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     )}
                     <div className="space-y-3">
                         {comments.map((c) => (
-                            <div key={c.id} className="rounded-lg bg-slate-50 px-3 py-2">
-                                <p className="text-xs font-semibold text-slate-700">
-                                    {c.author ? (
-                                        <Link to={`/users/${c.author.id}`} className="hover:underline">{c.author.name}</Link>
-                                    ) : "Unknown"}
-                                </p>
-                                <p className="text-sm text-slate-700">{c.content}</p>
-                            </div>
+                            <CommentItem key={c.id} comment={c} currentUser={currentUser} onChanged={reloadComments} />
                         ))}
                     </div>
 

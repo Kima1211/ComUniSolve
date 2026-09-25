@@ -1,22 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
-import { apiGet, apiPost, imageUrl } from "../api";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet, apiPost, imageUrl } from "../api";
 import { useAuth } from "../auth-context";
 import Layout, { TierBadge } from "./Layout";
 import SolutionCard from "./SolutionCard";
 import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
 import ReportButton from "./ReportButton";
+import EditProblemForm from "./EditProblemForm";
 
 function ProblemDetail() {
     const { id } = useParams()
     const { user } = useAuth()
     const imageError = useLocation().state?.imageError
+    const navigate = useNavigate()
 
     const [problem, setProblem] = useState(null)
     const [solutions, setSolutions] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
+
+    const [editing, setEditing] = useState(false)
+    const [deleting, setDeleting] = useState(false)
+    const [ownerError, setOwnerError] = useState("")
 
     const [text, setText] = useState("")
     const [submitting, setSubmitting] = useState(false)
@@ -121,6 +127,27 @@ function ProblemDetail() {
         }
     }
 
+    function handleSaved(updated) {
+        setProblem(updated)
+        setEditing(false)
+        // The backend cleared the old AI Suggestion, so ask again for the new text.
+        suggestionAskedFor.current = null
+        setAiSuggestion(null)
+    }
+
+    async function handleDelete() {
+        if (!window.confirm("Delete this problem? People who answered it keep their points.")) return
+        try {
+            setOwnerError("")
+            setDeleting(true)
+            await apiDelete(`/problems/${id}`)
+            navigate("/")
+        } catch (e) {
+            setOwnerError(e.message || "Could not delete this problem")
+            setDeleting(false)
+        }
+    }
+
     function submitSolution(e) {
         e.preventDefault()
         postSolution(false)
@@ -156,6 +183,10 @@ function ProblemDetail() {
             )}
 
             <article className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
+                {editing ? (
+                    <EditProblemForm problem={problem} onSaved={handleSaved} onCancel={() => setEditing(false)} />
+                ) : (
+                <>
                 <div className="flex items-start justify-between gap-3">
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">{problem.title}</h1>
                     <span
@@ -184,15 +215,41 @@ function ProblemDetail() {
                             <TierBadge tier={problem.author.tier} />
                         </>
                     )}
+                    {problem.edited_at && <span className="text-xs text-slate-400">edited</span>}
                     {user && user.id !== problem.user_id && (
                         <div className="ml-auto">
                             <ReportButton problemId={problem.id} />
                         </div>
                     )}
+                    {user && user.id === problem.user_id && (
+                        <div className="ml-auto flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setEditing(true)}
+                                className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            >
+                                Edit
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDelete}
+                                disabled={deleting}
+                                className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            >
+                                {deleting ? "Deleting..." : "Delete"}
+                            </button>
+                        </div>
+                    )}
                 </div>
+
+                {ownerError && (
+                    <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{ownerError}</p>
+                )}
 
                 {problem.description && (
                     <p className="mt-4 whitespace-pre-wrap text-slate-700">{problem.description}</p>
+                )}
+                </>
                 )}
 
                 {problem.image_url && (

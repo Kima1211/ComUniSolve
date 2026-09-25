@@ -116,19 +116,25 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
 
     problems = (
         db.query(problem.Problem)
-        .filter(problem.Problem.user_id == user_id, problem.Problem.moderation_status != "removed")
+        .filter(
+            problem.Problem.user_id == user_id,
+            problem.Problem.moderation_status != "removed",
+            problem.Problem.deleted_at.is_(None),
+        )
         .order_by(problem.Problem.created_at.desc())
         .all()
     )
 
-    # Skip solutions whose problem was removed, so the list never links to a missing page.
+    # Skip solutions whose problem is gone, so the list never links to a missing page.
     solution_rows = (
         db.query(solution.Solution, problem.Problem.title)
         .join(problem.Problem, problem.Problem.id == solution.Solution.problem_id)
         .filter(
             solution.Solution.user_id == user_id,
             solution.Solution.moderation_status != "removed",
+            solution.Solution.deleted_at.is_(None),
             problem.Problem.moderation_status != "removed",
+            problem.Problem.deleted_at.is_(None),
         )
         .order_by(solution.Solution.created_at.desc())
         .all()

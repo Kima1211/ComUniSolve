@@ -4,8 +4,7 @@ import { apiPost, apiPostForm } from "../api";
 import Layout from "./Layout";
 import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
-
-const CATEGORIES = ["Household", "School", "Public", "Health", "Livelihood", "Other"]
+import { CATEGORIES } from "../categories";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]

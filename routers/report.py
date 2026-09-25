@@ -23,7 +23,7 @@ def create_report(
             .filter(problem_models.Problem.id == body.problem_id)
             .first()
         )
-        if not target or target.moderation_status == "removed":
+        if not target or target.moderation_status == "removed" or target.deleted_at is not None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Problem not found")
     else:
         target = (
@@ -31,7 +31,7 @@ def create_report(
             .filter(solution_models.Solution.id == body.solution_id)
             .first()
         )
-        if not target or target.moderation_status == "removed":
+        if not target or target.moderation_status == "removed" or target.deleted_at is not None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Solution not found")
 
     new_report = Report(
