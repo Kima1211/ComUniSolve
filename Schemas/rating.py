@@ -12,5 +12,5 @@ class Rate(BaseModel):
     created_at: datetime
 
 class RateIn(BaseModel):
-    score: int
+    score: int = Field(..., ge=1, le=5)
     feedback: Optional[str] = Field(None, max_length=1000)

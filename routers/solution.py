@@ -6,6 +6,7 @@ from Models.database import get_db
 from Models import solution,problem,user
 from Security.utils import get_current_user, get_verified_user, get_active_poster
 from Services.reputation import award_points
+from Services.rating import poster_ratings, clear_ratings
 from Services.moderation import run_pre_post_gate
 from Schemas.moderation import ContentCheckResponse
 
@@ -73,7 +74,7 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
-    return (
+    solutions = (
         db.query(solution.Solution)
         .filter(solution.Solution.problem_id == problem_id)
         .filter(solution.Solution.moderation_status != "removed", solution.Solution.deleted_at.is_(None))
@@ -84,6 +85,10 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
         )
         .all()
     )
+    stars = poster_ratings(db, [s.id for s in solutions])
+    for s in solutions:
+        s.rating = stars.get(s.id)
+    return solutions
 
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
 def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
@@ -113,6 +118,7 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
     
     if previously_accepted:
         previously_accepted.status = "pending"
+        clear_ratings(db, previously_accepted.id)
         previous_author = db.query(user.User).filter(user.User.id == previously_accepted.user_id).first()
         if not is_self_solve:
             if previous_author:
@@ -123,6 +129,8 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
         if new_author:
             award_points(new_author, 10)
     
+    # Start fresh, so a rating given before this acceptance doesn't carry over.
+    clear_ratings(db, fnd_solution.id)
     fnd_solution.status = "accepted"
     fnd_problem.status = "resolved"
 
@@ -160,6 +168,7 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
     )
 
     fnd_solution.status = "pending"
+    clear_ratings(db, fnd_solution.id)
     solution_author = db.query(user.User).filter(user.User.id == fnd_solution.user_id).first()
     if not is_self_solve:
         if solution_author:

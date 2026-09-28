@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import Stars from "./Stars";
 
 const RELEVANCE_STYLES = {
     high: "bg-emerald-100 text-emerald-800",
@@ -71,7 +72,12 @@ function SimilarProblems({ matches, title = "Similar problems already posted", h
 
                         {m.accepted_solution && (
                             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                                <p className="text-xs font-semibold text-amber-800">Accepted solution</p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-xs font-semibold text-amber-800">Accepted solution</p>
+                                    {m.accepted_solution_rating && (
+                                        <Stars value={m.accepted_solution_rating} className="text-sm" />
+                                    )}
+                                </div>
                                 <p className="mt-1 text-sm text-slate-700 line-clamp-3">
                                     {m.accepted_solution}
                                 </p>

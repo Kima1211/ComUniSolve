@@ -15,6 +15,7 @@ class MatchedProblem(BaseModel):
     status: str
     score: float
     accepted_solution: Optional[str] = None
+    accepted_solution_rating: Optional[int] = None
 
     relevance: Optional[str] = None
     reason: Optional[str] = None

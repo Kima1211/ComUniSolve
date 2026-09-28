@@ -4,6 +4,7 @@ import { apiDelete, apiGet, apiPost, apiPatch } from "../api";
 import { TierBadge } from "./Layout";
 import ReportButton from "./ReportButton";
 import ModerationNotice from "./ModerationNotice";
+import Stars from "./Stars";
 
 function CommentItem({ comment, currentUser, onChanged }) {
     const [editing, setEditing] = useState(false)
@@ -106,6 +107,8 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
     const isProblemOwner = currentUser && currentUser.id === problem.user_id
     const isAuthor = currentUser && currentUser.id === solution.user_id
     const signedIn = Boolean(currentUser)
+    // Only the poster rates, only the accepted solution, and never their own.
+    const canRate = isProblemOwner && isAccepted && !isAuthor
 
     async function run(action) {
         try {
@@ -189,9 +192,17 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
             }`}
         >
             {isAccepted && (
-                <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                    Accepted solution
-                </p>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <p className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                        Accepted solution
+                    </p>
+                    {solution.rating && (
+                        <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <Stars value={solution.rating} className="text-base" />
+                            rated by the poster
+                        </p>
+                    )}
+                </div>
             )}
 
             <div className="flex items-center gap-2">
@@ -296,7 +307,13 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                         <button
                             type="button"
                             disabled={busy}
-                            onClick={() => run(() => apiPatch(`/solutions/${solution.id}/accept`))}
+                            onClick={() =>
+                                run(async () => {
+                                    await apiPatch(`/solutions/${solution.id}/accept`)
+                                    // Nudge, not force: ask for stars right away, but rating stays optional.
+                                    if (!isAuthor) setRatingOpen(true)
+                                })
+                            }
                             className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40"
                         >
                             Accept
@@ -304,13 +321,13 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     )
                 )}
 
-                {isProblemOwner && (
+                {canRate && (
                     <button
                         type="button"
                         onClick={() => setRatingOpen((v) => !v)}
                         className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
-                        Rate
+                        {solution.rating ? "Change rating" : "Rate"}
                     </button>
                 )}
 
@@ -329,25 +346,37 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                 )}
             </div>
 
-            {ratingOpen && isProblemOwner && (
-                <div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 p-3">
-                    <span className="text-sm text-slate-600">Your rating:</span>
-                    {[1, 2, 3, 4, 5].map((score) => (
-                        <button
-                            key={score}
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                                run(async () => {
-                                    await apiPost(`/solutions/${solution.id}/rate`, { score, feedback: null })
-                                    setRatingOpen(false)
-                                })
-                            }
-                            className="h-8 w-8 rounded-md border border-slate-300 text-sm font-semibold text-slate-700 hover:border-amber-400 hover:text-amber-600 disabled:opacity-40"
-                        >
-                            {score}
-                        </button>
-                    ))}
+            {ratingOpen && canRate && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <span className="text-sm text-amber-900">How well did this work? (optional)</span>
+                    <div className="flex">
+                        {[1, 2, 3, 4, 5].map((score) => (
+                            <button
+                                key={score}
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                    run(async () => {
+                                        await apiPost(`/solutions/${solution.id}/rate`, { score, feedback: null })
+                                        setRatingOpen(false)
+                                    })
+                                }
+                                title={`${score} out of 5 stars`}
+                                className={`px-0.5 text-2xl leading-none hover:scale-110 disabled:opacity-40 ${
+                                    score <= (solution.rating || 0) ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
+                                }`}
+                            >
+                                ★
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setRatingOpen(false)}
+                        className="ml-auto text-xs font-medium text-amber-900 underline underline-offset-2"
+                    >
+                        Later
+                    </button>
                 </div>
             )}
 

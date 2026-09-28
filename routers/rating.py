@@ -21,27 +21,34 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
 
     if fnd_problem.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the problem poster can rate solutions")
-    
-    existing_rating = db.query(rating.Rating).filter(rating.Rating.user_id == current_user.id, rating.Rating.solution_id == solution_id).first()
-    if existing_rating:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="User already scored")
-    
-    if rate.score < 1 or rate.score > 5:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Score must be 1-5 only")
 
-    new_rating = rating.Rating(
-        user_id= current_user.id,
-        solution_id = solution_id,
-        score = rate.score,
-        feedback = rate.feedback
-    )
-    try:     
-        db.add(new_rating)
+    # Stars are the poster's evidence that the chosen fix worked, so only the accepted one is rated.
+    if fnd_solution.status != "accepted":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You can only rate the accepted solution")
+
+    if fnd_solution.user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You can't rate your own solution")
+
+    # Rating again changes the existing rating instead of adding a second one.
+    fnd_rating = db.query(rating.Rating).filter(rating.Rating.user_id == current_user.id, rating.Rating.solution_id == solution_id).first()
+    if fnd_rating:
+        fnd_rating.score = rate.score
+        fnd_rating.feedback = rate.feedback
+    else:
+        fnd_rating = rating.Rating(
+            user_id= current_user.id,
+            solution_id = solution_id,
+            score = rate.score,
+            feedback = rate.feedback
+        )
+        db.add(fnd_rating)
+
+    try:
         db.commit()
-        db.refresh(new_rating)
+        db.refresh(fnd_rating)
     except Exception:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit rating")
-    
-    return new_rating
+
+    return fnd_rating
 

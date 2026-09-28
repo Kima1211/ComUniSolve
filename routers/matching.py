@@ -11,6 +11,7 @@ from Schemas.matching import AiSuggestionResponse, MatchRequest, MatchResponse, 
 from Services.matching import find_similar, build_candidate_pool, SIMILARITY_THRESHOLD, MAX_MATCHES
 from Services import gemini
 from Services.ai_suggestion import generate_suggestion
+from Services.rating import poster_ratings
 
 router = APIRouter()
 
@@ -72,11 +73,22 @@ def _build_matches(
         ai_ranked = gemini.rerank(query_title, query_description, pool)
 
     if ai_ranked is not None:
+        accepted = _accepted_solutions(db, list(ai_ranked.keys()))
+        stars = poster_ratings(db, [s.id for s in accepted.values()])
+
+        def rating_of(pid):
+            sol = accepted.get(pid)
+            return stars.get(sol.id, 0) if sol else 0
+
         chosen = [
             (pid, tfidf_scores.get(pid, 0.0), info)
             for pid, info in ai_ranked.items()
         ]
-        chosen.sort(key=lambda t: (_RELEVANCE_ORDER.get(t[2]["relevance"], 0), t[1]), reverse=True)
+        # Similarity first: stars only break ties inside the same AI relevance level.
+        chosen.sort(
+            key=lambda t: (_RELEVANCE_ORDER.get(t[2]["relevance"], 0), rating_of(t[0]), t[1]),
+            reverse=True,
+        )
         chosen = chosen[:MAX_MATCHES]
     else:
         chosen = [
@@ -84,8 +96,8 @@ def _build_matches(
             for pid, score in sorted(tfidf_scores.items(), key=lambda kv: kv[1], reverse=True)
             if score >= SIMILARITY_THRESHOLD
         ][:MAX_MATCHES]
-
-    accepted = _accepted_solutions(db, [pid for pid, _, _ in chosen])
+        accepted = _accepted_solutions(db, [pid for pid, _, _ in chosen])
+        stars = poster_ratings(db, [s.id for s in accepted.values()])
 
     results = []
     for pid, score, info in chosen:
@@ -100,6 +112,7 @@ def _build_matches(
                 status=p.status,
                 score=round(score, 4),
                 accepted_solution=sol.solution_text if sol else None,
+                accepted_solution_rating=stars.get(sol.id) if sol else None,
                 relevance=info["relevance"] if info else None,
                 reason=info["reason"] if info else None,
             )

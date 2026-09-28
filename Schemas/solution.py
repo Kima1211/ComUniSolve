@@ -24,6 +24,7 @@ class SolutionResponse(BaseModel):
     user_id: int
     problem_id: int
     edited_at: Optional[datetime] = None
+    rating: Optional[int] = None
     author: Optional[AuthorOut] = None
 
 class  SolutionAccept(BaseModel):
