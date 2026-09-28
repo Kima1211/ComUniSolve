@@ -18,7 +18,7 @@ from Models.report import Report
 from Models.moderation_log import ModerationLog
 from Security.utils import get_current_admin
 from Models import problem, user, solution, comment
-from Services.moderation import remove_content, restore_content, suspend_user, unsuspend_user
+from Services.moderation import active_removal_counts, remove_content, restore_content, suspend_user, unsuspend_user
 from Services.reputation import is_currently_suspended, get_tier
 
 router = APIRouter()
@@ -75,8 +75,7 @@ def list_users(
     ids = [u.id for u in rows]
     problem_counts = _count_per_user(db, problem.Problem.user_id, ids)
     solution_counts = _count_per_user(db, solution.Solution.user_id, ids)
-    removal_counts = _count_per_user(db, ModerationLog.target_user_id, ids,
-                                     ModerationLog.action == "removed")
+    removal_counts = active_removal_counts(db, ids)
 
     return AdminUserList(total=total, users=[
         AdminUserRow(

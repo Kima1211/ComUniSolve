@@ -2,9 +2,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from Models.comment import Comment
 from Models.moderation_log import ModerationLog
+from Models.problem import Problem
+from Models.solution import Solution
 from Services.keywords import check_text
 from Services.moderation_ai import check_content
 from Services.reputation import (
@@ -99,6 +103,37 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
     )
 
 
+# A restore undoes the admin's mistake, so only posts that are STILL removed count toward suspension.
+# Counted per post, so a post removed, restored and removed again counts once.
+def active_removal_counts(db: Session, user_ids) -> dict[int, int]:
+    user_ids = list(user_ids)
+    if not user_ids:
+        return {}
+
+    rows = (
+        db.query(ModerationLog.target_user_id, ModerationLog.problem_id,
+                 ModerationLog.solution_id, ModerationLog.comment_id)
+        .outerjoin(Problem, Problem.id == ModerationLog.problem_id)
+        .outerjoin(Solution, Solution.id == ModerationLog.solution_id)
+        .outerjoin(Comment, Comment.id == ModerationLog.comment_id)
+        .filter(
+            ModerationLog.target_user_id.in_(user_ids),
+            ModerationLog.action == "removed",
+            or_(
+                Problem.moderation_status == "removed",
+                Solution.moderation_status == "removed",
+                Comment.moderation_status == "removed",
+            ),
+        )
+        .all()
+    )
+
+    posts: dict[int, set] = {}
+    for user_id, problem_id, solution_id, comment_id in rows:
+        posts.setdefault(user_id, set()).add((problem_id, solution_id, comment_id))
+    return {user_id: len(p) for user_id, p in posts.items()}
+
+
 def _count_actions(db: Session, user_id: int, action: str) -> int:
     return (
         db.query(ModerationLog)
@@ -178,7 +213,7 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
     award_points(author, _penalty(target_type))
 
     db.flush()
-    removals = _count_actions(db, author.id, "removed")
+    removals = active_removal_counts(db, [author.id]).get(author.id, 0)
 
     suspended_days: Optional[int] = None
     newly_suspended = False
