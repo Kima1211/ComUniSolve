@@ -111,7 +111,7 @@ def main_test():
     print("\nLayer 1 - AI pre-post check (AI stubbed, no API calls)")
     real_check = moderation_service.check_content
 
-    moderation_service.check_content = lambda t, x: {
+    moderation_service.check_content = lambda t, x, **kw: {
         "verdict": "unclear", "reason": "Too vague.", "suggestion": "Say which street."}
     r = client.post("/problems", json={
         "title": "help", "description": "problem po", "category": "Public"})
@@ -133,14 +133,14 @@ def main_test():
               p.moderation_status)
         check("ai_status records the verdict", p.ai_status == "unclear", p.ai_status)
 
-    moderation_service.check_content = lambda t, x: {
+    moderation_service.check_content = lambda t, x, **kw: {
         "verdict": "inappropriate", "reason": "Harassment.", "suggestion": None}
     r = client.post("/problems", json={
         "title": "about my neighbour", "description": "...", "category": "Public",
         "acknowledged": True})
     check("inappropriate cannot be acknowledged past", r.status_code == 422, f"-> {r.status_code}")
 
-    moderation_service.check_content = lambda t, x: None
+    moderation_service.check_content = lambda t, x, **kw: None
     r = client.post("/problems", json={
         "title": "Clogged canal near the school",
         "description": "Water rises fast when it rains.", "category": "Public"})

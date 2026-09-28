@@ -5,8 +5,26 @@ from Models.database import get_db
 from Security.utils import get_current_user, get_active_poster
 from Models import user,solution,comment
 from Schemas.comment import CommentIn, CommentEdit, CommentResponse
+from Schemas.moderation import ContentCheckResponse
+from Services.moderation import run_pre_post_gate
 
 router = APIRouter()
+
+
+def _check_comment(text: str) -> None:
+    gate = run_pre_post_gate(None, text, kind="comment")
+    if gate.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=ContentCheckResponse(
+                verdict=gate.verdict,
+                blocked=gate.blocked,
+                acknowledgeable=gate.acknowledgeable,
+                message=gate.message,
+                matched_terms=gate.matched_terms,
+                suggestion=gate.suggestion,
+            ).model_dump(),
+        )
 
 @router.get("/solutions/{solution_id}/comments", response_model=list[CommentResponse])
 def get_comments(solution_id: int, db: Session = Depends(get_db)):
@@ -45,6 +63,8 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
                 detail="Cannot reply to a reply, only one level of replies allowed")
     
         
+    _check_comment(create_comm.content)
+
     new_comment = comment.Comment(
         user_id = current_user.id,
         solution_id = solution_id,
@@ -76,6 +96,7 @@ def _own_comment(comment_id: int, db: Session, current_user):
 @router.patch("/comments/{comment_id}", response_model=CommentResponse)
 def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_comment = _own_comment(comment_id, db, current_user)
+    _check_comment(body.content)
     fnd_comment.content = body.content
     fnd_comment.edited_at = datetime.now(timezone.utc)
 

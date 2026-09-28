@@ -26,7 +26,9 @@ class GateResult:
     matched_terms: list[str] = field(default_factory=list)
 
 
-def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = False) -> GateResult:
+# context is only shown to the AI (e.g. the problem a solution answers); keywords check title and text only.
+def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = False,
+                      kind: str = "problem", context: Optional[str] = None) -> GateResult:
     keywords = check_text(title or "", text)
 
     if keywords.is_blocked:
@@ -42,7 +44,16 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
             matched_terms=keywords.blocked,
         )
 
-    ai = check_content(title, text)
+    # Comments are short discussion, so they only get the keyword filter, not the AI clarity check.
+    if kind == "comment":
+        return GateResult(
+            blocked=False,
+            verdict="unchecked",
+            moderation_status="flagged" if keywords.is_flagged else "visible",
+            matched_terms=keywords.flagged,
+        )
+
+    ai = check_content(title, text, kind=kind, context=context)
 
     if ai is None:
         return GateResult(

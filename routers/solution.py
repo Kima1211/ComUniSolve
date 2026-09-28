@@ -12,6 +12,12 @@ from Schemas.moderation import ContentCheckResponse
 
 router = APIRouter()
 
+
+def _problem_context(fnd_problem) -> str:
+    if fnd_problem is None:
+        return ""
+    return f"Title: {fnd_problem.title}\nDescription: {(fnd_problem.description or '')[:500]}"
+
 @router.post("/solutions", status_code=status.HTTP_201_CREATED)
 def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_problem = db.query(problem.Problem).filter(
@@ -24,7 +30,8 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
     existing_solution = db.query(solution.Solution).filter(solution.Solution.user_id == current_user.id, solution.Solution.problem_id == fnd_problem.id).first()
     
     gate = run_pre_post_gate(None, solution_create.solution_text,
-                             acknowledged=solution_create.acknowledged)
+                             acknowledged=solution_create.acknowledged, kind="solution",
+                             context=_problem_context(fnd_problem))
     if gate.blocked:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -256,7 +263,9 @@ def edit_solution(
 ):
     fnd_solution = _own_solution(solution_id, db, current_user)
 
-    gate = run_pre_post_gate(None, body.solution_text, acknowledged=body.acknowledged)
+    fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
+    gate = run_pre_post_gate(None, body.solution_text, acknowledged=body.acknowledged, kind="solution",
+                             context=_problem_context(fnd_problem))
     if gate.blocked:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
