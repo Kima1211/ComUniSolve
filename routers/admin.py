@@ -17,7 +17,7 @@ from Models.database import get_db
 from Models.report import Report
 from Models.moderation_log import ModerationLog
 from Security.utils import get_current_admin
-from Models import problem, user, solution
+from Models import problem, user, solution, comment
 from Services.moderation import remove_content, restore_content, suspend_user, unsuspend_user
 from Services.reputation import is_currently_suspended, get_tier
 
@@ -109,6 +109,7 @@ def get_problem_overview(db: Session = Depends(get_db), current_user: user.User 
     flagged_content = (
         db.query(problem.Problem).filter(problem.Problem.moderation_status == "flagged").count()
         + db.query(solution.Solution).filter(solution.Solution.moderation_status == "flagged").count()
+        + db.query(comment.Comment).filter(comment.Comment.moderation_status == "flagged").count()
     )
 
     return {
@@ -126,10 +127,14 @@ def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User 
 
     problem_reports: dict[int, list[str]] = {}
     solution_reports: dict[int, list[str]] = {}
+    comment_reports: dict[int, list[str]] = {}
     for r in pending:
-        bucket = problem_reports if r.problem_id is not None else solution_reports
-        key = r.problem_id if r.problem_id is not None else r.solution_id
-        bucket.setdefault(key, []).append(r.reason)
+        if r.problem_id is not None:
+            problem_reports.setdefault(r.problem_id, []).append(r.reason)
+        elif r.solution_id is not None:
+            solution_reports.setdefault(r.solution_id, []).append(r.reason)
+        else:
+            comment_reports.setdefault(r.comment_id, []).append(r.reason)
 
     items: list[QueueItem] = []
 
@@ -183,15 +188,39 @@ def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User 
             created_at=s.created_at,
         ))
 
+    comments = (
+        db.query(comment.Comment)
+        .filter(comment.Comment.moderation_status != "removed")
+        .filter(
+            (comment.Comment.moderation_status == "flagged")
+            | (comment.Comment.id.in_(comment_reports.keys() or [-1]))
+        )
+        .all()
+    )
+    for c in comments:
+        reasons = comment_reports.get(c.id, [])
+        items.append(QueueItem(
+            target_type="comment",
+            id=c.id,
+            title=None,
+            excerpt=(c.content or "")[:300],
+            author_id=c.user_id,
+            author_name=c.author.name if c.author else "(unknown)",
+            ai_status="unchecked",
+            moderation_status=c.moderation_status,
+            report_count=len(reasons),
+            report_reasons=sorted(set(reasons)),
+            created_at=c.created_at,
+        ))
+
     items.sort(key=lambda i: (i.report_count, i.created_at), reverse=True)
     return items
 
 
 def _load_target(db: Session, target_type: str, target_id: int):
-    if target_type == "problem":
-        target = db.query(problem.Problem).filter(problem.Problem.id == target_id).first()
-    else:
-        target = db.query(solution.Solution).filter(solution.Solution.id == target_id).first()
+    models = {"problem": problem.Problem, "solution": solution.Solution, "comment": comment.Comment}
+    model = models[target_type]
+    target = db.query(model).filter(model.id == target_id).first()
 
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"{target_type.title()} not found")
@@ -203,7 +232,7 @@ def _load_target(db: Session, target_type: str, target_id: int):
 
 
 def _close_reports(db: Session, target_type: str, target_id: int, new_status: str) -> int:
-    column = Report.problem_id if target_type == "problem" else Report.solution_id
+    column = {"problem": Report.problem_id, "solution": Report.solution_id, "comment": Report.comment_id}[target_type]
     reports = db.query(Report).filter(column == target_id, Report.status == "pending").all()
     for r in reports:
         r.status = new_status
@@ -266,6 +295,16 @@ def moderate_solution(
     current_user: user.User = Depends(get_current_admin),
 ):
     return _moderate(db, current_user, "solution", solution_id, body)
+
+
+@router.patch("/admin/comments/{comment_id}/moderate")
+def moderate_comment(
+    comment_id: int,
+    body: ModerationActionIn,
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_current_admin),
+):
+    return _moderate(db, current_user, "comment", comment_id, body)
 
 
 @router.patch("/admin/users/{user_id}/suspension")
@@ -348,6 +387,11 @@ def get_moderation_logs(
         db.query(solution.Solution.id, solution.Solution.moderation_status)
         .filter(solution.Solution.id.in_(solution_ids)).all()
     ) if solution_ids else {}
+    comment_ids = {l.comment_id for l in logs if l.comment_id}
+    comment_status = dict(
+        db.query(comment.Comment.id, comment.Comment.moderation_status)
+        .filter(comment.Comment.id.in_(comment_ids)).all()
+    ) if comment_ids else {}
 
     return [
         ModerationLogResponse.model_validate(l).model_copy(update={
@@ -356,6 +400,7 @@ def get_moderation_logs(
             "target_status": (
                 problem_status.get(l.problem_id) if l.problem_id
                 else solution_status.get(l.solution_id) if l.solution_id
+                else comment_status.get(l.comment_id) if l.comment_id
                 else None
             ),
         })

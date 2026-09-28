@@ -9,7 +9,7 @@ const REASONS = [
     { value: "other", label: "Something else" },
 ]
 
-function ReportButton({ problemId, solutionId }) {
+function ReportButton({ problemId, solutionId, commentId }) {
     const [open, setOpen] = useState(false)
     const [reason, setReason] = useState(REASONS[0].value)
     const [details, setDetails] = useState("")
@@ -24,6 +24,7 @@ function ReportButton({ problemId, solutionId }) {
             await apiPost("/reports", {
                 problem_id: problemId ?? null,
                 solution_id: solutionId ?? null,
+                comment_id: commentId ?? null,
                 reason,
                 details: details.trim() || null,
             })

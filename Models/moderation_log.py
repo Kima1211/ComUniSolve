@@ -12,7 +12,7 @@ from datetime import datetime
 from Models.database import Base
 
 MODERATION_ACTIONS = ["approved", "removed", "restored", "dismissed", "suspended", "unsuspended"]
-TARGET_TYPES = ["problem", "solution", "user"]
+TARGET_TYPES = ["problem", "solution", "comment", "user"]
 
 AI_STATUSES = ["unchecked", "ok", "unclear", "inappropriate"]
 MODERATION_STATUSES = ["visible", "flagged", "removed"]
@@ -26,6 +26,7 @@ class ModerationLog(Base):
     target_type: Mapped[str] = mapped_column(String(20), nullable=False)
     problem_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("problems.id", ondelete="SET NULL"), nullable=True, index=True)
     solution_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("solutions.id", ondelete="SET NULL"), nullable=True, index=True)
+    comment_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("comments.id", ondelete="SET NULL"), nullable=True, index=True)
     target_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(20), nullable=False)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

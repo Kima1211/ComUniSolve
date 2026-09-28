@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 REMOVAL_PENALTY_POINTS = -15
+COMMENT_REMOVAL_PENALTY_POINTS = -5
 REMOVALS_BEFORE_SUSPENSION = 3
 SUSPENSION_LADDER = [1, 3, 7]
 
@@ -9,7 +10,6 @@ SUSPENSION_LADDER = [1, 3, 7]
 def award_points(user, amount: int) -> None:
     user.points =max (0, user.points + amount)
 
-# Must match the tier table in the manuscript.
 def get_tier(points: int) -> str:
     if points >= 70:
         return "Community Expert"

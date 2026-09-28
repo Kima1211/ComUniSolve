@@ -50,6 +50,11 @@ function CommentItem({ comment, currentUser, onChanged }) {
                     ) : "Unknown"}
                 </p>
                 {comment.edited_at && <span className="text-xs text-slate-400">edited</span>}
+                {currentUser && !isAuthor && (
+                    <div className="ml-auto">
+                        <ReportButton commentId={comment.id} />
+                    </div>
+                )}
                 {isAuthor && !editing && (
                     <div className="ml-auto flex gap-2 text-xs">
                         <button type="button" onClick={() => setEditing(true)} className="text-slate-500 hover:text-slate-900">

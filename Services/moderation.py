@@ -8,6 +8,7 @@ from Models.moderation_log import ModerationLog
 from Services.keywords import check_text
 from Services.moderation_ai import check_content
 from Services.reputation import (
+    COMMENT_REMOVAL_PENALTY_POINTS,
     REMOVAL_PENALTY_POINTS,
     REMOVALS_BEFORE_SUSPENSION,
     award_points,
@@ -109,12 +110,13 @@ def _count_actions(db: Session, user_id: int, action: str) -> int:
 def _log(db: Session, admin_id: Optional[int], action: str, target_type: str,
          target_user_id: Optional[int], reason: Optional[str] = None,
          snapshot: Optional[str] = None, problem_id: Optional[int] = None,
-         solution_id: Optional[int] = None) -> ModerationLog:
+         solution_id: Optional[int] = None, comment_id: Optional[int] = None) -> ModerationLog:
     entry = ModerationLog(
         admin_id=admin_id,
         target_type=target_type,
         problem_id=problem_id,
         solution_id=solution_id,
+        comment_id=comment_id,
         target_user_id=target_user_id,
         action=action,
         reason=reason,
@@ -149,21 +151,31 @@ def unsuspend_user(db: Session, admin_id: Optional[int], target_user,
     _log(db, admin_id, "unsuspended", "user", target_user.id, reason=reason)
 
 
+def _penalty(target_type: str) -> int:
+    return COMMENT_REMOVAL_PENALTY_POINTS if target_type == "comment" else REMOVAL_PENALTY_POINTS
+
+
+def _target_ids(target, target_type: str) -> dict:
+    return {
+        "problem_id": target.id if target_type == "problem" else None,
+        "solution_id": target.id if target_type == "solution" else None,
+        "comment_id": target.id if target_type == "comment" else None,
+    }
+
+
 def remove_content(db: Session, admin_id: Optional[int], target, target_type: str,
                    author, reason: Optional[str] = None) -> dict:
     target.moderation_status = "removed"
 
     snapshot = getattr(target, "title", None) or ""
-    body = getattr(target, "description", None) or getattr(target, "solution_text", "") or ""
+    body = (getattr(target, "description", None) or getattr(target, "solution_text", None)
+            or getattr(target, "content", "") or "")
     snapshot = f"{snapshot}\n{body}".strip()
 
-    _log(
-        db, admin_id, "removed", target_type, author.id, reason=reason, snapshot=snapshot,
-        problem_id=target.id if target_type == "problem" else None,
-        solution_id=target.id if target_type == "solution" else None,
-    )
+    _log(db, admin_id, "removed", target_type, author.id, reason=reason, snapshot=snapshot,
+         **_target_ids(target, target_type))
 
-    award_points(author, REMOVAL_PENALTY_POINTS)
+    award_points(author, _penalty(target_type))
 
     db.flush()
     removals = _count_actions(db, author.id, "removed")
@@ -188,10 +200,6 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
 def restore_content(db: Session, admin_id: Optional[int], target, target_type: str,
                     author, reason: Optional[str] = None) -> None:
     target.moderation_status = "visible"
-    award_points(author, -REMOVAL_PENALTY_POINTS)
-    _log(
-        db, admin_id, "restored", target_type, author.id, reason=reason,
-        problem_id=target.id if target_type == "problem" else None,
-        solution_id=target.id if target_type == "solution" else None,
-    )
+    award_points(author, -_penalty(target_type))
+    _log(db, admin_id, "restored", target_type, author.id, reason=reason, **_target_ids(target, target_type))
 

@@ -150,9 +150,8 @@ function OverviewTab() {
         try {
             setBusy(true)
             setError("")
-            const path = item.target_type === "problem"
-                ? `/admin/problems/${item.id}/moderate`
-                : `/admin/solutions/${item.id}/moderate`
+            // problem -> /admin/problems/..., solution -> /admin/solutions/..., comment -> /admin/comments/...
+            const path = `/admin/${item.target_type}s/${item.id}/moderate`
             const result = await apiPatch(path, { action, reason: reason || null })
 
             if (action === "removed") {
@@ -495,7 +494,9 @@ function ActivityTab() {
 
         const path = log.problem_id
             ? `/admin/problems/${log.problem_id}/moderate`
-            : `/admin/solutions/${log.solution_id}/moderate`
+            : log.solution_id
+                ? `/admin/solutions/${log.solution_id}/moderate`
+                : `/admin/comments/${log.comment_id}/moderate`
         try {
             setBusyId(log.id)
             setError("")

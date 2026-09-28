@@ -9,13 +9,15 @@ ReportStatus = Literal["pending", "actioned", "dismissed"]
 class ReportCreate(BaseModel):
     problem_id: Optional[int] = None
     solution_id: Optional[int] = None
+    comment_id: Optional[int] = None
     reason: ReportReason
     details: Optional[str] = Field(None, max_length=1000)
 
     @model_validator(mode="after")
     def exactly_one_target(self):
-        if (self.problem_id is None) == (self.solution_id is None):
-            raise ValueError("Provide exactly one of problem_id or solution_id.")
+        targets = [self.problem_id, self.solution_id, self.comment_id]
+        if sum(t is not None for t in targets) != 1:
+            raise ValueError("Provide exactly one of problem_id, solution_id or comment_id.")
         return self
 
 
@@ -26,6 +28,7 @@ class ReportResponse(BaseModel):
     user_id: int
     problem_id: Optional[int] = None
     solution_id: Optional[int] = None
+    comment_id: Optional[int] = None
     reason: str
     details: Optional[str] = None
     status: str

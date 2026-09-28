@@ -23,6 +23,7 @@ class Report(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     problem_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("problems.id", ondelete="CASCADE"), nullable=True, index=True)
     solution_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("solutions.id", ondelete="CASCADE"), nullable=True, index=True)
+    comment_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("comments.id", ondelete="CASCADE"), nullable=True, index=True)
     reason: Mapped[str] = mapped_column(String(20), nullable=False)
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
@@ -31,12 +32,15 @@ class Report(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "(problem_id IS NULL) <> (solution_id IS NULL)",
+            "(CASE WHEN problem_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN solution_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN comment_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
             name="report_targets_exactly_one",
         ),
         CheckConstraint(reason.in_(REPORT_REASONS), name="valid_report_reason"),
         CheckConstraint(status.in_(REPORT_STATUSES), name="valid_report_status"),
         UniqueConstraint("user_id", "problem_id", name="one_report_per_user_per_problem"),
         UniqueConstraint("user_id", "solution_id", name="one_report_per_user_per_solution"),
+        UniqueConstraint("user_id", "comment_id", name="one_report_per_user_per_comment"),
     )
 

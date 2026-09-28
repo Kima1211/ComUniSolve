@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from Models.database import get_db
 from Models.report import Report
 from Models import problem as problem_models, solution as solution_models, user as user_models
+from Models import comment as comment_models
 from Schemas.report import ReportCreate, ReportResponse
 from Security.utils import get_active_poster
 
@@ -25,7 +26,7 @@ def create_report(
         )
         if not target or target.moderation_status == "removed" or target.deleted_at is not None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Problem not found")
-    else:
+    elif body.solution_id is not None:
         target = (
             db.query(solution_models.Solution)
             .filter(solution_models.Solution.id == body.solution_id)
@@ -33,11 +34,20 @@ def create_report(
         )
         if not target or target.moderation_status == "removed" or target.deleted_at is not None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Solution not found")
+    else:
+        target = (
+            db.query(comment_models.Comment)
+            .filter(comment_models.Comment.id == body.comment_id)
+            .first()
+        )
+        if not target or target.moderation_status == "removed" or target.deleted_at is not None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Comment not found")
 
     new_report = Report(
         user_id=current_user.id,
         problem_id=body.problem_id,
         solution_id=body.solution_id,
+        comment_id=body.comment_id,
         reason=body.reason,
         details=body.details,
     )

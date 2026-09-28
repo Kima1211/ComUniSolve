@@ -11,7 +11,7 @@ from Services.moderation import run_pre_post_gate
 router = APIRouter()
 
 
-def _check_comment(text: str) -> None:
+def _check_comment(text: str):
     gate = run_pre_post_gate(None, text, kind="comment")
     if gate.blocked:
         raise HTTPException(
@@ -25,6 +25,12 @@ def _check_comment(text: str) -> None:
                 suggestion=gate.suggestion,
             ).model_dump(),
         )
+    return gate
+
+
+# Hidden from everyone: removed by an admin, or deleted by the author.
+def _live_comments(query):
+    return query.filter(comment.Comment.moderation_status != "removed", comment.Comment.deleted_at.is_(None))
 
 @router.get("/solutions/{solution_id}/comments", response_model=list[CommentResponse])
 def get_comments(solution_id: int, db: Session = Depends(get_db)):
@@ -35,8 +41,8 @@ def get_comments(solution_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
 
     return (
-        db.query(comment.Comment)
-        .filter(comment.Comment.solution_id == solution_id, comment.Comment.deleted_at.is_(None))
+        _live_comments(db.query(comment.Comment))
+        .filter(comment.Comment.solution_id == solution_id)
         .order_by(comment.Comment.created_at.asc())
         .all()
     )
@@ -50,8 +56,8 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Solution Not Found!")
     
     if create_comm.parent_id is not None:
-        parent_comment = db.query(comment.Comment).filter(
-            comment.Comment.id == create_comm.parent_id, comment.Comment.deleted_at.is_(None)
+        parent_comment = _live_comments(db.query(comment.Comment)).filter(
+            comment.Comment.id == create_comm.parent_id
         ).first()
         if not parent_comment:
             raise HTTPException(
@@ -63,13 +69,14 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
                 detail="Cannot reply to a reply, only one level of replies allowed")
     
         
-    _check_comment(create_comm.content)
+    gate = _check_comment(create_comm.content)
 
     new_comment = comment.Comment(
         user_id = current_user.id,
         solution_id = solution_id,
         parent_id = create_comm.parent_id,
-        content = create_comm.content
+        content = create_comm.content,
+        moderation_status = gate.moderation_status,
     )
     try:
         db.add(new_comment)
@@ -83,9 +90,7 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
 
 
 def _own_comment(comment_id: int, db: Session, current_user):
-    fnd_comment = db.query(comment.Comment).filter(
-        comment.Comment.id == comment_id, comment.Comment.deleted_at.is_(None)
-    ).first()
+    fnd_comment = _live_comments(db.query(comment.Comment)).filter(comment.Comment.id == comment_id).first()
     if not fnd_comment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
     if fnd_comment.user_id != current_user.id:
@@ -96,8 +101,11 @@ def _own_comment(comment_id: int, db: Session, current_user):
 @router.patch("/comments/{comment_id}", response_model=CommentResponse)
 def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_comment = _own_comment(comment_id, db, current_user)
-    _check_comment(body.content)
+    gate = _check_comment(body.content)
     fnd_comment.content = body.content
+    # Never un-flag on edit, or a small edit would skip admin review.
+    if fnd_comment.moderation_status != "flagged":
+        fnd_comment.moderation_status = gate.moderation_status
     fnd_comment.edited_at = datetime.now(timezone.utc)
 
     try:

@@ -38,6 +38,7 @@ class ModerationLogResponse(BaseModel):
     target_type: str
     problem_id: Optional[int] = None
     solution_id: Optional[int] = None
+    comment_id: Optional[int] = None
     target_user_id: Optional[int] = None
     action: str
     reason: Optional[str] = None
@@ -49,7 +50,7 @@ class ModerationLogResponse(BaseModel):
 
 
 class QueueItem(BaseModel):
-    target_type: Literal["problem", "solution"]
+    target_type: Literal["problem", "solution", "comment"]
     id: int
     title: Optional[str] = None
     excerpt: str
