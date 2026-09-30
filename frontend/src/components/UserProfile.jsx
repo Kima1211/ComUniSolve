@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import Layout, { TierBadge } from "./Layout";
+import { InstallSection } from "./InstallButton";
 
 function formatDate(value) {
     return value ? new Date(value).toLocaleDateString() : ""
@@ -109,6 +110,8 @@ function UserProfile({ own = false }) {
                         {resetError && <p className="mt-2 text-sm text-red-700">{resetError}</p>}
                     </div>
                 )}
+
+                {own && <InstallSection />}
 
                 <div className="mt-5 grid grid-cols-3 gap-3">
                     <Stat label="Problems" value={profile.problem_count} />

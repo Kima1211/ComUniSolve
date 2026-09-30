@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth-context";
+import { HeaderInstallButton } from "./InstallButton";
 
 function TierBadge({ tier }) {
     const colours = {
@@ -37,6 +38,7 @@ function Layout({ children }) {
 
                     {loading ? null : user ? (
                         <div className="flex items-center gap-3">
+                            <HeaderInstallButton />
                             <Link
                                 to="/postproblem"
                                 className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
@@ -65,6 +67,7 @@ function Layout({ children }) {
                         </div>
                     ) : (
                         <div className="flex items-center gap-3">
+                            <HeaderInstallButton />
                             <Link to="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900">
                                 Log in
                             </Link>
