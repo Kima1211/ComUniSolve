@@ -2,6 +2,7 @@ import { useState } from "react";
 import { apiPatch } from "../api";
 import { CATEGORIES } from "../categories";
 import ModerationNotice from "./ModerationNotice";
+import AiCheckStatus from "./AiCheckStatus";
 
 const inputClass =
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none " +
@@ -78,6 +79,8 @@ function EditProblemForm({ problem, onSaved, onCancel }) {
                 />
             )}
 
+            {saving && <AiCheckStatus message="Checking your changes with AI for clarity and safety. This takes a few seconds..." />}
+
             <div className="flex gap-2">
                 <button
                     type="submit"
@@ -85,7 +88,7 @@ function EditProblemForm({ problem, onSaved, onCancel }) {
                     className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white
                                hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                    {saving ? "Saving..." : "Save changes"}
+                    {saving ? "Checking..." : "Save changes"}
                 </button>
                 <button
                     type="button"

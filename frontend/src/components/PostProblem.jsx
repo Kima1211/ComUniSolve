@@ -4,6 +4,7 @@ import { apiPost, apiPostForm } from "../api";
 import Layout from "./Layout";
 import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
+import AiCheckStatus from "./AiCheckStatus";
 import { CATEGORIES } from "../categories";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -22,6 +23,7 @@ function PostProblem() {
     const [error, setError] = useState("")
     const [gate, setGate] = useState(null)
     const [submitting, setSubmitting] = useState(false)
+    const [step, setStep] = useState("")
     const [matches, setMatches] = useState([])
     const [aiUsed, setAiUsed] = useState(false)
     const [checkingAi, setCheckingAi] = useState(false)
@@ -84,10 +86,12 @@ function PostProblem() {
             setError("")
             setGate(null)
             setSubmitting(true)
+            setStep("checking")
             const data = await apiPost("/problems", { title, description, category, acknowledged })
 
             let imageError = ""
             if (image) {
+                setStep("uploading")
                 try {
                     const form = new FormData()
                     form.append("image", image)
@@ -106,6 +110,7 @@ function PostProblem() {
             setError(e.message || "Something went wrong! Please try again.")
         } finally {
             setSubmitting(false)
+            setStep("")
         }
     }
 
@@ -204,13 +209,16 @@ function PostProblem() {
                         onPostAnyway={() => submitProblem(true)}
                     />
 
+                    {step === "checking" && <AiCheckStatus />}
+                    {step === "uploading" && <AiCheckStatus message="Your problem passed the check. Uploading your photo..." />}
+
                     <button
                         type="submit"
                         disabled={submitting || !title.trim()}
                         className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white
                                    hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
-                        {submitting ? "Posting..." : "Post problem"}
+                        {step === "checking" ? "Checking..." : step === "uploading" ? "Uploading photo..." : "Post problem"}
                     </button>
                 </form>
 

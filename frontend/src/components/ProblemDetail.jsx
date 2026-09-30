@@ -8,6 +8,7 @@ import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
 import ReportButton from "./ReportButton";
 import EditProblemForm from "./EditProblemForm";
+import AiCheckStatus from "./AiCheckStatus";
 
 function ProblemDetail() {
     const { id } = useParams()
@@ -397,13 +398,18 @@ function ProblemDetail() {
                                 />
                             </div>
                         )}
+                        {submitting && (
+                            <div className="mt-2">
+                                <AiCheckStatus message="Checking your solution with AI for clarity and safety. This takes a few seconds..." />
+                            </div>
+                        )}
                         <button
                             type="submit"
                             disabled={submitting || !text.trim()}
                             className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white
                                        hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                         >
-                            {submitting ? "Posting..." : "Post solution"}
+                            {submitting ? "Checking..." : "Post solution"}
                         </button>
                     </form>
                 )}

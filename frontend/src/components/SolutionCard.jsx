@@ -5,6 +5,7 @@ import { TierBadge } from "./Layout";
 import ReportButton from "./ReportButton";
 import ModerationNotice from "./ModerationNotice";
 import Stars from "./Stars";
+import AiCheckStatus from "./AiCheckStatus";
 
 function CommentItem({ comment, currentUser, onChanged }) {
     const [editing, setEditing] = useState(false)
@@ -263,6 +264,11 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             />
                         </div>
                     )}
+                    {busy && (
+                        <div className="mt-2">
+                            <AiCheckStatus message="Checking your changes with AI for clarity and safety. This takes a few seconds..." />
+                        </div>
+                    )}
                     <div className="mt-2 flex gap-2">
                         <button
                             type="button"
@@ -270,7 +276,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             disabled={busy || !editText.trim()}
                             className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:bg-slate-300"
                         >
-                            {busy ? "Saving..." : "Save changes"}
+                            {busy ? "Checking..." : "Save changes"}
                         </button>
                         <button
                             type="button"
