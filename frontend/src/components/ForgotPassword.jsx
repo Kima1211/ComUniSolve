@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { apiPost } from "../api";
+import { useLanguage } from "../i18n/language-context";
 import AuthLayout from "./AuthLayout";
 
 const inputClass =
@@ -10,23 +11,24 @@ const inputClass =
     "disabled:bg-slate-50 disabled:text-slate-400"
 
 function ForgotPassword() {
+    const { t, errorText } = useLanguage()
     const [email, setEmail] = useState("")
-    const [message, setMessage] = useState("")
-    const [error, setError] = useState("")
+    const [sent, setSent] = useState(false)
+    const [error, setError] = useState(null)
     const [submitting, setSubmitting] = useState(false)
 
     async function handleSubmit(e) {
         e.preventDefault()
 
         try {
-            setError("")
-            setMessage("")
+            setError(null)
+            setSent(false)
             setSubmitting(true)
 
-            const data = await apiPost("/forgot-password", { email: email })
-            setMessage(data.message)
+            await apiPost("/forgot-password", { email: email })
+            setSent(true)
         } catch (e) {
-            setError(e.message || "Something went wrong! Please try again.")
+            setError(e)
         } finally {
             setSubmitting(false)
         }
@@ -34,13 +36,13 @@ function ForgotPassword() {
 
     return (
         <AuthLayout
-            title="Forgot your password?"
-            subtitle="Enter your email and we'll send you a link to choose a new one."
+            title={t("forgot.title")}
+            subtitle={t("forgot.subtitle")}
             footer={
                 <>
-                    Remembered it?{" "}
+                    {t("forgot.remembered")}{" "}
                     <Link to="/login" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
-                        Back to sign in
+                        {t("forgot.back")}
                     </Link>
                 </>
             }
@@ -48,13 +50,13 @@ function ForgotPassword() {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
-                        Email
+                        {t("auth.email")}
                     </label>
                     <input
                         id="email"
                         type="email"
                         autoComplete="email"
-                        placeholder="you@example.com"
+                        placeholder={t("auth.emailPlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={email}
@@ -62,14 +64,14 @@ function ForgotPassword() {
                     />
                 </div>
 
-                {message && (
+                {sent && (
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                        {message} Check your spam folder too.
+                        {t("forgot.sent")} {t("common.checkSpam")}
                     </div>
                 )}
                 {error && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {error}
+                        {errorText(error)}
                     </div>
                 )}
 
@@ -80,7 +82,7 @@ function ForgotPassword() {
                                hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
                                disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                    {submitting ? "Sending..." : "Send reset link"}
+                    {submitting ? t("common.sending") : t("forgot.submit")}
                 </button>
             </form>
         </AuthLayout>

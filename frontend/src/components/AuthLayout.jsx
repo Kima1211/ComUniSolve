@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import CommunityPreview from "./CommunityPreview";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 function AuthLayout({ title, subtitle, children, footer }) {
     return (
@@ -8,14 +9,17 @@ function AuthLayout({ title, subtitle, children, footer }) {
             <div className="flex flex-col justify-center px-6 py-12 sm:px-12">
                 <div className="mx-auto w-full max-w-sm">
 
-                    <Link to="/" className="inline-flex items-center gap-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-                            C
-                        </span>
-                        <span className="text-lg font-bold tracking-tight text-slate-900">
-                            ComUniSolve
-                        </span>
-                    </Link>
+                    <div className="flex items-center justify-between gap-3">
+                        <Link to="/" className="inline-flex items-center gap-2">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+                                C
+                            </span>
+                            <span className="text-lg font-bold tracking-tight text-slate-900">
+                                ComUniSolve
+                            </span>
+                        </Link>
+                        <LanguageSwitcher />
+                    </div>
 
                     <h1 className="mt-10 text-2xl font-bold tracking-tight text-slate-900">
                         {title}

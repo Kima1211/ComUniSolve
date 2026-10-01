@@ -5,6 +5,7 @@ import './install.js'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './auth.jsx'
+import { LanguageProvider } from './i18n/language.jsx'
 
 // Only in production builds: in dev, a service worker would cache files while you're still editing them.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -16,9 +17,11 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </LanguageProvider>
     </BrowserRouter>
   </StrictMode>,
 )

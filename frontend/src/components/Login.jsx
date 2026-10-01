@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
+import { useLanguage } from "../i18n/language-context";
 import AuthLayout from "./AuthLayout";
 
 const inputClass =
@@ -14,17 +15,18 @@ function Login() {
     const navigate = useNavigate()
     const location = useLocation()
     const { refreshUser } = useAuth()
+    const { t, errorText } = useLanguage()
 
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
     const [submitting, setSubmitting] = useState(false)
 
     async function handleSubmit(e) {
         e.preventDefault()
 
         try {
-            setError("")
+            setError(null)
             setSubmitting(true)
 
             await apiPost("/login", { email: email, password: password })
@@ -34,7 +36,7 @@ function Login() {
             const goingTo = location.state?.from || "/"
             navigate(goingTo, { replace: true })
         } catch (e) {
-            setError(e.message || "Something went wrong! Please try again.")
+            setError(e)
         } finally {
             setSubmitting(false)
         }
@@ -42,13 +44,13 @@ function Login() {
 
     return (
         <AuthLayout
-            title="Welcome back"
-            subtitle="Sign in to post problems and share solutions."
+            title={t("login.title")}
+            subtitle={t("login.subtitle")}
             footer={
                 <>
-                    New to ComUniSolve?{" "}
+                    {t("login.newHere")}{" "}
                     <Link to="/register" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
-                        Create an account
+                        {t("login.createAccount")}
                     </Link>
                 </>
             }
@@ -56,13 +58,13 @@ function Login() {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
-                        Email
+                        {t("auth.email")}
                     </label>
                     <input
                         id="email"
                         type="email"
                         autoComplete="email"
-                        placeholder="you@example.com"
+                        placeholder={t("auth.emailPlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={email}
@@ -73,17 +75,17 @@ function Login() {
                 <div>
                     <div className="mb-1 flex items-center justify-between">
                         <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                            Password
+                            {t("auth.password")}
                         </label>
                         <Link to="/forgot-password" className="text-sm font-medium text-brand-700 hover:text-brand-800">
-                            Forgot password?
+                            {t("auth.forgot")}
                         </Link>
                     </div>
                     <input
                         id="password"
                         type="password"
                         autoComplete="current-password"
-                        placeholder="Enter your password"
+                        placeholder={t("auth.passwordPlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={password}
@@ -93,7 +95,7 @@ function Login() {
 
                 {error && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {error}
+                        {errorText(error)}
                     </div>
                 )}
 
@@ -104,7 +106,7 @@ function Login() {
                                hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
                                disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                    {submitting ? "Signing in..." : "Sign in"}
+                    {submitting ? t("login.submitting") : t("login.submit")}
                 </button>
             </form>
         </AuthLayout>

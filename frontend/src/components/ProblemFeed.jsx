@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { apiGet, imageUrl } from "../api"
+import { useLanguage } from "../i18n/language-context"
 
 export function ProblemCard({ problem }) {
+    const { t, label } = useLanguage()
     return (
         <Link
             to={`/problems/${problem.id}`}
@@ -17,7 +19,7 @@ export function ProblemCard({ problem }) {
                             : "bg-amber-100 text-amber-700"
                     }`}
                 >
-                    {problem.status === "resolved" ? "Resolved" : "Open"}
+                    {problem.status === "resolved" ? t("common.resolved") : t("common.open")}
                 </span>
             </div>
 
@@ -36,19 +38,18 @@ export function ProblemCard({ problem }) {
 
             <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
-                    {problem.category}
+                    {label("category", problem.category)}
                 </span>
-                {problem.author && <span>by {problem.author.name}</span>}
-                <span>
-                    {problem.solution_count} {problem.solution_count === 1 ? "solution" : "solutions"}
-                </span>
+                {problem.author && <span>{t("common.by", { name: problem.author.name })}</span>}
+                <span>{t("common.solutions", { count: problem.solution_count })}</span>
             </div>
         </Link>
     )
 }
 
 function ProblemFeed() {
-    const [error, setError] = useState("")
+    const { t, errorText } = useLanguage()
+    const [error, setError] = useState(null)
     const [problems, setProblems] = useState([])
     const [loading, setLoading] = useState(true)
 
@@ -56,7 +57,7 @@ function ProblemFeed() {
         let cancelled = false
         apiGet("/problems")
             .then((data) => { if (!cancelled) setProblems(data) })
-            .catch((e) => { if (!cancelled) setError(e.message || "Something went wrong") })
+            .catch((e) => { if (!cancelled) setError(e) })
             .finally(() => { if (!cancelled) setLoading(false) })
         return () => { cancelled = true }
     }, [])
@@ -73,18 +74,18 @@ function ProblemFeed() {
 
     return (
         <div>
-            <h1 className="text-xl font-bold text-slate-900">Community problems</h1>
-            <p className="mt-1 text-sm text-slate-500">Newest first.</p>
+            <h1 className="text-xl font-bold text-slate-900">{t("feed.title")}</h1>
+            <p className="mt-1 text-sm text-slate-500">{t("feed.newest")}</p>
 
             {error && (
                 <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {error}
+                    {errorText(error)}
                 </div>
             )}
 
             {!error && problems.length === 0 && (
                 <p className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                    No problems posted yet. Be the first.
+                    {t("feed.empty")}
                 </p>
             )}
 

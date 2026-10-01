@@ -8,6 +8,7 @@ ModerationAction = Literal["approved", "removed", "removed_no_penalty", "restore
 
 class ContentCheckResponse(BaseModel):
     verdict: Verdict
+    code: Optional[str] = None
     blocked: bool
     acknowledgeable: bool = False
     message: Optional[str] = None

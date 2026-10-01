@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
+import { useLanguage } from "../i18n/language-context";
 import AuthLayout from "./AuthLayout";
 
 const inputClass =
@@ -13,25 +14,26 @@ const inputClass =
 function Register() {
     const navigate = useNavigate()
     const { refreshUser } = useAuth()
+    const { t, errorText } = useLanguage()
 
     const [name, setName] = useState("")
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
     const [submitting, setSubmitting] = useState(false)
 
     async function handleSubmit(e) {
         e.preventDefault()
 
         try {
-            setError("")
+            setError(null)
             setSubmitting(true)
 
             const data = await apiPost("/register", { name: name, email: email, password: password })
             await refreshUser()
             navigate("/verify-email", { replace: true, state: { emailFailed: data.email_sent === false } })
         } catch (e) {
-            setError(e.message || "Something went wrong! Please try again.")
+            setError(e)
         } finally {
             setSubmitting(false)
         }
@@ -39,13 +41,13 @@ function Register() {
 
     return (
         <AuthLayout
-            title="Create your account"
-            subtitle="Join your community and start solving problems together."
+            title={t("register.title")}
+            subtitle={t("register.subtitle")}
             footer={
                 <>
-                    Already have an account?{" "}
+                    {t("register.haveAccount")}{" "}
                     <Link to="/login" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
-                        Sign in
+                        {t("register.signIn")}
                     </Link>
                 </>
             }
@@ -53,13 +55,13 @@ function Register() {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label htmlFor="name" className="block text-sm font-medium text-slate-700 mb-1">
-                        Name
+                        {t("register.name")}
                     </label>
                     <input
                         id="name"
                         type="text"
                         autoComplete="name"
-                        placeholder="Juan dela Cruz"
+                        placeholder={t("register.namePlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={name}
@@ -69,13 +71,13 @@ function Register() {
 
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
-                        Email
+                        {t("auth.email")}
                     </label>
                     <input
                         id="email"
                         type="email"
                         autoComplete="email"
-                        placeholder="you@example.com"
+                        placeholder={t("auth.emailPlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={email}
@@ -85,24 +87,24 @@ function Register() {
 
                 <div>
                     <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-                        Password
+                        {t("auth.password")}
                     </label>
                     <input
                         id="password"
                         type="password"
                         autoComplete="new-password"
-                        placeholder="At least 8 characters"
+                        placeholder={t("auth.newPasswordPlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
-                    <p className="mt-1 text-xs text-slate-500">Must be at least 8 characters.</p>
+                    <p className="mt-1 text-xs text-slate-500">{t("auth.passwordHint")}</p>
                 </div>
 
                 {error && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {error}
+                        {errorText(error)}
                     </div>
                 )}
 
@@ -113,7 +115,7 @@ function Register() {
                                hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
                                disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                    {submitting ? "Creating account..." : "Create account"}
+                    {submitting ? t("register.submitting") : t("register.submit")}
                 </button>
             </form>
         </AuthLayout>

@@ -8,6 +8,7 @@ from Models import problem as problem_models, solution as solution_models, user 
 from Models import comment as comment_models
 from Schemas.report import ReportCreate, ReportResponse
 from Security.utils import get_active_poster
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ def create_report(
             .first()
         )
         if not target or target.moderation_status == "removed" or target.deleted_at is not None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Problem not found")
+            raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
     elif body.solution_id is not None:
         target = (
             db.query(solution_models.Solution)
@@ -33,7 +34,7 @@ def create_report(
             .first()
         )
         if not target or target.moderation_status == "removed" or target.deleted_at is not None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Solution not found")
+            raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
     else:
         target = (
             db.query(comment_models.Comment)
@@ -41,7 +42,7 @@ def create_report(
             .first()
         )
         if not target or target.moderation_status == "removed" or target.deleted_at is not None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Comment not found")
+            raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Comment not found")
 
     new_report = Report(
         user_id=current_user.id,
@@ -58,16 +59,10 @@ def create_report(
         db.refresh(new_report)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You have already reported this.",
-        )
+        raise api_error(status.HTTP_409_CONFLICT, "already_reported", "You have already reported this.")
     except Exception:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to submit report",
-        )
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to submit report")
 
     return new_report
 

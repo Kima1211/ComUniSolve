@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api";
+import { useLanguage } from "../i18n/language-context";
 import Layout, { TierBadge } from "./Layout";
 
 const PAGE_SIZE = 50
@@ -30,11 +31,13 @@ function Badge({ children, tone = "slate" }) {
     )
 }
 
+// error is an error object (translated on render), notice is ready-made text.
 function Message({ error, notice }) {
+    const { errorText } = useLanguage()
     return (
         <>
             {error && (
-                <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+                <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorText(error)}</p>
             )}
             {notice && (
                 <p className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">{notice}</p>
@@ -43,32 +46,28 @@ function Message({ error, notice }) {
     )
 }
 
-function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : ""
-}
-
 function QueueRow({ item, onAction, busy }) {
+    const { t, label } = useLanguage()
     const reported = item.report_count > 0
+    const reasons = item.report_reasons.map((r) => label("report.reason", r)).join(", ")
 
     return (
         <div className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="slate">{item.target_type}</Badge>
+                <Badge tone="slate">{label("admin.type", item.target_type)}</Badge>
                 {reported && (
-                    <Badge tone="red">
-                        {item.report_count} report{item.report_count === 1 ? "" : "s"}
-                    </Badge>
+                    <Badge tone="red">{t("admin.reports", { count: item.report_count })}</Badge>
                 )}
-                {item.moderation_status === "flagged" && <Badge tone="amber">flagged</Badge>}
+                {item.moderation_status === "flagged" && <Badge tone="amber">{t("admin.flagged")}</Badge>}
                 {item.ai_status !== "unchecked" && item.ai_status !== "ok" && (
-                    <Badge tone="purple">AI: {item.ai_status}</Badge>
+                    <Badge tone="purple">{t("admin.ai", { status: label("admin.aiStatus", item.ai_status) })}</Badge>
                 )}
-                {item.ai_status === "unchecked" && <Badge tone="slate">AI: not checked</Badge>}
+                {item.ai_status === "unchecked" && <Badge tone="slate">{t("admin.aiNotChecked")}</Badge>}
             </div>
 
             {item.problem_title && (
                 <p className="mt-2 text-xs text-slate-500">
-                    {item.target_type === "comment" ? "Comment under an answer to: " : "Answer to: "}
+                    {item.target_type === "comment" ? t("admin.commentUnder") : t("admin.answerTo")}{" "}
                     <a href={`/problems/${item.problem_id}`} target="_blank" rel="noreferrer"
                        className="font-medium text-brand-700 hover:underline">
                         {item.problem_title}
@@ -79,11 +78,11 @@ function QueueRow({ item, onAction, busy }) {
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{item.excerpt}</p>
 
             <p className="mt-2 text-xs text-slate-500">
-                by {item.author_name} (#{item.author_id})
-                {reported && <> · reported for {item.report_reasons.join(", ").replaceAll("_", "-")}</>}
+                {t("admin.byAuthor", { name: item.author_name, id: item.author_id })}
+                {reported && <> · {t("admin.reportedFor", { reasons })}</>}
                 {item.problem_id && (
                     <> · <a href={`/problems/${item.problem_id}`} target="_blank" rel="noreferrer"
-                            className="font-medium text-brand-700 hover:underline">view on site</a></>
+                            className="font-medium text-brand-700 hover:underline">{t("admin.viewOnSite")}</a></>
                 )}
             </p>
 
@@ -91,7 +90,7 @@ function QueueRow({ item, onAction, busy }) {
                 <ul className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
                     {item.reports.filter((r) => r.details).map((r, i) => (
                         <li key={i}>
-                            <span className="font-medium">{r.reason.replaceAll("_", "-")}:</span> {r.details}
+                            <span className="font-medium">{label("report.reason", r.reason)}:</span> {r.details}
                         </li>
                     ))}
                 </ul>
@@ -104,30 +103,30 @@ function QueueRow({ item, onAction, busy }) {
                     className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs
                                font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
                 >
-                    Approve
+                    {t("admin.approve")}
                 </button>
                 <button
                     type="button" disabled={busy}
                     onClick={() => {
-                        const reason = window.prompt("Reason for removing this? (optional)") ?? ""
+                        const reason = window.prompt(t("admin.promptRemove")) ?? ""
                         onAction(item, "removed", reason)
                     }}
                     className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs
                                font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
                 >
-                    Remove
+                    {t("admin.remove")}
                 </button>
                 <button
                     type="button" disabled={busy}
                     onClick={() => {
-                        const reason = window.prompt("Reason for removing this without penalty? (optional)") ?? ""
+                        const reason = window.prompt(t("admin.promptRemoveNoPenalty")) ?? ""
                         onAction(item, "removed_no_penalty", reason)
                     }}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs
                                font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    title="Hide it without taking points or counting toward suspension"
+                    title={t("admin.removeNoPenaltyTitle")}
                 >
-                    Remove without penalty
+                    {t("admin.removeNoPenalty")}
                 </button>
             </div>
         </div>
@@ -136,8 +135,9 @@ function QueueRow({ item, onAction, busy }) {
 
 function OverviewTab() {
     const navigate = useNavigate()
+    const { t } = useLanguage()
 
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
     const [notice, setNotice] = useState("")
     const [total, setTotal] = useState(null)
     const [queue, setQueue] = useState([])
@@ -160,7 +160,7 @@ function OverviewTab() {
             .catch((e) => {
                 if (cancelled) return
                 if (e.status === 401) { navigate("/login"); return }
-                setError(e.message || "Something went wrong! Please try again.")
+                setError(e)
             })
             .finally(() => { if (!cancelled) setLoading(false) })
         return () => { cancelled = true }
@@ -175,30 +175,30 @@ function OverviewTab() {
     async function handleAction(item, action, reason) {
         try {
             setBusy(true)
-            setError("")
+            setError(null)
             // problem -> /admin/problems/..., solution -> /admin/solutions/..., comment -> /admin/comments/...
             const path = `/admin/${item.target_type}s/${item.id}/moderate`
             const result = await apiPatch(path, { action, reason: reason || null })
 
             if (action === "removed") {
-                let msg = `Removed. ${item.author_name} is now on ${result.points_after} points`
+                let msg = t("admin.removedPoints", { name: item.author_name, points: result.points_after })
                 if (result.suspended) {
                     msg += result.suspended_days
-                        ? ` and is suspended for ${result.suspended_days} day${result.suspended_days === 1 ? "" : "s"}.`
-                        : " and is permanently suspended."
+                        ? t("admin.removedSuspendedDays", { count: result.suspended_days })
+                        : t("admin.removedSuspendedForever")
                 } else {
-                    msg += ` (${result.removals} removal${result.removals === 1 ? "" : "s"} total).`
+                    msg += t("admin.removalsTotal", { count: result.removals })
                 }
                 setNotice(msg)
             } else if (action === "removed_no_penalty") {
-                setNotice(`Removed without penalty. ${item.author_name} keeps ${result.points_after} points and this doesn't count toward suspension.`)
+                setNotice(t("admin.removedNoPenalty", { name: item.author_name, points: result.points_after }))
             } else {
-                setNotice("Done.")
+                setNotice(t("admin.done"))
             }
 
             await reload()
         } catch (e) {
-            setError(e.message || "Could not apply that action.")
+            setError(e.code ? e : { key: "admin.couldNotAct" })
         } finally {
             setBusy(false)
         }
@@ -216,22 +216,20 @@ function OverviewTab() {
 
             {total && (
                 <div className="mt-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                    <StatCard label="Total users" value={total.total_users} />
-                    <StatCard label="Total problems" value={total.total_problems} />
-                    <StatCard label="Total solutions" value={total.total_solutions} />
-                    <StatCard label="Pending reports" value={total.pending_reports ?? 0} highlight />
-                    <StatCard label="Flagged content" value={total.flagged_content ?? 0} highlight />
+                    <StatCard label={t("admin.stat.users")} value={total.total_users} />
+                    <StatCard label={t("admin.stat.problems")} value={total.total_problems} />
+                    <StatCard label={t("admin.stat.solutions")} value={total.total_solutions} />
+                    <StatCard label={t("admin.stat.pending")} value={total.pending_reports ?? 0} highlight />
+                    <StatCard label={t("admin.stat.flagged")} value={total.flagged_content ?? 0} highlight />
                 </div>
             )}
 
-            <h2 className="mt-10 text-lg font-bold text-slate-900">Moderation queue</h2>
-            <p className="mt-1 text-sm text-slate-500">
-                Content flagged automatically or reported by the community. Most-reported first.
-            </p>
+            <h2 className="mt-10 text-lg font-bold text-slate-900">{t("admin.queue")}</h2>
+            <p className="mt-1 text-sm text-slate-500">{t("admin.queueHint")}</p>
 
             {!loading && queue.length === 0 && (
                 <p className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-                    Nothing is waiting for review.
+                    {t("admin.queueEmpty")}
                 </p>
             )}
 
@@ -249,23 +247,21 @@ function OverviewTab() {
     )
 }
 
-const USER_FILTERS = [
-    ["all", "All"],
-    ["suspended", "Suspended"],
-    ["unverified", "Unverified"],
-    ["admins", "Admins"],
-]
+const USER_FILTERS = ["all", "suspended", "unverified", "admins"]
 
 function UserStatus({ u }) {
+    const { t, formatDate } = useLanguage()
     return (
         <div className="flex flex-wrap gap-1">
-            {u.role === "admin" && <Badge tone="purple">admin</Badge>}
-            {u.is_verified ? <Badge tone="green">verified</Badge> : <Badge tone="amber">unverified</Badge>}
+            {u.role === "admin" && <Badge tone="purple">{t("admin.badge.admin")}</Badge>}
+            {u.is_verified
+                ? <Badge tone="green">{t("admin.badge.verified")}</Badge>
+                : <Badge tone="amber">{t("admin.badge.unverified")}</Badge>}
             {u.is_suspended && (
                 <Badge tone="red">
                     {u.suspended_until
-                        ? `suspended until ${new Date(u.suspended_until).toLocaleDateString()}`
-                        : "permanently suspended"}
+                        ? t("admin.suspendedUntil", { date: formatDate(u.suspended_until) })
+                        : t("admin.permSuspended")}
                 </Badge>
             )}
         </div>
@@ -273,12 +269,13 @@ function UserStatus({ u }) {
 }
 
 function UsersTab() {
+    const { t, formatDate } = useLanguage()
     const [search, setSearch] = useState("")
     const [show, setShow] = useState("all")
     const [page, setPage] = useState(0)
     const [data, setData] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
     const [notice, setNotice] = useState("")
     const [busyId, setBusyId] = useState(null)
     const [reloadKey, setReloadKey] = useState(0)
@@ -291,8 +288,8 @@ function UsersTab() {
                 search, show, limit: PAGE_SIZE, offset: page * PAGE_SIZE,
             })
             apiGet(`/admin/users?${params}`)
-                .then((d) => { if (!cancelled) { setData(d); setError("") } })
-                .catch((e) => { if (!cancelled) setError(e.message || "Could not load users.") })
+                .then((d) => { if (!cancelled) { setData(d); setError(null) } })
+                .catch((e) => { if (!cancelled) setError(e.code ? e : { key: "admin.couldNotLoadUsers" }) })
                 .finally(() => { if (!cancelled) setLoading(false) })
         }, 300)
         return () => { cancelled = true; clearTimeout(timer) }
@@ -300,32 +297,30 @@ function UsersTab() {
 
     async function changeSuspension(u, suspend) {
         const reason = window.prompt(
-            suspend
-                ? `Why are you suspending ${u.name}? (required)`
-                : `Why are you lifting ${u.name}'s suspension? (optional)`
+            suspend ? t("admin.promptSuspend", { name: u.name }) : t("admin.promptUnsuspend", { name: u.name })
         )
         if (reason === null) return
         if (suspend && !reason.trim()) {
-            setError("A reason is required to suspend someone.")
+            setError({ key: "admin.reasonRequired" })
             return
         }
 
         try {
             setBusyId(u.id)
-            setError("")
+            setError(null)
             const result = await apiPatch(`/admin/users/${u.id}/suspension`, {
                 suspend, reason: reason.trim() || null,
             })
             if (!suspend) {
-                setNotice(`${u.name}'s suspension was lifted.`)
+                setNotice(t("admin.unsuspendedMsg", { name: u.name }))
             } else if (result.days) {
-                setNotice(`${u.name} is suspended for ${result.days} day${result.days === 1 ? "" : "s"}.`)
+                setNotice(t("admin.suspendedFor", { name: u.name, count: result.days }))
             } else {
-                setNotice(`${u.name} is permanently suspended.`)
+                setNotice(t("admin.suspendedForever", { name: u.name }))
             }
             setReloadKey((k) => k + 1)
         } catch (e) {
-            setError(e.message || "Could not update the suspension.")
+            setError(e.code ? e : { key: "admin.couldNotSuspend" })
         } finally {
             setBusyId(null)
         }
@@ -340,14 +335,14 @@ function UsersTab() {
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
                     type="search"
-                    placeholder="Search by name or email"
+                    placeholder={t("admin.search")}
                     value={search}
                     onChange={(e) => { setSearch(e.target.value); setPage(0) }}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none
                                focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 sm:max-w-xs"
                 />
                 <div className="flex flex-wrap gap-2">
-                    {USER_FILTERS.map(([value, label]) => (
+                    {USER_FILTERS.map((value) => (
                         <button
                             key={value}
                             type="button"
@@ -358,7 +353,7 @@ function UsersTab() {
                                     : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                             }`}
                         >
-                            {label}
+                            {t(`admin.filter.${value}`)}
                         </button>
                     ))}
                 </div>
@@ -370,12 +365,12 @@ function UsersTab() {
                 <table className="min-w-full text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                         <tr>
-                            <th className="px-4 py-3 font-medium">User</th>
-                            <th className="px-4 py-3 font-medium">Reputation</th>
-                            <th className="px-4 py-3 font-medium">Posts</th>
-                            <th className="px-4 py-3 font-medium">Removed</th>
-                            <th className="px-4 py-3 font-medium">Status</th>
-                            <th className="px-4 py-3 font-medium">Joined</th>
+                            <th className="px-4 py-3 font-medium">{t("admin.col.user")}</th>
+                            <th className="px-4 py-3 font-medium">{t("admin.col.reputation")}</th>
+                            <th className="px-4 py-3 font-medium">{t("admin.col.posts")}</th>
+                            <th className="px-4 py-3 font-medium">{t("admin.col.removed")}</th>
+                            <th className="px-4 py-3 font-medium">{t("admin.col.status")}</th>
+                            <th className="px-4 py-3 font-medium">{t("admin.col.joined")}</th>
                             <th className="px-4 py-3 font-medium"></th>
                         </tr>
                     </thead>
@@ -388,12 +383,12 @@ function UsersTab() {
                                 </td>
                                 <td className="px-4 py-3">
                                     <TierBadge tier={u.tier} />
-                                    <p className="mt-1 text-xs text-slate-500">{u.points} pts</p>
+                                    <p className="mt-1 text-xs text-slate-500">{t("admin.pts", { points: u.points })}</p>
                                 </td>
                                 <td className="px-4 py-3 text-slate-700">
-                                    {u.problem_count} problems
+                                    {t("admin.problemCount", { count: u.problem_count })}
                                     <br />
-                                    {u.solution_count} solutions
+                                    {t("common.solutions", { count: u.solution_count })}
                                 </td>
                                 <td className={`px-4 py-3 ${u.removal_count > 0 ? "font-semibold text-red-700" : "text-slate-500"}`}>
                                     {u.removal_count}
@@ -405,7 +400,7 @@ function UsersTab() {
                                     )}
                                 </td>
                                 <td className="px-4 py-3 text-xs text-slate-500">
-                                    {u.created_at ? new Date(u.created_at).toLocaleDateString() : ""}
+                                    {formatDate(u.created_at)}
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                     {u.role !== "admin" && (
@@ -417,7 +412,7 @@ function UsersTab() {
                                                 className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs
                                                            font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
                                             >
-                                                Unsuspend
+                                                {t("admin.unsuspend")}
                                             </button>
                                         ) : (
                                             <button
@@ -427,7 +422,7 @@ function UsersTab() {
                                                 className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs
                                                            font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
                                             >
-                                                Suspend
+                                                {t("admin.suspend")}
                                             </button>
                                         )
                                     )}
@@ -438,15 +433,15 @@ function UsersTab() {
                 </table>
 
                 {!loading && data && data.users.length === 0 && (
-                    <p className="p-6 text-center text-sm text-slate-500">No users match.</p>
+                    <p className="p-6 text-center text-sm text-slate-500">{t("admin.noUsers")}</p>
                 )}
                 {loading && !data && (
-                    <p className="p-6 text-center text-sm text-slate-500">Loading users...</p>
+                    <p className="p-6 text-center text-sm text-slate-500">{t("admin.loadingUsers")}</p>
                 )}
             </div>
 
             <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
-                <span>{total > 0 ? `Showing ${from}–${to} of ${total}` : ""}</span>
+                <span>{total > 0 ? t("admin.showing", { from, to, total }) : ""}</span>
                 <div className="flex gap-2">
                     <button
                         type="button"
@@ -454,7 +449,7 @@ function UsersTab() {
                         onClick={() => setPage((p) => p - 1)}
                         className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50 disabled:opacity-40"
                     >
-                        Previous
+                        {t("admin.previous")}
                     </button>
                     <button
                         type="button"
@@ -462,7 +457,7 @@ function UsersTab() {
                         onClick={() => setPage((p) => p + 1)}
                         className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50 disabled:opacity-40"
                     >
-                        Next
+                        {t("admin.next")}
                     </button>
                 </div>
             </div>
@@ -470,14 +465,7 @@ function UsersTab() {
     )
 }
 
-const LOG_FILTERS = [
-    ["", "All actions"],
-    ["removed", "Removed"],
-    ["removed_no_penalty", "Removed without penalty"],
-    ["restored", "Restored"],
-    ["suspended", "Suspended"],
-    ["unsuspended", "Unsuspended"],
-]
+const LOG_FILTERS = ["", "removed", "removed_no_penalty", "restored", "suspended", "unsuspended"]
 
 const ACTION_TONES = {
     removed: "red",
@@ -487,20 +475,12 @@ const ACTION_TONES = {
     unsuspended: "sky",
 }
 
-function describe(log) {
-    const who = log.admin_name || "Automatic"
-    const target = log.target_user_name || "a deleted user"
-    if (log.action === "suspended") return `${who} suspended ${target}`
-    if (log.action === "unsuspended") return `${who} lifted ${target}'s suspension`
-    if (log.action === "removed_no_penalty") return `${who} removed a ${log.target_type} by ${target} without penalty`
-    return `${who} ${log.action} a ${log.target_type} by ${target}`
-}
-
 function ActivityTab() {
+    const { t, label, formatDateTime } = useLanguage()
     const [action, setAction] = useState("")
     const [logs, setLogs] = useState([])
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
     const [notice, setNotice] = useState("")
     const [busyId, setBusyId] = useState(null)
     const [reloadKey, setReloadKey] = useState(0)
@@ -512,15 +492,26 @@ function ActivityTab() {
             const params = new URLSearchParams({ limit: 200 })
             if (action) params.set("action", action)
             apiGet(`/admin/logs?${params}`)
-                .then((d) => { if (!cancelled) { setLogs(d); setError("") } })
-                .catch((e) => { if (!cancelled) setError(e.message || "Could not load the activity log.") })
+                .then((d) => { if (!cancelled) { setLogs(d); setError(null) } })
+                .catch((e) => { if (!cancelled) setError(e.code ? e : { key: "admin.couldNotLoadLog" }) })
                 .finally(() => { if (!cancelled) setLoading(false) })
         }, 0)
         return () => { cancelled = true; clearTimeout(timer) }
     }, [action, reloadKey])
 
+    function describe(log) {
+        const params = {
+            who: log.admin_name || t("admin.log.automatic"),
+            target: log.target_user_name || t("admin.log.deletedUser"),
+            type: label("admin.type", log.target_type),
+            action: label("admin.action", log.action),
+        }
+        const known = ["suspended", "unsuspended", "removed", "removed_no_penalty", "restored"]
+        return t(known.includes(log.action) ? `admin.log.${log.action}` : "admin.log.other", params)
+    }
+
     async function restore(log) {
-        const reason = window.prompt("Why are you restoring this? (optional)")
+        const reason = window.prompt(t("admin.promptRestore"))
         if (reason === null) return
 
         const path = log.problem_id
@@ -530,12 +521,14 @@ function ActivityTab() {
                 : `/admin/comments/${log.comment_id}/moderate`
         try {
             setBusyId(log.id)
-            setError("")
+            setError(null)
             const result = await apiPatch(path, { action: "restored", reason: reason.trim() || null })
-            setNotice(`Restored. ${log.target_user_name || "The author"} is now on ${result.points_after} points.`)
+            setNotice(t("admin.restoredMsg", {
+                name: log.target_user_name || t("admin.theAuthor"), points: result.points_after,
+            }))
             setReloadKey((k) => k + 1)
         } catch (e) {
-            setError(e.message || "Could not restore this.")
+            setError(e.code ? e : { key: "admin.couldNotRestore" })
         } finally {
             setBusyId(null)
         }
@@ -550,7 +543,9 @@ function ActivityTab() {
                     className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none
                                focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
                 >
-                    {LOG_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {LOG_FILTERS.map((value) => (
+                        <option key={value} value={value}>{t(`admin.action.${value || "all"}`)}</option>
+                    ))}
                 </select>
             </div>
 
@@ -558,7 +553,7 @@ function ActivityTab() {
 
             {!loading && logs.length === 0 && (
                 <p className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-                    No moderation activity yet.
+                    {t("admin.noActivity")}
                 </p>
             )}
 
@@ -566,21 +561,21 @@ function ActivityTab() {
                 {logs.map((log) => (
                     <div key={log.id} className="rounded-xl border border-slate-200 bg-white p-4">
                         <div className="flex flex-wrap items-center gap-2">
-                            <Badge tone={ACTION_TONES[log.action] || "slate"}>{log.action.replaceAll("_", " ")}</Badge>
+                            <Badge tone={ACTION_TONES[log.action] || "slate"}>{label("admin.action", log.action)}</Badge>
                             <span className="text-sm text-slate-900">{describe(log)}</span>
-                            <span className="ml-auto text-xs text-slate-500">{formatDate(log.created_at)}</span>
+                            <span className="ml-auto text-xs text-slate-500">{formatDateTime(log.created_at)}</span>
                         </div>
 
                         {log.reason && (
                             <p className="mt-2 text-sm text-slate-600">
-                                <span className="font-medium text-slate-700">Reason:</span> {log.reason}
+                                <span className="font-medium text-slate-700">{t("admin.reason")}</span> {log.reason}
                             </p>
                         )}
 
                         {log.content_snapshot && (
                             <details className="mt-2 text-sm">
                                 <summary className="cursor-pointer text-slate-500 hover:text-slate-800">
-                                    Show the content
+                                    {t("admin.showContent")}
                                 </summary>
                                 <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-slate-700">
                                     {log.content_snapshot}
@@ -596,7 +591,7 @@ function ActivityTab() {
                                 className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs
                                            font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
                             >
-                                Restore
+                                {t("admin.restore")}
                             </button>
                         )}
                     </div>
@@ -606,23 +601,20 @@ function ActivityTab() {
     )
 }
 
-const TABS = [
-    ["overview", "Overview"],
-    ["users", "Users"],
-    ["activity", "Activity log"],
-]
+const TABS = ["overview", "users", "activity"]
 
 function AdminDashboard() {
+    const { t } = useLanguage()
     const [params, setParams] = useSearchParams()
-    const tab = TABS.some(([value]) => value === params.get("tab")) ? params.get("tab") : "overview"
+    const tab = TABS.includes(params.get("tab")) ? params.get("tab") : "overview"
 
     return (
         <Layout>
-            <h1 className="text-xl font-bold text-slate-900">Admin dashboard</h1>
-            <p className="mt-1 text-sm text-slate-500">Statistics, user management, and moderation monitoring.</p>
+            <h1 className="text-xl font-bold text-slate-900">{t("admin.title")}</h1>
+            <p className="mt-1 text-sm text-slate-500">{t("admin.subtitle")}</p>
 
             <div className="mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">
-                {TABS.map(([value, label]) => (
+                {TABS.map((value) => (
                     <button
                         key={value}
                         type="button"
@@ -633,7 +625,7 @@ function AdminDashboard() {
                                 : "border-transparent text-slate-500 hover:text-slate-800"
                         }`}
                     >
-                        {label}
+                        {t(`admin.tab.${value}`)}
                     </button>
                 ))}
             </div>

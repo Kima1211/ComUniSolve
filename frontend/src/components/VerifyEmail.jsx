@@ -2,28 +2,29 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../api";
 import { useAuth } from "../auth-context";
+import { useLanguage } from "../i18n/language-context";
 import Layout from "./Layout";
 
 function VerifyEmail() {
     const { token } = useParams()
     const { refreshUser } = useAuth()
+    const { t, errorText } = useLanguage()
 
     const [status, setStatus] = useState("checking")
-    const [message, setMessage] = useState("")
+    const [error, setError] = useState(null)
 
     useEffect(() => {
         let cancelled = false
         apiGet(`/verify/${token}`)
-            .then((data) => {
+            .then(() => {
                 if (cancelled) return
                 setStatus("success")
-                setMessage(data.message || "Email verified successfully")
                 refreshUser()
             })
             .catch((e) => {
                 if (cancelled) return
                 setStatus("failed")
-                setMessage(e.message || "Something went wrong! Please try again.")
+                setError(e)
             })
         return () => { cancelled = true }
     }, [token, refreshUser])
@@ -31,7 +32,7 @@ function VerifyEmail() {
     return (
         <Layout>
             <div className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center">
-                {status === "checking" && <p className="text-slate-600">Verifying your email...</p>}
+                {status === "checking" && <p className="text-slate-600">{t("verify.checking")}</p>}
 
                 {status !== "checking" && (
                     <>
@@ -43,14 +44,16 @@ function VerifyEmail() {
                             {status === "success" ? "✓" : "!"}
                         </div>
                         <h1 className="mt-4 text-lg font-semibold text-slate-900">
-                            {status === "success" ? "Email verified" : "Verification failed"}
+                            {status === "success" ? t("verify.success") : t("verify.failed")}
                         </h1>
-                        <p className="mt-2 text-sm text-slate-600">{message}</p>
+                        <p className="mt-2 text-sm text-slate-600">
+                            {status === "success" ? t("verify.successBody") : errorText(error)}
+                        </p>
                         <Link
                             to="/"
                             className="mt-6 inline-block rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
                         >
-                            Go to the problem feed
+                            {t("verify.goFeed")}
                         </Link>
                     </>
                 )}

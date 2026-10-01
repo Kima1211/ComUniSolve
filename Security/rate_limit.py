@@ -2,7 +2,9 @@ import threading
 import time
 from collections import deque
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
+
+from Services.errors import api_error
 
 
 # Counts live in memory: correct only while the backend runs as ONE process.
@@ -64,7 +66,7 @@ def client_ip(request: Request) -> str:
 
 def enforce(limiter: RateLimiter, key: str, message: str) -> None:
     if not limiter.hit(key):
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=message)
+        raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "rate_limited", message)
 
 
 LOGIN_PER_IP = RateLimiter(max_events=30, window_seconds=5 * 60)

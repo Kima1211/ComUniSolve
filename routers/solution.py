@@ -9,6 +9,7 @@ from Services.reputation import award_points
 from Services.rating import poster_ratings, clear_ratings
 from Services.moderation import run_pre_post_gate
 from Schemas.moderation import ContentCheckResponse
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
     ).first()
      
     if not fnd_problem:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     existing_solution = db.query(solution.Solution).filter(solution.Solution.user_id == current_user.id, solution.Solution.problem_id == fnd_problem.id).first()
     
@@ -37,6 +38,7 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=ContentCheckResponse(
                 verdict=gate.verdict,
+                code=gate.code,
                 blocked=gate.blocked,
                 acknowledgeable=gate.acknowledgeable,
                 message=gate.message,
@@ -64,7 +66,7 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
         db.refresh(new_solution)
     except Exception: 
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save solution to the database")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to save solution to the database")
     
     return {
     "id": new_solution.id,
@@ -79,7 +81,7 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
 def get_solution(problem_id: int, db: Session=Depends(get_db), viewer=Depends(get_optional_user)):
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
     if not fnd_problem:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     solutions = (
         db.query(solution.Solution)
@@ -110,14 +112,14 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
         solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
     ).first()
     if not fnd_solution:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
 
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
     if not fnd_problem:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     if fnd_problem.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Problem doesnt belong to this user")
+        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "Problem doesnt belong to this user")
     
     is_self_solve = (
         fnd_solution.user_id == fnd_problem.user_id
@@ -154,7 +156,7 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
         db.refresh(fnd_problem)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to accept solution")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to accept solution")
 
     return {
         "status": fnd_solution.status,
@@ -165,17 +167,17 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
 def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(solution.Solution.id == solution_id).first()
     if not fnd_solution:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
     
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
     if not fnd_problem:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
     
     if fnd_problem.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Problem doesnt belong to this user")
+        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "Problem doesnt belong to this user")
     
     if fnd_solution.status != "accepted":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail ="This solution isn't currently accepted")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "not_accepted", "This solution isn't currently accepted")
     
     is_self_solve=(
         fnd_problem.user_id == fnd_solution.user_id
@@ -196,7 +198,7 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
         db.refresh(fnd_problem)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to un-accept solution")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to un-accept solution")
         
     return{
         "status": fnd_solution.status,
@@ -209,7 +211,7 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
         solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
     ).first()
     if not fnd_solution: 
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
     
     # Clicking again takes the upvote back (like Reddit), including the author's point.
     existing_upvote = db.query(solution.Upvote).filter(solution.Upvote.user_id == current_user.id, solution.Upvote.solution_id == solution_id).first()
@@ -231,7 +233,7 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail = "Failed to upvote solution")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to upvote solution")
 
     return {
         "upvoted": existing_upvote is None,
@@ -250,9 +252,9 @@ def _own_solution(solution_id: int, db: Session, current_user):
         .first()
     )
     if not fnd_solution:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
     if fnd_solution.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only change your own solution")
+        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only change your own solution")
     return fnd_solution
 
 
@@ -273,6 +275,7 @@ def edit_solution(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=ContentCheckResponse(
                 verdict=gate.verdict,
+                code=gate.code,
                 blocked=gate.blocked,
                 acknowledgeable=gate.acknowledgeable,
                 message=gate.message,
@@ -293,7 +296,7 @@ def edit_solution(
         db.refresh(fnd_solution)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update solution")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update solution")
 
     return fnd_solution
 
@@ -308,10 +311,7 @@ def delete_solution(
 
     # The problem owner relied on it, so an accepted solution can only be edited.
     if fnd_solution.status == "accepted":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An accepted solution can't be deleted. You can still edit it.",
-        )
+        raise api_error(status.HTTP_400_BAD_REQUEST, "accepted_cant_delete", "An accepted solution can't be deleted. You can still edit it.")
 
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
 
@@ -343,6 +343,6 @@ def delete_solution(
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete solution")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to delete solution")
 
     return {"message": "Solution deleted", "points_reversed": points_to_reverse}

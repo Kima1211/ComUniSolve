@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost, imageUrl } from "../api";
 import { useAuth } from "../auth-context";
+import { useLanguage } from "../i18n/language-context";
 import Layout, { TierBadge } from "./Layout";
 import SolutionCard from "./SolutionCard";
 import SimilarProblems from "./SimilarProblems";
@@ -13,21 +14,22 @@ import AiCheckStatus from "./AiCheckStatus";
 function ProblemDetail() {
     const { id } = useParams()
     const { user } = useAuth()
+    const { t, label, errorText } = useLanguage()
     const imageError = useLocation().state?.imageError
     const navigate = useNavigate()
 
     const [problem, setProblem] = useState(null)
     const [solutions, setSolutions] = useState([])
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
 
     const [editing, setEditing] = useState(false)
     const [deleting, setDeleting] = useState(false)
-    const [ownerError, setOwnerError] = useState("")
+    const [ownerError, setOwnerError] = useState(null)
 
     const [text, setText] = useState("")
     const [submitting, setSubmitting] = useState(false)
-    const [submitError, setSubmitError] = useState("")
+    const [submitError, setSubmitError] = useState(null)
     const [solutionGate, setSolutionGate] = useState(null)
     const [matches, setMatches] = useState([])
     const [matchesAiUsed, setMatchesAiUsed] = useState(false)
@@ -89,7 +91,7 @@ function ProblemDetail() {
         let cancelled = false
         fetchAll()
             .then(([p, s]) => { if (!cancelled) { setProblem(p); setSolutions(s) } })
-            .catch((e) => { if (!cancelled) setError(e.message || "Could not load this problem") })
+            .catch((e) => { if (!cancelled) setError(e) })
             .finally(() => { if (!cancelled) setLoading(false) })
         return () => { cancelled = true }
     }, [fetchAll])
@@ -109,7 +111,7 @@ function ProblemDetail() {
 
     async function postSolution(acknowledged) {
         try {
-            setSubmitError("")
+            setSubmitError(null)
             setSolutionGate(null)
             setSubmitting(true)
             await apiPost("/solutions", {
@@ -122,7 +124,7 @@ function ProblemDetail() {
                 setSolutionGate(e.detail)
                 return
             }
-            setSubmitError(e.message || "Could not submit your solution")
+            setSubmitError(e)
         } finally {
             setSubmitting(false)
         }
@@ -137,14 +139,14 @@ function ProblemDetail() {
     }
 
     async function handleDelete() {
-        if (!window.confirm("Delete this problem? People who answered it keep their points.")) return
+        if (!window.confirm(t("detail.confirmDelete"))) return
         try {
-            setOwnerError("")
+            setOwnerError(null)
             setDeleting(true)
             await apiDelete(`/problems/${id}`)
             navigate("/")
         } catch (e) {
-            setOwnerError(e.message || "Could not delete this problem")
+            setOwnerError(e)
             setDeleting(false)
         }
     }
@@ -162,10 +164,10 @@ function ProblemDetail() {
         return (
             <Layout>
                 <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error || "Problem not found."}
+                    {error ? errorText(error, "detail.couldNotLoad") : t("detail.notFound")}
                 </p>
                 <Link to="/" className="mt-4 inline-block text-sm font-medium text-brand-700 hover:underline">
-                    Back to the feed
+                    {t("common.backToFeed")}
                 </Link>
             </Layout>
         )
@@ -174,12 +176,12 @@ function ProblemDetail() {
     return (
         <Layout>
             <Link to="/" className="text-sm font-medium text-slate-500 hover:text-slate-900">
-                ← Back to the feed
+                ← {t("common.backToFeed")}
             </Link>
 
             {imageError && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    Your problem was posted, but the photo wasn't added: {imageError}
+                    {t("detail.imageNotAdded", { error: imageError })}
                 </div>
             )}
 
@@ -197,18 +199,18 @@ function ProblemDetail() {
                                 : "bg-amber-100 text-amber-700"
                         }`}
                     >
-                        {problem.status === "resolved" ? "Resolved" : "Open"}
+                        {problem.status === "resolved" ? t("common.resolved") : t("common.open")}
                     </span>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                        {problem.category}
+                        {label("category", problem.category)}
                     </span>
                     {problem.author && (
                         <>
                             <span>
-                                posted by{" "}
+                                {t("detail.postedBy")}{" "}
                                 <Link to={`/users/${problem.author.id}`} className="font-medium text-slate-700 hover:underline">
                                     {problem.author.name}
                                 </Link>
@@ -216,7 +218,7 @@ function ProblemDetail() {
                             <TierBadge tier={problem.author.tier} />
                         </>
                     )}
-                    {problem.edited_at && <span className="text-xs text-slate-400">edited</span>}
+                    {problem.edited_at && <span className="text-xs text-slate-400">{t("common.edited")}</span>}
                     {user && user.id !== problem.user_id && (
                         <div className="ml-auto">
                             <ReportButton problemId={problem.id} />
@@ -229,7 +231,7 @@ function ProblemDetail() {
                                 onClick={() => setEditing(true)}
                                 className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                             >
-                                Edit
+                                {t("common.edit")}
                             </button>
                             <button
                                 type="button"
@@ -237,14 +239,16 @@ function ProblemDetail() {
                                 disabled={deleting}
                                 className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                             >
-                                {deleting ? "Deleting..." : "Delete"}
+                                {deleting ? t("common.deleting") : t("common.delete")}
                             </button>
                         </div>
                     )}
                 </div>
 
                 {ownerError && (
-                    <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{ownerError}</p>
+                    <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        {errorText(ownerError, "detail.couldNotDelete")}
+                    </p>
                 )}
 
                 {problem.description && (
@@ -257,7 +261,7 @@ function ProblemDetail() {
                     <a href={problem.image_url} target="_blank" rel="noreferrer" className="mt-4 block">
                         <img
                             src={imageUrl(problem.image_url, 1000)}
-                            alt={`Photo for: ${problem.title}`}
+                            alt={t("detail.photoAlt", { title: problem.title })}
                             className="max-h-[28rem] w-full rounded-lg border border-slate-200 bg-slate-50 object-contain"
                         />
                     </a>
@@ -268,25 +272,21 @@ function ProblemDetail() {
                 <SimilarProblems
                     matches={matches}
                     aiUsed={matchesAiUsed}
-                    title="Related problems"
-                    hint={
-                        matchesAiUsed
-                            ? "Word overlap gathered the candidates; the AI judged which describe the same issue, including across English and Tagalog."
-                            : "Matched by comparing the wording of every problem on the platform."
-                    }
+                    title={t("detail.related")}
+                    hint={matchesAiUsed ? t("detail.relatedHintAi") : t("detail.relatedHintWords")}
                 />
 
                 {checkingAi && (
                     <p className="mt-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50
                                   px-4 py-2 text-sm text-purple-800">
                         <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
-                        Checking with AI for problems worded differently...
+                        {t("detail.checkingAi")}
                     </p>
                 )}
 
                 {!checkingAi && matchesAiUsed && matches.length === 0 && (
                     <p className="mt-3 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500">
-                        The AI read every other problem on the platform and found none describing this issue.
+                        {t("detail.aiNone")}
                     </p>
                 )}
 
@@ -294,9 +294,7 @@ function ProblemDetail() {
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg
                                     border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
                         <span>
-                            {matches.length > 0
-                                ? "The AI layer could not be reached, so these are word matches only."
-                                : "The AI layer could not be reached, and word matching found nothing."}
+                            {matches.length > 0 ? t("detail.aiDownWithMatches") : t("detail.aiDownNoMatches")}
                         </span>
                         <button
                             type="button"
@@ -304,7 +302,7 @@ function ProblemDetail() {
                             className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs
                                        font-medium text-amber-900 hover:bg-amber-100"
                         >
-                            Try again
+                            {t("detail.tryAgain")}
                         </button>
                     </div>
                 )}
@@ -312,7 +310,7 @@ function ProblemDetail() {
 
             <section className="mt-8">
                 <h2 className="text-lg font-semibold text-slate-900">
-                    {solutions.length} {solutions.length === 1 ? "solution" : "solutions"}
+                    {t("common.solutions", { count: solutions.length })}
                 </h2>
 
                 <div className="mt-4 space-y-3">
@@ -320,7 +318,7 @@ function ProblemDetail() {
                         <p className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50
                                       px-4 py-2 text-sm text-purple-800">
                             <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
-                            Checking whether the AI can suggest a first step...
+                            {t("detail.suggestionPending")}
                         </p>
                     )}
 
@@ -328,24 +326,20 @@ function ProblemDetail() {
                         <div className="rounded-xl border border-purple-200 bg-white p-5">
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800">
-                                    AI Suggestion
+                                    {t("detail.aiSuggestion")}
                                 </span>
-                                <span className="text-xs text-slate-500">
-                                    Not from a community member
-                                </span>
+                                <span className="text-xs text-slate-500">{t("detail.notFromMember")}</span>
                             </div>
                             <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{aiSuggestion.suggestion}</p>
                             <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                                Written by AI because nobody has answered yet and no similar problem has been
-                                solved. It may be wrong, so use your judgment. It disappears as soon as a
-                                community member posts a solution.
+                                {t("detail.aiSuggestionNote")}
                             </p>
                         </div>
                     )}
 
                     {solutions.length === 0 && (
                         <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                            No community solutions yet. If you know the answer, share it below.
+                            {t("detail.noSolutions")}
                         </p>
                     )}
                     {solutions.map((s) => (
@@ -361,30 +355,28 @@ function ProblemDetail() {
             </section>
 
             <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
-                <h2 className="text-lg font-semibold text-slate-900">Your solution</h2>
+                <h2 className="text-lg font-semibold text-slate-900">{t("detail.yourSolution")}</h2>
 
                 {!user ? (
                     <p className="mt-3 text-sm text-slate-600">
-                        <Link to="/login" className="font-medium text-brand-700 hover:underline">Sign in</Link>
-                        {" "}to answer this problem.
+                        <Link to="/login" className="font-medium text-brand-700 hover:underline">{t("detail.signIn")}</Link>
+                        {t("detail.toAnswer")}
                     </p>
                 ) : !user.is_verified ? (
-                    <p className="mt-3 text-sm text-amber-800">
-                        Verify your email before posting a solution — check your inbox for the link.
-                    </p>
+                    <p className="mt-3 text-sm text-amber-800">{t("detail.verifyFirst")}</p>
                 ) : (
                     <form onSubmit={submitSolution} className="mt-3">
                         <textarea
                             rows={4}
                             value={text}
                             onChange={(e) => setText(e.target.value)}
-                            placeholder="Explain how to solve this, step by step."
+                            placeholder={t("detail.solutionPlaceholder")}
                             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none
                                        focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
                         />
                         {submitError && (
                             <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                                {submitError}
+                                {errorText(submitError, "detail.couldNotSubmit")}
                             </p>
                         )}
 
@@ -400,7 +392,7 @@ function ProblemDetail() {
                         )}
                         {submitting && (
                             <div className="mt-2">
-                                <AiCheckStatus message="Checking your solution with AI for clarity and safety. This takes a few seconds..." />
+                                <AiCheckStatus message={t("aiCheck.solution")} />
                             </div>
                         )}
                         <button
@@ -409,7 +401,7 @@ function ProblemDetail() {
                             className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white
                                        hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                         >
-                            {submitting ? "Checking..." : "Post solution"}
+                            {submitting ? t("common.checking") : t("detail.postSolution")}
                         </button>
                     </form>
                 )}

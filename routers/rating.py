@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from Models.database import get_db
 from Security.utils import get_current_user, get_active_poster
 from Models import rating,solution,problem,user
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -13,21 +14,21 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
         solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
     ).first()
     if not fnd_solution:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
     
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
     if not fnd_problem:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     if fnd_problem.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the problem poster can rate solutions")
+        raise api_error(status.HTTP_403_FORBIDDEN, "rate_not_poster", "Only the problem poster can rate solutions")
 
     # Stars are the poster's evidence that the chosen fix worked, so only the accepted one is rated.
     if fnd_solution.status != "accepted":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You can only rate the accepted solution")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "rate_not_accepted", "You can only rate the accepted solution")
 
     if fnd_solution.user_id == current_user.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You can't rate your own solution")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "rate_own", "You can't rate your own solution")
 
     # Rating again changes the existing rating instead of adding a second one.
     fnd_rating = db.query(rating.Rating).filter(rating.Rating.user_id == current_user.id, rating.Rating.solution_id == solution_id).first()
@@ -48,7 +49,7 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
         db.refresh(fnd_rating)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit rating")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to submit rating")
 
     return fnd_rating
 

@@ -14,6 +14,7 @@ import hashlib
 from Models.refresh_token import RefreshToken
 from Models.user import User
 from Services.reputation import is_currently_suspended
+from Services.errors import api_error
 
 
 load_dotenv()
@@ -152,38 +153,25 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
 
     if token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            )
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Not authenticated")
 
     try:
         email, token_version = decode_token(token)
     except ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token expired")
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Access token expired")
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid access token")
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Invalid access token")
 
     user = db.query(db_models.User).filter(db_models.User.email == email).first()
 
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found")
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "not_found", "User not found")
 
     if token_version != user.session_version:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session has ended")
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Session has ended")
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive")
+        raise api_error(status.HTTP_403_FORBIDDEN, "account_inactive", "Account is inactive")
     return user
 
 
@@ -196,12 +184,12 @@ def get_optional_user(request: Request, db: Session = Depends(get_db)):
 
 def get_current_admin(current_user: db_models.User = Depends(get_current_user)):
     if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an admin")
+        raise api_error(status.HTTP_403_FORBIDDEN, "forbidden", "You are not an admin")
     return current_user
 
 def get_verified_user(current_user: db_models.User = Depends(get_current_user)):
     if not current_user.is_verified:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Please verify your email before posting")
+        raise api_error(status.HTTP_403_FORBIDDEN, "verify_first", "Please verify your email before posting")
     return current_user
 
 
@@ -210,9 +198,9 @@ def get_active_poster(current_user: db_models.User = Depends(get_verified_user))
         until = current_user.suspended_until
         when = f" until {until:%d %b %Y}" if until else ""
         reason = f" Reason: {current_user.suspension_reason}" if current_user.suspension_reason else ""
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Your account is suspended{when}.{reason}",
+        raise api_error(
+            status.HTTP_403_FORBIDDEN, "account_suspended", f"Your account is suspended{when}.{reason}",
+            {"until": until.isoformat() if until else None, "reason": current_user.suspension_reason},
         )
     return current_user
 

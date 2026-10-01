@@ -21,6 +21,7 @@ from Models.user import User
 from Schemas.user import ForgotPassword, ResetPassword
 from Services.email import send_verification_email, send_password_reset_email
 from Security.rate_limit import FORGOT_PASSWORD_PER_IP, client_ip, enforce
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -32,26 +33,17 @@ ROTATION_GRACE = timedelta(seconds=30)
 @router.post("/resend-verification")
 def resend_verification(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This account is already verified",
-        )
+        raise api_error(status.HTTP_400_BAD_REQUEST, "already_verified", "This account is already verified")
 
     expires_at = current_user.verification_token_expires_at
     if expires_at is not None:
         issued_at = expires_at - timedelta(hours=24)
         if datetime.now(timezone.utc) - issued_at < RESEND_COOLDOWN:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Please wait a minute before requesting another email",
-            )
+            raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "email_cooldown", "Please wait a minute before requesting another email")
 
     token = issue_verification_token(current_user, db)
     if not send_verification_email(current_user.email, current_user.name, token):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="We couldn't send the email right now. Please try again in a minute.",
-        )
+        raise api_error(status.HTTP_502_BAD_GATEWAY, "email_send_failed", "We couldn't send the email right now. Please try again in a minute.")
 
     return {"message": f"Verification email sent to {current_user.email}"}
 
@@ -60,19 +52,13 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     token = request.cookies.get("refresh_token")
     
     if token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token missing",
-        )
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Refresh token missing")
     
     hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
     db_token = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed_token).first()
     
     if db_token is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-        )
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Invalid refresh token")
     
     current_time = datetime.now(timezone.utc)
     db_expires_at = db_token.expires_at
@@ -80,10 +66,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
     if current_time >= db_expires_at:
         db.delete(db_token)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has expired",
-        )
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Refresh token has expired")
     
     # A replaced token coming back means it was copied: end every session (30s grace for two tabs).
     if db_token.revoked_at is not None:
@@ -94,25 +77,16 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         db.commit()
         clear_auth_cookies(response)
         print(f"[AUTH] reused refresh token for user_id={db_token.user_id} - all sessions revoked")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Your session has ended for security reasons. Please sign in again.",
-        )
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "session_ended", "Your session has ended for security reasons. Please sign in again.")
 
     user = db.query(User).filter(User.id == db_token.user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User associated with token not found",
-        )
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "User associated with token not found")
 
     if not user.is_active:
         db.delete(db_token)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive",
-        )
+        raise api_error(status.HTTP_403_FORBIDDEN, "account_inactive", "Account is inactive")
 
     db_token.revoked_at = current_time
     
@@ -144,14 +118,14 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.verification_token_hash == hashed_token).first()
     
     if db_user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail = "Invalid verification token")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "verify_invalid", "Invalid verification token")
 
     if db_user.is_verified:
         return {"message": "Email verified successfully"}
 
     current_time = datetime.now(timezone.utc)
     if db_user.verification_token_expires_at is None or current_time >= db_user.verification_token_expires_at:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification token has expired")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "verify_expired", "Verification token has expired")
 
     db_user.is_verified=True
 
@@ -159,7 +133,7 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to verify account")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to verify account")
     
     return {"message": "Email verified successfully"}
 
@@ -197,17 +171,11 @@ def reset_password(body: ResetPassword, response: Response, db: Session = Depend
     db_user = db.query(User).filter(User.password_reset_token_hash == hashed_token).first()
 
     if db_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This reset link is invalid or has already been used",
-        )
+        raise api_error(status.HTTP_400_BAD_REQUEST, "reset_invalid", "This reset link is invalid or has already been used")
 
     current_time = datetime.now(timezone.utc)
     if db_user.password_reset_expires_at is None or current_time >= db_user.password_reset_expires_at:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This reset link has expired. Please request a new one.",
-        )
+        raise api_error(status.HTTP_400_BAD_REQUEST, "reset_expired", "This reset link has expired. Please request a new one.")
 
     db_user.password = hash_password(body.new_password)
 
@@ -224,7 +192,7 @@ def reset_password(body: ResetPassword, response: Response, db: Session = Depend
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to reset password")
 
     clear_auth_cookies(response)
 

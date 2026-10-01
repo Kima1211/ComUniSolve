@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
+import { useLanguage } from "../i18n/language-context";
 import AuthLayout from "./AuthLayout";
 
 const inputClass =
@@ -13,10 +14,11 @@ const inputClass =
 function ResetPassword() {
     const { token } = useParams()
     const { refreshUser } = useAuth()
+    const { t, errorText } = useLanguage()
 
     const [password, setPassword] = useState("")
     const [confirm, setConfirm] = useState("")
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
     const [done, setDone] = useState(false)
     const [submitting, setSubmitting] = useState(false)
 
@@ -24,12 +26,12 @@ function ResetPassword() {
         e.preventDefault()
 
         if (password !== confirm) {
-            setError("The two passwords don't match.")
+            setError({ key: "reset.mismatch" })
             return
         }
 
         try {
-            setError("")
+            setError(null)
             setSubmitting(true)
 
             await apiPost("/reset-password", { token: token, new_password: password })
@@ -37,7 +39,7 @@ function ResetPassword() {
             await refreshUser()
             setDone(true)
         } catch (e) {
-            setError(e.message || "Something went wrong! Please try again.")
+            setError(e)
         } finally {
             setSubmitting(false)
         }
@@ -45,12 +47,12 @@ function ResetPassword() {
 
     if (done) {
         return (
-            <AuthLayout title="Password updated" subtitle="Your password has been reset. You've been signed out of every device.">
+            <AuthLayout title={t("reset.doneTitle")} subtitle={t("reset.doneSubtitle")}>
                 <Link
                     to="/login"
                     className="block w-full rounded-lg bg-brand-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-brand-700"
                 >
-                    Sign in with your new password
+                    {t("reset.signInNew")}
                 </Link>
             </AuthLayout>
         )
@@ -58,13 +60,13 @@ function ResetPassword() {
 
     return (
         <AuthLayout
-            title="Choose a new password"
-            subtitle="This link works once and expires 30 minutes after it was sent."
+            title={t("reset.title")}
+            subtitle={t("reset.subtitle")}
             footer={
                 <>
-                    Link not working?{" "}
+                    {t("reset.notWorking")}{" "}
                     <Link to="/forgot-password" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
-                        Request a new one
+                        {t("reset.requestNew")}
                     </Link>
                 </>
             }
@@ -72,30 +74,30 @@ function ResetPassword() {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                     <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-                        New password
+                        {t("reset.newPassword")}
                     </label>
                     <input
                         id="password"
                         type="password"
                         autoComplete="new-password"
-                        placeholder="At least 8 characters"
+                        placeholder={t("auth.newPasswordPlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
-                    <p className="mt-1 text-xs text-slate-500">Must be at least 8 characters.</p>
+                    <p className="mt-1 text-xs text-slate-500">{t("auth.passwordHint")}</p>
                 </div>
 
                 <div>
                     <label htmlFor="confirm" className="block text-sm font-medium text-slate-700 mb-1">
-                        Confirm new password
+                        {t("reset.confirm")}
                     </label>
                     <input
                         id="confirm"
                         type="password"
                         autoComplete="new-password"
-                        placeholder="Type it again"
+                        placeholder={t("reset.confirmPlaceholder")}
                         className={inputClass}
                         disabled={submitting}
                         value={confirm}
@@ -105,7 +107,7 @@ function ResetPassword() {
 
                 {error && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {error}
+                        {errorText(error)}
                     </div>
                 )}
 
@@ -116,7 +118,7 @@ function ResetPassword() {
                                hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
                                disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                    {submitting ? "Saving..." : "Reset password"}
+                    {submitting ? t("reset.saving") : t("reset.submit")}
                 </button>
             </form>
         </AuthLayout>

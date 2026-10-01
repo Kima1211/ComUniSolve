@@ -2,12 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import { useAuth } from "../auth-context";
+import { useLanguage } from "../i18n/language-context";
 import Layout, { TierBadge } from "./Layout";
 import { InstallSection } from "./InstallButton";
-
-function formatDate(value) {
-    return value ? new Date(value).toLocaleDateString() : ""
-}
 
 function Stat({ label, value }) {
     return (
@@ -22,24 +19,25 @@ function Stat({ label, value }) {
 function UserProfile({ own = false }) {
     const params = useParams()
     const { user } = useAuth()
+    const { t, label, formatDate, errorText } = useLanguage()
     const userId = own ? user?.id : params.id
 
     // Remembers which id the result is for, so switching profiles shows loading instead of the old one.
-    const [result, setResult] = useState({ id: null, profile: null, error: "" })
+    const [result, setResult] = useState({ id: null, profile: null, error: null })
     const loading = String(result.id) !== String(userId)
     const { profile, error } = result
 
-    const [resetMessage, setResetMessage] = useState("")
-    const [resetError, setResetError] = useState("")
+    const [resetSent, setResetSent] = useState(false)
+    const [resetError, setResetError] = useState(null)
     const [sendingReset, setSendingReset] = useState(false)
 
     useEffect(() => {
         if (!userId) return
         let cancelled = false
         apiGet(`/users/${userId}/profile`)
-            .then((data) => { if (!cancelled) setResult({ id: userId, profile: data, error: "" }) })
+            .then((data) => { if (!cancelled) setResult({ id: userId, profile: data, error: null }) })
             .catch((e) => {
-                if (!cancelled) setResult({ id: userId, profile: null, error: e.message || "Something went wrong" })
+                if (!cancelled) setResult({ id: userId, profile: null, error: e })
             })
         return () => { cancelled = true }
     }, [userId])
@@ -47,13 +45,13 @@ function UserProfile({ own = false }) {
     // Reuses the forgot-password flow, so changing a password also ends every other session.
     async function handleChangePassword() {
         try {
-            setResetError("")
-            setResetMessage("")
+            setResetError(null)
+            setResetSent(false)
             setSendingReset(true)
-            const data = await apiPost("/forgot-password", { email: user.email })
-            setResetMessage(data.message)
+            await apiPost("/forgot-password", { email: user.email })
+            setResetSent(true)
         } catch (e) {
-            setResetError(e.message || "Something went wrong! Please try again.")
+            setResetError(e)
         } finally {
             setSendingReset(false)
         }
@@ -71,7 +69,7 @@ function UserProfile({ own = false }) {
         return (
             <Layout>
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {error || "User not found"}
+                    {error ? errorText(error, "profile.notFound") : t("profile.notFound")}
                 </div>
             </Layout>
         )
@@ -85,13 +83,13 @@ function UserProfile({ own = false }) {
                     <TierBadge tier={profile.tier} />
                 </div>
                 <p className="mt-1 text-sm text-slate-500">
-                    {profile.points} points · Joined {formatDate(profile.created_at)}
+                    {t("profile.pointsJoined", { points: profile.points, date: formatDate(profile.created_at) })}
                 </p>
 
                 {own && (
                     <div className="mt-4 border-t border-slate-100 pt-4">
                         <p className="text-sm text-slate-600">
-                            Email: <span className="font-medium text-slate-900">{user.email}</span>
+                            {t("profile.email")} <span className="font-medium text-slate-900">{user.email}</span>
                         </p>
                         <button
                             type="button"
@@ -100,30 +98,30 @@ function UserProfile({ own = false }) {
                             className="mt-3 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700
                                        hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
                         >
-                            {sendingReset ? "Sending..." : "Change password"}
+                            {sendingReset ? t("common.sending") : t("profile.changePassword")}
                         </button>
-                        {resetMessage && (
+                        {resetSent && (
                             <p className="mt-2 text-sm text-emerald-700">
-                                {resetMessage} Check your spam folder too.
+                                {t("forgot.sent")} {t("common.checkSpam")}
                             </p>
                         )}
-                        {resetError && <p className="mt-2 text-sm text-red-700">{resetError}</p>}
+                        {resetError && <p className="mt-2 text-sm text-red-700">{errorText(resetError)}</p>}
                     </div>
                 )}
 
                 {own && <InstallSection />}
 
                 <div className="mt-5 grid grid-cols-3 gap-3">
-                    <Stat label="Problems" value={profile.problem_count} />
-                    <Stat label="Solutions" value={profile.solution_count} />
-                    <Stat label="Accepted" value={profile.accepted_count} />
+                    <Stat label={t("profile.statProblems")} value={profile.problem_count} />
+                    <Stat label={t("profile.statSolutions")} value={profile.solution_count} />
+                    <Stat label={t("profile.statAccepted")} value={profile.accepted_count} />
                 </div>
             </section>
 
             <section className="mt-6">
-                <h2 className="font-semibold text-slate-900">Problems</h2>
+                <h2 className="font-semibold text-slate-900">{t("profile.problems")}</h2>
                 {profile.problems.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-500">No problems posted yet.</p>
+                    <p className="mt-2 text-sm text-slate-500">{t("profile.noProblems")}</p>
                 ) : (
                     <div className="mt-2 space-y-2">
                         {profile.problems.map((p) => (
@@ -134,7 +132,7 @@ function UserProfile({ own = false }) {
                             >
                                 <p className="font-medium text-slate-900">{p.title}</p>
                                 <p className="mt-1 text-xs text-slate-500">
-                                    {p.category} · {p.status === "resolved" ? "Resolved" : "Open"} · {formatDate(p.created_at)}
+                                    {label("category", p.category)} · {p.status === "resolved" ? t("common.resolved") : t("common.open")} · {formatDate(p.created_at)}
                                 </p>
                             </Link>
                         ))}
@@ -143,9 +141,9 @@ function UserProfile({ own = false }) {
             </section>
 
             <section className="mt-6">
-                <h2 className="font-semibold text-slate-900">Solutions</h2>
+                <h2 className="font-semibold text-slate-900">{t("profile.solutions")}</h2>
                 {profile.solutions.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-500">No solutions submitted yet.</p>
+                    <p className="mt-2 text-sm text-slate-500">{t("profile.noSolutions")}</p>
                 ) : (
                     <div className="mt-2 space-y-2">
                         {profile.solutions.map((s) => (
@@ -155,10 +153,10 @@ function UserProfile({ own = false }) {
                                 className="block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-brand-300"
                             >
                                 <p className="text-xs text-slate-500">
-                                    On: <span className="font-medium text-slate-700">{s.problem_title}</span>
+                                    {t("profile.on")} <span className="font-medium text-slate-700">{s.problem_title}</span>
                                     {s.status === "accepted" && (
                                         <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">
-                                            Accepted
+                                            {t("profile.accepted")}
                                         </span>
                                     )}
                                 </p>

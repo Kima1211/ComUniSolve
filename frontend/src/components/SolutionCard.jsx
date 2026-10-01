@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { apiDelete, apiGet, apiPost, apiPatch } from "../api";
+import { useLanguage } from "../i18n/language-context";
 import { TierBadge } from "./Layout";
 import ReportButton from "./ReportButton";
 import ModerationNotice from "./ModerationNotice";
@@ -8,21 +9,22 @@ import Stars from "./Stars";
 import AiCheckStatus from "./AiCheckStatus";
 
 function CommentItem({ comment, currentUser, onChanged }) {
+    const { t, errorText } = useLanguage()
     const [editing, setEditing] = useState(false)
     const [text, setText] = useState(comment.content)
     const [busy, setBusy] = useState(false)
-    const [error, setError] = useState("")
+    const [error, setError] = useState(null)
 
     const isAuthor = currentUser && currentUser.id === comment.user_id
 
     async function run(action) {
         try {
-            setError("")
+            setError(null)
             setBusy(true)
             await action()
             await onChanged()
         } catch (e) {
-            setError(e.message || "Something went wrong")
+            setError(e)
         } finally {
             setBusy(false)
         }
@@ -38,7 +40,7 @@ function CommentItem({ comment, currentUser, onChanged }) {
     }
 
     function remove() {
-        if (!window.confirm("Delete this comment?")) return
+        if (!window.confirm(t("comment.confirmDelete"))) return
         run(() => apiDelete(`/comments/${comment.id}`))
     }
 
@@ -48,9 +50,9 @@ function CommentItem({ comment, currentUser, onChanged }) {
                 <p className="text-xs font-semibold text-slate-700">
                     {comment.author ? (
                         <Link to={`/users/${comment.author.id}`} className="hover:underline">{comment.author.name}</Link>
-                    ) : "Unknown"}
+                    ) : t("common.unknown")}
                 </p>
-                {comment.edited_at && <span className="text-xs text-slate-400">edited</span>}
+                {comment.edited_at && <span className="text-xs text-slate-400">{t("common.edited")}</span>}
                 {currentUser && !isAuthor && (
                     <div className="ml-auto">
                         <ReportButton commentId={comment.id} />
@@ -59,10 +61,10 @@ function CommentItem({ comment, currentUser, onChanged }) {
                 {isAuthor && !editing && (
                     <div className="ml-auto flex gap-2 text-xs">
                         <button type="button" onClick={() => setEditing(true)} className="text-slate-500 hover:text-slate-900">
-                            Edit
+                            {t("common.edit")}
                         </button>
                         <button type="button" onClick={remove} disabled={busy} className="text-red-600 hover:text-red-800">
-                            Delete
+                            {t("common.delete")}
                         </button>
                     </div>
                 )}
@@ -78,27 +80,28 @@ function CommentItem({ comment, currentUser, onChanged }) {
                         className="flex-1 rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-brand-500"
                     />
                     <button type="submit" disabled={busy || !text.trim()} className="text-xs font-medium text-brand-700 disabled:opacity-40">
-                        Save
+                        {t("common.save")}
                     </button>
                     <button
                         type="button"
                         onClick={() => { setEditing(false); setText(comment.content) }}
                         className="text-xs text-slate-500"
                     >
-                        Cancel
+                        {t("common.cancel")}
                     </button>
                 </form>
             ) : (
                 <p className="text-sm text-slate-700">{comment.content}</p>
             )}
 
-            {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+            {error && <p className="mt-1 text-xs text-red-700">{errorText(error)}</p>}
         </div>
     )
 }
 
 function SolutionCard({ solution, problem, currentUser, onChanged }) {
-    const [error, setError] = useState("")
+    const { t, errorText } = useLanguage()
+    const [error, setError] = useState(null)
     const [busy, setBusy] = useState(false)
 
     const [comments, setComments] = useState(null)
@@ -118,12 +121,12 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
 
     async function run(action) {
         try {
-            setError("")
+            setError(null)
             setBusy(true)
             await action()
             onChanged()
         } catch (e) {
-            setError(e.message || "Something went wrong")
+            setError(e)
         } finally {
             setBusy(false)
         }
@@ -131,7 +134,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
 
     async function saveEdit(acknowledged) {
         try {
-            setError("")
+            setError(null)
             setEditGate(null)
             setBusy(true)
             await apiPatch(`/solutions/${solution.id}`, { solution_text: editText, acknowledged })
@@ -143,7 +146,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                 setEditGate(e.detail)
                 return
             }
-            setError(e.message || "Could not save your changes")
+            setError(e)
         } finally {
             setBusy(false)
         }
@@ -156,7 +159,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
     }
 
     function deleteSolution() {
-        if (!window.confirm("Delete this solution? The points it earned you will be taken back.")) return
+        if (!window.confirm(t("solution.confirmDelete"))) return
         run(() => apiDelete(`/solutions/${solution.id}`))
     }
 
@@ -172,7 +175,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
         try {
             setComments(await apiGet(`/solutions/${solution.id}/comments`))
         } catch (e) {
-            setError(e.message || "Could not load comments")
+            setError(e)
         }
     }
 
@@ -185,7 +188,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
             setCommentText("")
             await reloadComments()
         } catch (e) {
-            setError(e.message || "Could not post comment")
+            setError(e)
         } finally {
             setBusy(false)
         }
@@ -200,12 +203,12 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
             {isAccepted && (
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                     <p className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                        Accepted solution
+                        {t("solution.accepted")}
                     </p>
                     {solution.rating && (
                         <p className="flex items-center gap-1.5 text-xs text-slate-500">
                             <Stars value={solution.rating} className="text-base" />
-                            rated by the poster
+                            {t("solution.ratedByPoster")}
                         </p>
                     )}
                 </div>
@@ -217,10 +220,10 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                         {solution.author.name}
                     </Link>
                 ) : (
-                    <span className="text-sm font-semibold text-slate-900">Unknown</span>
+                    <span className="text-sm font-semibold text-slate-900">{t("common.unknown")}</span>
                 )}
                 {solution.author && <TierBadge tier={solution.author.tier} />}
-                {solution.edited_at && <span className="text-xs text-slate-400">edited</span>}
+                {solution.edited_at && <span className="text-xs text-slate-400">{t("common.edited")}</span>}
                 {isAuthor && !editing && (
                     <div className="ml-auto flex gap-2">
                         <button
@@ -228,7 +231,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             onClick={() => setEditing(true)}
                             className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                         >
-                            Edit
+                            {t("common.edit")}
                         </button>
                         {!isAccepted && (
                             <button
@@ -237,7 +240,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                                 disabled={busy}
                                 className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                             >
-                                Delete
+                                {t("common.delete")}
                             </button>
                         )}
                     </div>
@@ -266,7 +269,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     )}
                     {busy && (
                         <div className="mt-2">
-                            <AiCheckStatus message="Checking your changes with AI for clarity and safety. This takes a few seconds..." />
+                            <AiCheckStatus message={t("aiCheck.edit")} />
                         </div>
                     )}
                     <div className="mt-2 flex gap-2">
@@ -276,7 +279,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             disabled={busy || !editText.trim()}
                             className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:bg-slate-300"
                         >
-                            {busy ? "Checking..." : "Save changes"}
+                            {busy ? t("common.checking") : t("common.saveChanges")}
                         </button>
                         <button
                             type="button"
@@ -284,7 +287,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             disabled={busy}
                             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                         >
-                            Cancel
+                            {t("common.cancel")}
                         </button>
                     </div>
                 </div>
@@ -303,7 +306,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             ? "border-brand-500 bg-brand-50 text-brand-700"
                             : "border-slate-300 text-slate-700 hover:border-brand-400 hover:text-brand-700"
                     }`}
-                    title={!signedIn ? "Sign in to upvote" : solution.upvoted ? "Remove your upvote" : "Upvote this solution"}
+                    title={!signedIn ? t("solution.signInToUpvote") : solution.upvoted ? t("solution.removeUpvote") : t("solution.upvote")}
                 >
                     ▲ {solution.upvote_count}
                 </button>
@@ -316,7 +319,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             onClick={() => run(() => apiPatch(`/solutions/${solution.id}/unaccept`))}
                             className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
                         >
-                            Un-accept
+                            {t("solution.unaccept")}
                         </button>
                     ) : (
                         <button
@@ -331,7 +334,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                             }
                             className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-40"
                         >
-                            Accept
+                            {t("solution.accept")}
                         </button>
                     )
                 )}
@@ -342,7 +345,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                         onClick={() => setRatingOpen((v) => !v)}
                         className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
-                        {solution.rating ? "Change rating" : "Rate"}
+                        {solution.rating ? t("solution.changeRating") : t("solution.rate")}
                     </button>
                 )}
 
@@ -351,7 +354,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     onClick={toggleComments}
                     className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-900"
                 >
-                    {comments === null ? "Comments" : "Hide comments"}
+                    {comments === null ? t("solution.comments") : t("solution.hideComments")}
                 </button>
 
                 {signedIn && currentUser?.id !== solution.user_id && (
@@ -363,7 +366,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
 
             {ratingOpen && canRate && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <span className="text-sm text-amber-900">How well did this work? (optional)</span>
+                    <span className="text-sm text-amber-900">{t("solution.howWell")}</span>
                     <div className="flex">
                         {[1, 2, 3, 4, 5].map((score) => (
                             <button
@@ -376,7 +379,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                                         setRatingOpen(false)
                                     })
                                 }
-                                title={`${score} out of 5 stars`}
+                                title={t("common.stars", { count: score })}
                                 className={`px-0.5 text-2xl leading-none hover:scale-110 disabled:opacity-40 ${
                                     score <= (solution.rating || 0) ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
                                 }`}
@@ -390,21 +393,21 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                         onClick={() => setRatingOpen(false)}
                         className="ml-auto text-xs font-medium text-amber-900 underline underline-offset-2"
                     >
-                        Later
+                        {t("solution.later")}
                     </button>
                 </div>
             )}
 
             {error && (
                 <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {error}
+                    {errorText(error)}
                 </p>
             )}
 
             {comments !== null && (
                 <div className="mt-4 border-t border-slate-100 pt-4">
                     {comments.length === 0 && (
-                        <p className="text-sm text-slate-500">No comments yet.</p>
+                        <p className="text-sm text-slate-500">{t("solution.noComments")}</p>
                     )}
                     <div className="space-y-3">
                         {comments.map((c) => (
@@ -418,7 +421,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                                 type="text"
                                 value={commentText}
                                 onChange={(e) => setCommentText(e.target.value)}
-                                placeholder="Add a comment"
+                                placeholder={t("solution.addComment")}
                                 className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
                             />
                             <button
@@ -426,7 +429,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                                 disabled={busy}
                                 className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-40"
                             >
-                                Send
+                                {t("solution.send")}
                             </button>
                         </form>
                     )}

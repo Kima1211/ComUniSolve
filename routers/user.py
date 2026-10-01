@@ -19,6 +19,7 @@ from Security.rate_limit import (
     client_ip,
     enforce,
 )
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -29,7 +30,7 @@ def reg_body(register: Register, request: Request, response: Response, db: Sessi
 
     existing = db.query(user.User).filter(user.User.email == register.email).first()
     if existing: 
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Email already exist")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "email_taken", "Email already exist")
     
     hashed = hash_password(register.password)
 
@@ -45,7 +46,7 @@ def reg_body(register: Register, request: Request, response: Response, db: Sessi
         
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to register")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to register")
     
     issue_auth_cookie(response,new_user)
     issue_refresh_token(response, new_user,db)
@@ -69,17 +70,13 @@ def login(login: Login, request: Request, response: Response,db: Session = Depen
 
     email_key = login.email.strip().lower()
     if LOGIN_FAILURES_PER_EMAIL.is_blocked(email_key):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed attempts for this email. Please wait 15 minutes, or reset your password.")
+        raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "login_locked", "Too many failed attempts for this email. Please wait 15 minutes, or reset your password.", {"minutes": 15})
 
     val_user = db.query(user.User).filter(user.User.email == login.email).first()
 
     if not val_user or not verify_password(login.password, val_user.password):
         LOGIN_FAILURES_PER_EMAIL.hit(email_key)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password")
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "invalid_login", "Invalid email or password")
 
     LOGIN_FAILURES_PER_EMAIL.reset(email_key)
 
@@ -112,7 +109,7 @@ def get_profile(current_user: user.User = Depends(get_current_user)):
 def get_public_profile(user_id: int, db: Session = Depends(get_db)):
     fnd_user = db.query(user.User).filter(user.User.id == user_id, user.User.is_active).first()
     if not fnd_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "User not found")
 
     problems = (
         db.query(problem.Problem)
@@ -170,17 +167,17 @@ def user_delete(user_id: int , user_del: DeleteUser, db: Session = Depends(get_d
     find_id = db.query(user.User).filter(user.User.id == user_id).first()
     
     if not find_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "User not found")
     if user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current User doesnt belong to this ID")
+        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "Current User doesnt belong to this ID")
     if not verify_password(user_del.user_password, find_id.password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Password doesn't match")
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "wrong_password", "Password doesn't match")
 
     try:
         db.delete(find_id)
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to delete user")
     
     return{"message": "Account deleted successfully"}

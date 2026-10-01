@@ -66,3 +66,16 @@ libreng load
 free load
 earn money fast
 click this link
+
+# Getting into someone else's account (Technology sector). Flag only: victims asking
+# for help ("na-hack ang account ko") must still be able to post. The AI blocks the real requests;
+# these catch them when the AI is down.
+i-hack
+mag-hack
+hack into
+bypass otp
+bypass the otp
+makuha ang password
+get her password
+get his password
+phishing link

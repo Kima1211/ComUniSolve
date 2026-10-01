@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "../api";
+import { useLanguage } from "../i18n/language-context";
 
-const HOW_IT_WORKS = [
-    { title: "Post a problem", body: "Describe something your community is dealing with." },
-    { title: "Get real solutions", body: "Neighbours answer, and the best answer gets accepted." },
-    { title: "Build reputation", body: "Helpful members earn points and recognised titles." },
-]
+const HOW_IT_WORKS = [1, 2, 3]
 
 function CommunityPreview() {
+    const { t, label } = useLanguage()
     const [problems, setProblems] = useState([])
 
     useEffect(() => {
@@ -29,17 +27,14 @@ function CommunityPreview() {
         <div className="hidden lg:flex flex-col justify-center bg-gradient-to-br from-brand-700 to-brand-900 px-12 py-16 text-white">
             <div className="max-w-md">
                 <h2 className="text-3xl font-bold leading-tight">
-                    Community problems,<br />community solutions.
+                    {t("preview.headline1")}<br />{t("preview.headline2")}
                 </h2>
-                <p className="mt-4 text-brand-100">
-                    A place for neighbours to ask for help with everyday problems —
-                    and for the people who know the answer to share it.
-                </p>
+                <p className="mt-4 text-brand-100">{t("preview.body")}</p>
 
                 {problems.length > 0 ? (
                     <div className="mt-10">
                         <p className="text-xs font-semibold uppercase tracking-wider text-brand-200">
-                            Recently posted
+                            {t("preview.recent")}
                         </p>
                         <div className="mt-4 space-y-3">
                             {problems.map((problem) => (
@@ -50,7 +45,7 @@ function CommunityPreview() {
                                     <div className="flex items-start justify-between gap-3">
                                         <h3 className="font-semibold text-white">{problem.title}</h3>
                                         <span className="shrink-0 rounded-full bg-white/15 px-2.5 py-0.5 text-xs text-brand-50">
-                                            {problem.category}
+                                            {label("category", problem.category)}
                                         </span>
                                     </div>
                                     {problem.description && (
@@ -64,14 +59,14 @@ function CommunityPreview() {
                     </div>
                 ) : (
                     <div className="mt-10 space-y-5">
-                        {HOW_IT_WORKS.map((step, index) => (
-                            <div key={step.title} className="flex gap-4">
+                        {HOW_IT_WORKS.map((step) => (
+                            <div key={step} className="flex gap-4">
                                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-semibold">
-                                    {index + 1}
+                                    {step}
                                 </span>
                                 <div>
-                                    <p className="font-semibold">{step.title}</p>
-                                    <p className="text-sm text-brand-100">{step.body}</p>
+                                    <p className="font-semibold">{t(`preview.step${step}Title`)}</p>
+                                    <p className="text-sm text-brand-100">{t(`preview.step${step}Body`)}</p>
                                 </div>
                             </div>
                         ))}

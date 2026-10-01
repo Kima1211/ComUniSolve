@@ -10,6 +10,7 @@ from Security.utils import get_current_user, get_verified_user, get_active_poste
 from Models import problem, user, solution
 from Services.moderation import run_pre_post_gate
 from Services import images
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -17,6 +18,7 @@ router = APIRouter()
 def _gate_to_response(result) -> dict:
     return ContentCheckResponse(
         verdict=result.verdict,
+        code=result.code,
         blocked=result.blocked,
         acknowledgeable=result.acknowledgeable,
         message=result.message,
@@ -76,10 +78,7 @@ def get_problem(problem_id: int, db: Session = Depends(get_db)):
     fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
 
     if not fnd_prob:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Problem with id {problem_id} not found"
-    )
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", f"Problem with id {problem_id} not found")
     _attach_solution_counts([fnd_prob], db)
     return fnd_prob
 
@@ -115,7 +114,7 @@ def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_u
         db.refresh(new_problem)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit problem")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to submit problem")
         
     return {
     "id": new_problem.id,
@@ -136,35 +135,35 @@ def upload_problem_image(
     current_user: user.User = Depends(get_active_poster),
 ):
     if not images.is_configured():
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Image upload is not available right now")
+        raise api_error(status.HTTP_503_SERVICE_UNAVAILABLE, "image_unavailable", "Image upload is not available right now")
 
     fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
     if not fnd_prob:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Problem with id {problem_id} not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", f"Problem with id {problem_id} not found")
 
     if fnd_prob.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only add an image to your own problem")
+        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only add an image to your own problem")
 
     if fnd_prob.image_url:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This problem already has an image")
+        raise api_error(status.HTTP_409_CONFLICT, "image_exists", "This problem already has an image")
 
     data = image.file.read(images.MAX_IMAGE_BYTES + 1)
     if len(data) > images.MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image must be 5 MB or smaller")
+        raise api_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "image_too_large", "Image must be 5 MB or smaller")
 
     if images.detect_image_type(data) is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image must be a JPG, PNG or WebP file")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "image_type", "Image must be a JPG, PNG or WebP file")
 
     url = images.upload_image(data, image.filename or "image")
     if url is None:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not upload the image. Please try again.")
+        raise api_error(status.HTTP_502_BAD_GATEWAY, "image_upload_failed", "Could not upload the image. Please try again.")
 
     fnd_prob.image_url = url
     try:
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save the image")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to save the image")
 
     return {"image_url": url}
 
@@ -172,9 +171,9 @@ def upload_problem_image(
 def _own_problem(problem_id: int, db: Session, current_user):
     fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
     if not fnd_prob:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Problem with id {problem_id} not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", f"Problem with id {problem_id} not found")
     if fnd_prob.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only change your own problem")
+        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only change your own problem")
     return fnd_prob
 
 
@@ -213,7 +212,7 @@ def edit_problem(
         db.refresh(fnd_prob)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update problem")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update problem")
 
     _attach_solution_counts([fnd_prob], db)
     return fnd_prob
@@ -233,6 +232,6 @@ def delete_problem(
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete problem")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to delete problem")
 
     return {"message": "Problem deleted"}

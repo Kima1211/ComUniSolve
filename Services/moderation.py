@@ -25,6 +25,7 @@ class GateResult:
     blocked: bool = False
     acknowledgeable: bool = False
     verdict: str = "unchecked"
+    code: Optional[str] = None
     moderation_status: str = "visible"
     message: Optional[str] = None
     suggestion: Optional[str] = None
@@ -42,6 +43,7 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
             blocked=True,
             acknowledgeable=False,
             verdict="unchecked",
+            code="keyword_blocked",
             message=(
                 f"Your post cannot be submitted because it contains: {terms}. "
                 "Please remove it and post again."
@@ -73,6 +75,7 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
             blocked=True,
             acknowledgeable=False,
             verdict="inappropriate",
+            code="ai_inappropriate",
             message=ai["reason"] or "This post looks inappropriate for the platform.",
             suggestion=ai["suggestion"],
             matched_terms=keywords.flagged,
@@ -84,6 +87,7 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
                 blocked=True,
                 acknowledgeable=True,
                 verdict="unclear",
+                code="ai_unclear",
                 message=ai["reason"] or "This post may be too vague for others to act on.",
                 suggestion=ai["suggestion"],
                 matched_terms=keywords.flagged,

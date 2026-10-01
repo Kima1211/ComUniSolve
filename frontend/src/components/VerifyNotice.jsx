@@ -2,18 +2,17 @@ import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
+import { useLanguage } from "../i18n/language-context";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 function VerifyNotice() {
     const { user, loading, refreshUser, logout } = useAuth()
+    const { t, errorText } = useLanguage()
     const navigate = useNavigate()
     const location = useLocation()
 
-    const [message, setMessage] = useState("")
-    const [error, setError] = useState(
-        location.state?.emailFailed
-            ? "We couldn't send your verification email. Please use the resend button below."
-            : ""
-    )
+    const [sent, setSent] = useState(false)
+    const [error, setError] = useState(location.state?.emailFailed ? { key: "notice.emailFailed" } : null)
     const [sending, setSending] = useState(false)
     const [cooldown, setCooldown] = useState(0)
 
@@ -41,11 +40,11 @@ function VerifyNotice() {
 
     async function handleResend() {
         try {
-            setError(""); setMessage(""); setSending(true)
-            const data = await apiPost("/resend-verification")
-            setMessage(data.message || "Verification email sent.")
+            setError(null); setSent(false); setSending(true)
+            await apiPost("/resend-verification")
+            setSent(true)
         } catch (e) {
-            setError(e.message || "Could not send the email. Please try again.")
+            setError(e)
         } finally {
             setSending(false)
         }
@@ -59,28 +58,28 @@ function VerifyNotice() {
     return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
             <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center">
+                <div className="flex justify-end">
+                    <LanguageSwitcher />
+                </div>
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-xl text-brand-700">
                     ✉
                 </div>
 
-                <h1 className="mt-5 text-xl font-bold text-slate-900">Verify your email</h1>
+                <h1 className="mt-5 text-xl font-bold text-slate-900">{t("notice.title")}</h1>
                 <p className="mt-2 text-sm text-slate-600">
-                    We sent a verification link to<br />
+                    {t("notice.sentTo")}<br />
                     <span className="font-medium text-slate-900">{user.email}</span>
                 </p>
-                <p className="mt-3 text-sm text-slate-500">
-                    Click the link to activate your account. This page will continue
-                    automatically once you do.
-                </p>
+                <p className="mt-3 text-sm text-slate-500">{t("notice.clickLink")}</p>
 
-                {message && (
+                {sent && (
                     <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                        {message}
+                        {t("notice.sent")}
                     </p>
                 )}
                 {error && (
                     <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {error}
+                        {errorText(error)}
                     </p>
                 )}
 
@@ -92,22 +91,20 @@ function VerifyNotice() {
                                hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                     {sending
-                        ? "Sending..."
+                        ? t("common.sending")
                         : cooldown > 0
-                            ? `Resend available in ${cooldown}s`
-                            : "Resend the email"}
+                            ? t("notice.resendIn", { seconds: cooldown })
+                            : t("notice.resend")}
                 </button>
 
-                <p className="mt-4 text-xs text-slate-500">
-                    Check your spam folder too — it can take a few minutes to arrive.
-                </p>
+                <p className="mt-4 text-xs text-slate-500">{t("notice.spam")}</p>
 
                 <button
                     type="button"
                     onClick={handleLogout}
                     className="mt-6 text-sm font-medium text-slate-500 hover:text-slate-900"
                 >
-                    Log out
+                    {t("nav.logout")}
                 </button>
             </div>
         </div>

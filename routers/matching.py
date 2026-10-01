@@ -12,6 +12,7 @@ from Services.matching import find_similar, build_candidate_pool, SIMILARITY_THR
 from Services import gemini
 from Services.ai_suggestion import generate_suggestion
 from Services.rating import poster_ratings
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -136,7 +137,7 @@ def match_with_ai(body: MatchRequest, db: Session = Depends(get_db)):
 def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
     fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
     if not fnd:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     matches, ai_used = _build_matches(
         fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=AUTO_AI_ON_DETAIL
@@ -148,7 +149,7 @@ def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
 def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
     fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
     if not fnd:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     matches, ai_used = _build_matches(
         fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True
@@ -169,7 +170,7 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
         .first()
     )
     if not fnd:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     # A real answer always replaces the AI one. The stored suggestion is kept,
     # so it comes back if every community solution is later removed.

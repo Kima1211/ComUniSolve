@@ -7,6 +7,7 @@ from Models import user,solution,comment
 from Schemas.comment import CommentIn, CommentEdit, CommentResponse
 from Schemas.moderation import ContentCheckResponse
 from Services.moderation import run_pre_post_gate
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ def _check_comment(text: str):
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=ContentCheckResponse(
                 verdict=gate.verdict,
+                code=gate.code,
                 blocked=gate.blocked,
                 acknowledgeable=gate.acknowledgeable,
                 message=gate.message,
@@ -38,7 +40,7 @@ def get_comments(solution_id: int, db: Session = Depends(get_db)):
         solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
     ).first()
     if not fnd_solution:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
 
     return (
         _live_comments(db.query(comment.Comment))
@@ -53,20 +55,16 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
         solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
     ).first()
     if not fnd_solution:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Solution Not Found!")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution Not Found!")
     
     if create_comm.parent_id is not None:
         parent_comment = _live_comments(db.query(comment.Comment)).filter(
             comment.Comment.id == create_comm.parent_id
         ).first()
         if not parent_comment:
-            raise HTTPException(
-                status_code=404, 
-                detail="Parent comment not found")
+            raise api_error(404, "not_found", "Parent comment not found")
         if parent_comment.parent_id is not None:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot reply to a reply, only one level of replies allowed")
+            raise api_error(400, "reply_depth", "Cannot reply to a reply, only one level of replies allowed")
     
         
     gate = _check_comment(create_comm.content)
@@ -84,7 +82,7 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
         db.refresh(new_comment)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail ="Failed to submit comment")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to submit comment")
     
     return new_comment
 
@@ -92,9 +90,9 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
 def _own_comment(comment_id: int, db: Session, current_user):
     fnd_comment = _live_comments(db.query(comment.Comment)).filter(comment.Comment.id == comment_id).first()
     if not fnd_comment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Comment not found")
     if fnd_comment.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only change your own comment")
+        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only change your own comment")
     return fnd_comment
 
 
@@ -113,7 +111,7 @@ def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_d
         db.refresh(fnd_comment)
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update comment")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update comment")
 
     return fnd_comment
 
@@ -127,6 +125,6 @@ def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user:
         db.commit()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete comment")
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to delete comment")
 
     return {"message": "Comment deleted"}

@@ -85,6 +85,7 @@ def main_test():
         d = r.json()["detail"]
         check("refusal names the term", "putangina" in (d.get("matched_terms") or []), d)
         check("keyword block is NOT acknowledgeable", d.get("acknowledgeable") is False, d)
+        check("keyword block has a translatable code", d.get("code") == "keyword_blocked", d)
 
     r = client.post("/problems", json={
         "title": "putangina this barangay",
@@ -238,9 +239,11 @@ def main_test():
     login(client, "poster@test.local")
     ids = []
     for n in range(REMOVALS_BEFORE_SUSPENSION):
+        # acknowledged=True: the live AI may call these vague test posts "unclear"; that's not what this tests.
         rr = client.post("/problems", json={
             "title": f"Test problem {n}", "description": "A description.",
-            "category": "Other"})
+            "category": "Other", "acknowledged": True})
+        assert rr.status_code == 201, rr.text
         ids.append(rr.json()["id"])
 
     login(client, "admin@test.local")
@@ -268,7 +271,7 @@ def main_test():
     db.commit()
     r = client.post("/problems", json={
         "title": "Back again", "description": "The suspension has expired.",
-        "category": "Other"})
+        "category": "Other", "acknowledged": True})
     check("an expired suspension lifts itself with no job running",
           r.status_code == 201, f"-> {r.status_code} {r.text[:120]}")
 

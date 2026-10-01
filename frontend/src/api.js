@@ -40,12 +40,15 @@ export function getErrorMessage(data, status) {
   return `Request failed (${status}). Please try again.`;
 }
 
+// `code` and `params` come from the backend (Services/errors.py) so the UI can show the error in its language.
 export class ApiError extends Error {
   constructor(message, status, detail = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.code = detail && typeof detail === "object" && !Array.isArray(detail) ? detail.code ?? null : null;
+    this.params = this.code ? detail.params ?? {} : {};
   }
 }
 

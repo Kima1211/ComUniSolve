@@ -21,6 +21,7 @@ from Security.utils import get_current_admin
 from Models import problem, user, solution, comment
 from Services.moderation import active_removal_counts, remove_content, restore_content, suspend_user, unsuspend_user
 from Services.reputation import is_currently_suspended, get_tier
+from Services.errors import api_error
 
 router = APIRouter()
 
@@ -200,11 +201,11 @@ def _load_target(db: Session, target_type: str, target_id: int):
     target = db.query(model).filter(model.id == target_id).first()
 
     if not target:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"{target_type.title()} not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", f"{target_type.title()} not found")
 
     author = db.query(user.User).filter(user.User.id == target.user_id).first()
     if not author:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Author not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Author not found")
     return target, author
 
 
@@ -223,14 +224,14 @@ def _moderate(db: Session, admin, target_type: str, target_id: int, body: Modera
     try:
         if body.action in ("removed", "removed_no_penalty"):
             if target.moderation_status == "removed":
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Already removed")
+                raise api_error(status.HTTP_400_BAD_REQUEST, "already_removed", "Already removed")
             outcome.update(remove_content(db, admin.id, target, target_type, author, body.reason,
                                           penalize=body.action == "removed"))
             outcome["reports_closed"] = _close_reports(db, target_type, target_id, "actioned")
 
         elif body.action == "restored":
             if target.moderation_status != "removed":
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="This is not removed")
+                raise api_error(status.HTTP_400_BAD_REQUEST, "not_removed", "This is not removed")
             restore_content(db, admin.id, target, target_type, author, body.reason)
             outcome["points_after"] = author.points
 
@@ -247,10 +248,7 @@ def _moderate(db: Session, admin, target_type: str, target_id: int, body: Modera
         raise
     except Exception:
         db.rollback()
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to apply moderation action",
-        )
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to apply moderation action")
 
     return outcome
 
@@ -294,21 +292,21 @@ def set_user_suspension(
 ):
     target = db.query(user.User).filter(user.User.id == user_id).first()
     if not target:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "User not found")
 
     if target.id == current_user.id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="You cannot suspend yourself")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "suspend_self", "You cannot suspend yourself")
 
     if target.role == "admin":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Admins cannot be suspended")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "suspend_admin", "Admins cannot be suspended")
 
     # Each suspension moves the user one step up the ladder (1, 3, 7 days,
     # then permanent), so suspending someone twice by accident must not count.
     currently_suspended = is_currently_suspended(target)
     if body.suspend and currently_suspended:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="This user is already suspended")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "already_suspended", "This user is already suspended")
     if not body.suspend and not currently_suspended:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="This user is not suspended")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "not_suspended", "This user is not suspended")
 
     try:
         if body.suspend:
@@ -320,10 +318,7 @@ def set_user_suspension(
         db.refresh(target)
     except Exception:
         db.rollback()
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update suspension",
-        )
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update suspension")
 
     return {
         "user_id": target.id,

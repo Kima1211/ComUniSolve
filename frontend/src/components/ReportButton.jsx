@@ -1,27 +1,29 @@
 import { useState } from "react";
 import { apiPost } from "../api";
+import { useLanguage } from "../i18n/language-context";
 
 const REASONS = [
-    { value: "spam", label: "Spam or advertising" },
-    { value: "inappropriate", label: "Inappropriate content" },
-    { value: "harassment", label: "Harassment or abuse" },
-    { value: "misleading", label: "Misleading or false" },
-    { value: "off_topic", label: "Off-topic", problemOnly: true },
-    { value: "other", label: "Something else" },
+    { value: "spam" },
+    { value: "inappropriate" },
+    { value: "harassment" },
+    { value: "misleading" },
+    { value: "off_topic", problemOnly: true },
+    { value: "other" },
 ]
 
 function ReportButton({ problemId, solutionId, commentId }) {
+    const { t, errorText } = useLanguage()
     const [open, setOpen] = useState(false)
     const [reason, setReason] = useState(REASONS[0].value)
     const [details, setDetails] = useState("")
-    const [status, setStatus] = useState("")
-    const [error, setError] = useState("")
+    const [statusKey, setStatusKey] = useState("")
+    const [error, setError] = useState(null)
     const [sending, setSending] = useState(false)
 
     async function submit() {
         try {
             setSending(true)
-            setError("")
+            setError(null)
             await apiPost("/reports", {
                 problem_id: problemId ?? null,
                 solution_id: solutionId ?? null,
@@ -29,22 +31,22 @@ function ReportButton({ problemId, solutionId, commentId }) {
                 reason,
                 details: details.trim() || null,
             })
-            setStatus("Reported. An admin will review it.")
+            setStatusKey("report.done")
             setOpen(false)
         } catch (e) {
             if (e.status === 409) {
-                setStatus("You have already reported this.")
+                setStatusKey("error.already_reported")
                 setOpen(false)
                 return
             }
-            setError(e.message || "Could not send the report.")
+            setError(e)
         } finally {
             setSending(false)
         }
     }
 
-    if (status) {
-        return <p className="text-xs text-slate-500">{status}</p>
+    if (statusKey) {
+        return <p className="text-xs text-slate-500">{t(statusKey)}</p>
     }
 
     if (!open) {
@@ -54,14 +56,14 @@ function ReportButton({ problemId, solutionId, commentId }) {
                 onClick={() => setOpen(true)}
                 className="text-xs font-medium text-slate-400 hover:text-slate-700"
             >
-                Report
+                {t("report.button")}
             </button>
         )
     }
 
     return (
         <div className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-semibold text-slate-700">Why are you reporting this?</p>
+            <p className="text-xs font-semibold text-slate-700">{t("report.why")}</p>
 
             <div className="mt-2 space-y-1">
                 {REASONS.filter((r) => problemId || !r.problemOnly).map((r) => (
@@ -73,7 +75,7 @@ function ReportButton({ problemId, solutionId, commentId }) {
                             checked={reason === r.value}
                             onChange={() => setReason(r.value)}
                         />
-                        {r.label}
+                        {t(`report.reason.${r.value}`)}
                     </label>
                 ))}
             </div>
@@ -82,12 +84,12 @@ function ReportButton({ problemId, solutionId, commentId }) {
                 rows={2}
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
-                placeholder={reason === "other" ? "What's wrong with it? (required)" : "Anything else the admin should know (optional)"}
+                placeholder={reason === "other" ? t("report.detailsRequired") : t("report.detailsOptional")}
                 className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs
                            outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
             />
 
-            {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+            {error && <p className="mt-2 text-xs text-red-600">{errorText(error, "report.couldNot")}</p>}
 
             <div className="mt-2 flex gap-2">
                 <button
@@ -97,14 +99,14 @@ function ReportButton({ problemId, solutionId, commentId }) {
                     className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white
                                hover:bg-slate-900 disabled:bg-slate-300"
                 >
-                    {sending ? "Sending..." : "Send report"}
+                    {sending ? t("common.sending") : t("report.send")}
                 </button>
                 <button
                     type="button"
-                    onClick={() => { setOpen(false); setError("") }}
+                    onClick={() => { setOpen(false); setError(null) }}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
                 >
-                    Cancel
+                    {t("common.cancel")}
                 </button>
             </div>
         </div>

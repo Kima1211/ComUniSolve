@@ -57,6 +57,10 @@ helper, helper_id = verified_client("Ben Cruz", "ben@example.com")
 
 r = asker.post("/problems", json={"title": "Street light is out", "description": "Dark for weeks", "category": "Other"})
 check("Post a problem", r.status_code == 201)
+
+dup = helper.post("/register", json={"name": "Dup", "email": "maria@example.com", "password": "password123"})
+check("Errors carry a code for the frontend to translate",
+      dup.status_code == 400 and dup.json()["detail"].get("code") == "email_taken", f"{dup.json()}")
 pid = r.json()["id"]
 
 r = asker.post("/problems", json={"title": "Old category", "description": "x", "category": "Public"})
