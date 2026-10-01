@@ -330,6 +330,21 @@ function UsersTab() {
         }
     }
 
+    async function reactivate(u) {
+        if (!window.confirm(t("admin.confirmReactivate", { name: u.name }))) return
+        try {
+            setBusyId(u.id)
+            setError(null)
+            await apiPatch(`/admin/users/${u.id}/reactivate`)
+            setNotice(t("admin.reactivatedMsg", { name: u.name }))
+            setReloadKey((k) => k + 1)
+        } catch (e) {
+            setError(e.code ? e : { key: "admin.couldNotAct" })
+        } finally {
+            setBusyId(null)
+        }
+    }
+
     const total = data?.total ?? 0
     const from = total === 0 ? 0 : page * PAGE_SIZE + 1
     const to = Math.min((page + 1) * PAGE_SIZE, total)
@@ -407,7 +422,17 @@ function UsersTab() {
                                     {formatDate(u.created_at)}
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                    {u.role !== "admin" && (
+                                    {!u.is_active ? (
+                                        <button
+                                            type="button"
+                                            disabled={busyId === u.id}
+                                            onClick={() => reactivate(u)}
+                                            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs
+                                                       font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+                                        >
+                                            {t("admin.reactivate")}
+                                        </button>
+                                    ) : u.role !== "admin" && (
                                         u.is_suspended ? (
                                             <button
                                                 type="button"
@@ -607,12 +632,13 @@ function ActivityTab() {
 
 const AUDIT_ACTIONS = [
     "login_success", "login_failed", "register", "email_verified",
-    "password_reset", "profile_updated", "account_deactivated",
+    "password_reset", "profile_updated", "account_deactivated", "account_reactivated",
 ]
 
 const AUDIT_TONES = {
     login_failed: "red",
     account_deactivated: "amber",
+    account_reactivated: "green",
     register: "green",
     email_verified: "green",
     password_reset: "sky",

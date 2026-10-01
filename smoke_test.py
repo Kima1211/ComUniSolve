@@ -262,14 +262,44 @@ check("Deactivation needs the right password", r.status_code == 400 and r.json()
 r = lito.post("/users/me/deactivate", json={"password": PASSWORD})
 check("A user can deactivate their account", r.status_code == 200, f"{r.json()}")
 r = TestClient(app).post("/login", json={"email": "lito@example.com", "password": PASSWORD})
-check("A deactivated account can't sign in", r.status_code == 403 and r.json()["detail"]["code"] == "account_inactive", f"{r.json()}")
+check("Signing in to a deactivated account offers to reactivate it",
+      r.status_code == 403 and r.json()["detail"]["code"] == "account_deactivated", f"{r.json()}")
 check("A deactivated user's public profile is hidden", TestClient(app).get(f"/users/{lito_id}/profile").status_code == 404)
+
+d = SessionLocal()
+lu = d.query(user.User).filter(user.User.id == lito_id).first()
+check("Deactivation clears personal data but keeps the name and email",
+      lu.birth_date is None and lu.barangay_code is None and lu.street is None
+      and lu.first_name == "Lito" and lu.email == "lito@example.com")
+d.close()
+
+r = TestClient(app).post("/register", json=reg("Lito", "Cruz", "lito@example.com"))
+check("Registering again with that email explains how to come back",
+      r.status_code == 400 and r.json()["detail"]["code"] == "email_deactivated", f"{r.json()}")
+
+r = TestClient(app).post("/reactivate", json={"email": "lito@example.com", "password": "Wrong-pass1"})
+check("Reactivating needs the right password", r.status_code == 401, f"{r.status_code}")
+back = TestClient(app)
+r = back.post("/reactivate", json={"email": "LITO@example.com", "password": PASSWORD})
+check("The owner can reactivate by signing in", r.status_code == 200, f"{r.json()}")
+check("...is signed in again", back.get("/users/me").status_code == 200)
+check("...and their profile is public again", TestClient(app).get(f"/users/{lito_id}/profile").status_code == 200)
+
+boss, boss_id = verified_client("Boss Admin", "boss@example.com")
+d = SessionLocal()
+d.query(user.User).filter(user.User.id == boss_id).update({"role": "admin"}); d.commit(); d.close()
+back.post("/users/me/deactivate", json={"password": PASSWORD})
+r = boss.patch(f"/admin/users/{lito_id}/reactivate")
+check("An admin can reactivate a deactivated account", r.status_code == 200, f"{r.json()}")
+r = boss.patch(f"/admin/users/{lito_id}/reactivate")
+check("...but not one that is already active", r.status_code == 400 and r.json()["detail"]["code"] == "not_deactivated", f"{r.json()}")
 
 d = SessionLocal()
 actions = {a for (a,) in d.query(AuditLog.action).all()}
 d.close()
 check("Account activity is logged (sign-ups, logins, failed logins, verification, edits, deactivation)",
-      {"register", "login_success", "login_failed", "email_verified", "profile_updated", "account_deactivated"} <= actions,
+      {"register", "login_success", "login_failed", "email_verified", "profile_updated", "account_deactivated",
+       "account_reactivated"} <= actions,
       f"{sorted(actions)}")
 
 r = asker.post("/resend-verification")

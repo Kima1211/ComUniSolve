@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from Models.moderation_log import ModerationLog
 from Models.audit_log import AuditLog, AUDIT_ACTIONS
 from Security.utils import get_current_admin
 from Models import problem, user, solution, comment
+from routers.user import reactivate
 from Services.moderation import active_removal_counts, remove_content, restore_content, suspend_user, unsuspend_user
 from Services.reputation import is_currently_suspended, get_tier
 from Services.errors import api_error
@@ -403,3 +404,25 @@ def get_audit_logs(
         AuditLogResponse.model_validate(l).model_copy(update={"user_name": names.get(l.user_id)})
         for l in logs
     ]
+
+
+@router.patch("/admin/users/{user_id}/reactivate")
+def admin_reactivate_user(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_current_admin),
+):
+    target = db.query(user.User).filter(user.User.id == user_id).first()
+    if not target:
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "User not found")
+    if target.is_active:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "not_deactivated", "This account is not deactivated")
+
+    reactivate(target, db, request)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to reactivate account")
+    return {"id": target.id, "is_active": True}

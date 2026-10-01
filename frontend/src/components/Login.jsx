@@ -21,6 +21,27 @@ function Login() {
     const [password, setPassword] = useState("")
     const [error, setError] = useState(null)
     const [submitting, setSubmitting] = useState(false)
+    const deactivated = error?.code === "account_deactivated"
+
+    async function finishSignIn() {
+        await refreshUser()
+        const goingTo = location.state?.from || "/"
+        navigate(goingTo, { replace: true })
+    }
+
+    // Same email and password, sent to /reactivate: the account comes back with its posts and points.
+    async function handleReactivate() {
+        try {
+            setSubmitting(true)
+            await apiPost("/reactivate", { email: email, password: password })
+            setError(null)
+            await finishSignIn()
+        } catch (e) {
+            setError(e)
+        } finally {
+            setSubmitting(false)
+        }
+    }
 
     async function handleSubmit(e) {
         e.preventDefault()
@@ -34,11 +55,7 @@ function Login() {
             setSubmitting(true)
 
             await apiPost("/login", { email: email, password: password })
-
-            await refreshUser()
-
-            const goingTo = location.state?.from || "/"
-            navigate(goingTo, { replace: true })
+            await finishSignIn()
         } catch (e) {
             setError(e)
         } finally {
@@ -97,9 +114,22 @@ function Login() {
                     />
                 </div>
 
-                {error && (
+                {error && !deactivated && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                         {errorText(error)}
+                    </div>
+                )}
+                {deactivated && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+                        <p>{t("login.deactivatedBody")}</p>
+                        <button
+                            type="button"
+                            onClick={handleReactivate}
+                            disabled={submitting}
+                            className="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                        >
+                            {submitting ? t("login.reactivating") : t("login.reactivate")}
+                        </button>
                     </div>
                 )}
 

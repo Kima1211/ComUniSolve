@@ -66,7 +66,11 @@ def reg_body(register: Register, request: Request, response: Response, db: Sessi
     enforce(REGISTER_PER_IP, client_ip(request),
             "Too many accounts created from your network. Please try again later.")
 
-    if find_by_email(db, register.email):
+    existing = find_by_email(db, register.email)
+    if existing and existing.deactivated_at is not None:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "email_deactivated",
+                        "This email belongs to a deactivated account. Sign in to reactivate it.")
+    if existing:
         raise api_error(status.HTTP_400_BAD_REQUEST, "email_taken", "Email already exist")
     check_password_strength(register.password)
     check_address(register)
@@ -98,27 +102,37 @@ def reg_body(register: Register, request: Request, response: Response, db: Sessi
         }
     }
 
-@router.post("/login")
-def login(login: Login, request: Request, response: Response,db: Session = Depends(get_db)):
+# The same checks for signing in and for reactivating: rate limits, then email + password.
+def check_credentials(body: Login, request: Request, db: Session):
     enforce(LOGIN_PER_IP, client_ip(request),
             "Too many login attempts from your network. Please wait a few minutes.")
 
-    email_key = login.email.strip().lower()
+    email_key = body.email.strip().lower()
     if LOGIN_FAILURES_PER_EMAIL.is_blocked(email_key):
         raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "login_locked", "Too many failed attempts for this email. Please wait 15 minutes, or reset your password.", {"minutes": 15})
 
     val_user = find_by_email(db, email_key)
 
-    if not val_user or not verify_password(login.password, val_user.password):
+    if not val_user or not verify_password(body.password, val_user.password):
         LOGIN_FAILURES_PER_EMAIL.hit(email_key)
         record(db, "login_failed", request, user=val_user, email=email_key)
         db.commit()
         raise api_error(status.HTTP_401_UNAUTHORIZED, "invalid_login", "Invalid email or password")
 
+    LOGIN_FAILURES_PER_EMAIL.reset(email_key)
+    return val_user
+
+
+@router.post("/login")
+def login(login: Login, request: Request, response: Response,db: Session = Depends(get_db)):
+    val_user = check_credentials(login, request, db)
+
+    # Only the real owner (right password) learns the account is deactivated, and is offered to reactivate it.
+    if not val_user.is_active and val_user.deactivated_at is not None:
+        raise api_error(status.HTTP_403_FORBIDDEN, "account_deactivated", "This account is deactivated. You can reactivate it.")
     if not val_user.is_active:
         raise api_error(status.HTTP_403_FORBIDDEN, "account_inactive", "Account is inactive")
 
-    LOGIN_FAILURES_PER_EMAIL.reset(email_key)
     record(db, "login_success", request, user=val_user)
 
     issue_auth_cookie(response, val_user)
@@ -179,6 +193,16 @@ def update_profile(body: ProfileUpdate, request: Request, db: Session = Depends(
     return me_payload(current_user)
 
 
+PRIVATE_FIELDS = ("middle_name", "birth_date", "sex", "region_code", "province_code",
+                  "city_code", "barangay_code", "street")
+
+
+def reactivate(target, db: Session, request: Request) -> None:
+    target.is_active = True
+    target.deactivated_at = None
+    record(db, "account_reactivated", request, user=target)
+
+
 # Deactivate, not delete: the user's posts stay (others' solutions and ratings depend on them),
 # but the account can no longer sign in and every session ends now.
 @router.post("/users/me/deactivate")
@@ -192,6 +216,9 @@ def deactivate_account(body: Deactivate, request: Request, response: Response, d
 
     current_user.is_active = False
     current_user.deactivated_at = datetime.now(timezone.utc)
+    # Data Privacy Act: keep only what the account still needs (name for their posts, email + password to come back).
+    for field in PRIVATE_FIELDS:
+        setattr(current_user, field, None)
     current_user.session_version += 1
     revoke_all_refresh_tokens(current_user.id, db)
     record(db, "account_deactivated", request, user=current_user)
@@ -203,6 +230,20 @@ def deactivate_account(body: Deactivate, request: Request, response: Response, d
 
     clear_auth_cookies(response)
     return {"message": "Account deactivated"}
+
+
+# Sign back in to a deactivated account. A suspension still applies afterwards (it's stored separately).
+@router.post("/reactivate")
+def reactivate_account(body: Login, request: Request, response: Response, db: Session = Depends(get_db)):
+    val_user = check_credentials(body, request, db)
+    if val_user.is_active or val_user.deactivated_at is None:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "not_deactivated", "This account is not deactivated")
+
+    reactivate(val_user, db, request)
+    record(db, "login_success", request, user=val_user)
+    issue_auth_cookie(response, val_user)
+    issue_refresh_token(response, val_user, db)
+    return {"user": {"id": val_user.id, "name": val_user.name, "email": val_user.email}}
 
 
 @router.get("/users/{user_id}/profile", response_model=UserProfile)

@@ -9,7 +9,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not set in environment!")
 
-engine = create_engine(DATABASE_URL)
+# pool_pre_ping: Neon closes idle connections, so test each one before use instead of failing the request.
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
