@@ -7,6 +7,15 @@ import Layout, { TierBadge } from "./Layout";
 import { InstallSection } from "./InstallButton";
 import BackLink from "./BackLink";
 
+function fullName(u) {
+    return [u.first_name, u.middle_name, u.last_name, u.suffix].filter(Boolean).join(" ")
+}
+
+function addressText(u) {
+    const a = u.address || {}
+    return [u.street, a.barangay, a.city, a.province, a.region].filter(Boolean).join(", ")
+}
+
 function Stat({ label, value }) {
     return (
         <div className="rounded-lg bg-slate-50 px-4 py-3 text-center">
@@ -94,6 +103,29 @@ function UserProfile({ own = false }) {
                         <p className="text-sm text-slate-600">
                             {t("profile.email")} <span className="font-medium text-slate-900">{user.email}</span>
                         </p>
+                        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                            <dt className="text-slate-500">{t("profile.fullName")}</dt>
+                            <dd className="text-slate-900">{fullName(user) || t("profile.notSet")}</dd>
+                            <dt className="text-slate-500">{t("personal.birthDate")}</dt>
+                            <dd className="text-slate-900">{user.birth_date ? formatDate(user.birth_date) : t("profile.notSet")}</dd>
+                            <dt className="text-slate-500">{t("personal.sex")}</dt>
+                            <dd className="text-slate-900">
+                                {user.sex === "male" ? t("personal.sexMale") : user.sex === "female" ? t("personal.sexFemale") : t("personal.sexUnspecified")}
+                            </dd>
+                            <dt className="text-slate-500">{t("section.address")}</dt>
+                            <dd className="text-slate-900">{addressText(user) || t("profile.notSet")}</dd>
+                        </dl>
+                        {(!user.birth_date || !user.barangay_code) && (
+                            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                                {t("profile.completeHint")}
+                            </p>
+                        )}
+                        <Link
+                            to="/profile/edit"
+                            className="mr-2 mt-3 inline-block rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
+                        >
+                            {t("profile.edit")}
+                        </Link>
                         <button
                             type="button"
                             onClick={handleChangePassword}

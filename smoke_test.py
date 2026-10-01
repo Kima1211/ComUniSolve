@@ -14,7 +14,15 @@ for k, v in [("PASSWORD_PEPPER", "test-pepper"), ("SECRET_KEY", "test-secret"),
 
 from fastapi.testclient import TestClient
 import routers.user as user_router
-user_router.send_verification_email = lambda *a, **k: True
+import routers.auth as auth_router
+
+# Capture the emailed codes instead of sending them, so the OTP flow can be tested.
+SENT_CODES = {}
+def _fake_send_code(email, name, code):
+    SENT_CODES[email] = code
+    return True
+user_router.send_verification_code = _fake_send_code
+auth_router.send_verification_code = _fake_send_code
 
 from Security import rate_limit
 for _limiter in (rate_limit.LOGIN_PER_IP, rate_limit.LOGIN_FAILURES_PER_EMAIL,
@@ -35,16 +43,36 @@ def check(label, ok, evidence=""):
     results.append(ok)
     print(f"[{'PASS' if ok else 'FAIL'}] {label}" + (f"\n        {evidence}" if evidence else ""))
 
+from Services import locations as _loc
+from Models.audit_log import AuditLog
+
+PASSWORD = "Sagot2026!"
+_city = next(code for code, c in _loc.CITIES.items() if c["name"] == "San Jorge")
+ADDRESS = {
+    "region_code": _loc.CITIES[_city]["region"],
+    "province_code": _loc.CITIES[_city]["province"],
+    "city_code": _city,
+    "barangay_code": _loc.barangays(_city)[0]["code"],
+    "street": "Purok 1",
+}
+
+def reg(first, last, email, **extra):
+    body = {"first_name": first, "last_name": last, "birth_date": "2004-05-17",
+            "email": email, "password": PASSWORD, **ADDRESS}
+    body.update(extra)
+    return body
+
 def verified_client(name, email):
     c = TestClient(app)
-    c.post("/register", json={"name": name, "email": email, "password": "password123"})
+    first, last = name.split(" ", 1)
+    c.post("/register", json=reg(first, last, email))
     db = SessionLocal()
     u = db.query(user.User).filter(user.User.email == email).first()
     u.is_verified = True
     db.commit()
     uid = u.id
     db.close()
-    c.post("/login", json={"email": email, "password": "password123"})
+    c.post("/login", json={"email": email, "password": PASSWORD})
     return c, uid
 
 
@@ -58,8 +86,8 @@ helper, helper_id = verified_client("Ben Cruz", "ben@example.com")
 r = asker.post("/problems", json={"title": "Street light is out", "description": "Dark for weeks", "category": "Other"})
 check("Post a problem", r.status_code == 201)
 
-dup = helper.post("/register", json={"name": "Dup", "email": "maria@example.com", "password": "password123"})
-check("Errors carry a code for the frontend to translate",
+dup = helper.post("/register", json=reg("Dup", "User", "MARIA@Example.com"))
+check("The same email in different letter case is a duplicate, with a code to translate",
       dup.status_code == 400 and dup.json()["detail"].get("code") == "email_taken", f"{dup.json()}")
 pid = r.json()["id"]
 
@@ -138,8 +166,9 @@ check("Empty-but-valid problems still return a list, not 404",
 
 
 unverified = TestClient(app)
-r = unverified.post("/register", json={"name": "Nena Lim", "email": "nena@example.com", "password": "password123"})
-check("Registration succeeds without verifying", r.status_code == 201)
+r = unverified.post("/register", json=reg("Nena", "Lim", "nena@example.com", middle_name="Ma. Clara", suffix="Jr.", sex="female"))
+check("Registration succeeds without verifying", r.status_code == 201, f"{r.json()}")
+check("A 6-digit code was emailed on registration", len(SENT_CODES.get("nena@example.com", "")) == 6)
 
 r = unverified.get("/users/me")
 check("An unverified account is authenticated but flagged unverified",
@@ -156,15 +185,92 @@ check("Resend is refused inside the cooldown (registration just sent one)",
 from datetime import timedelta as _td
 db = SessionLocal()
 nena = db.query(user.User).filter(user.User.email == "nena@example.com").first()
-nena.verification_token_expires_at = nena.verification_token_expires_at - _td(minutes=2)
+nena.verification_sent_at = nena.verification_sent_at - _td(minutes=2)
 db.commit(); db.close()
 
 r = unverified.post("/resend-verification")
 check("Resend works once the cooldown has passed", r.status_code == 200, f"{r.json()}")
 
 r = unverified.get("/users/me")
-check("/users/me exposes the token expiry so the UI can show a countdown",
-      "verification_expires_at" in r.json(), f"keys={sorted(r.json().keys())}")
+check("/users/me exposes when the code was sent, so the UI can show a countdown",
+      "verification_sent_at" in r.json(), f"keys={sorted(r.json().keys())}")
+me = r.json()
+check("Personal info is stored atomized and the display name is built from it",
+      me["first_name"] == "Nena" and me["middle_name"] == "Ma. Clara" and me["last_name"] == "Lim"
+      and me["suffix"] == "Jr." and me["name"] == "Nena Lim Jr.", f"{me['name']}")
+check("The address comes back with official PSGC names",
+      me["address"]["city"] == "San Jorge" and me["address"]["province"] == "Samar", f"{me['address']}")
+
+def set_nena(**fields):
+    d = SessionLocal()
+    u = d.query(user.User).filter(user.User.email == "nena@example.com").first()
+    for k, v in fields.items():
+        setattr(u, k, v(getattr(u, k)) if callable(v) else v)
+    d.commit(); d.close()
+
+code = SENT_CODES["nena@example.com"]
+wrong = "111111" if code != "111111" else "222222"
+r = unverified.post("/verify-code", json={"code": wrong})
+check("A wrong code is refused and says how many tries are left",
+      r.status_code == 400 and r.json()["detail"]["code"] == "code_invalid" and r.json()["detail"]["params"]["left"] == 4,
+      f"{r.json()}")
+for _ in range(4):
+    r = unverified.post("/verify-code", json={"code": wrong})
+check("After 5 wrong codes the code is locked", r.status_code == 429 and r.json()["detail"]["code"] == "code_locked", f"{r.json()}")
+r = unverified.post("/verify-code", json={"code": code})
+check("...and even the right code no longer works", r.status_code == 429)
+
+set_nena(verification_sent_at=lambda v: v - _td(minutes=2))
+unverified.post("/resend-verification")
+set_nena(verification_token_expires_at=lambda v: v - _td(minutes=11))
+r = unverified.post("/verify-code", json={"code": SENT_CODES["nena@example.com"]})
+check("An expired code is refused", r.status_code == 400 and r.json()["detail"]["code"] == "code_expired", f"{r.json()}")
+
+set_nena(verification_sent_at=lambda v: v - _td(minutes=2))
+unverified.post("/resend-verification")
+r = unverified.post("/verify-code", json={"code": SENT_CODES["nena@example.com"]})
+check("A fresh correct code verifies the account", r.status_code == 200, f"{r.json()}")
+check("...and the account is now verified", unverified.get("/users/me").json()["is_verified"] is True)
+
+r = TestClient(app).post("/register", json=reg("Weak", "Pass", "weak@example.com", password="Password123"))
+check("A common password is rejected even with upper, lower and a number",
+      r.status_code == 422 and r.json()["detail"]["code"] == "weak_password", f"{r.json()}")
+r = TestClient(app).post("/register", json=reg("Weak", "Pass", "weak@example.com", password="alllowercase1"))
+check("A password without an uppercase letter is rejected",
+      r.status_code == 422 and "upper" in r.json()["detail"]["params"]["missing"], f"{r.json()}")
+
+_other_city = next(code for code, c in _loc.CITIES.items() if c["name"] == "Catbalogan City" or c["name"] == "City of Catbalogan")
+r = TestClient(app).post("/register", json=reg("Bad", "Address", "addr@example.com", barangay_code=_loc.barangays(_other_city)[0]["code"]))
+check("A barangay from another city is rejected", r.status_code == 422 and r.json()["detail"]["code"] == "invalid_address", f"{r.json()}")
+r = TestClient(app).post("/register", json=reg("Future", "Kid", "future@example.com", birth_date="2999-01-01"))
+check("A birth date in the future is rejected", r.status_code == 422, f"{r.status_code}")
+r = TestClient(app).post("/register", json=reg("Juan2", "Cruz", "digits@example.com"))
+check("Digits in a name are rejected", r.status_code == 422, f"{r.status_code}")
+
+r = TestClient(app).post("/login", json={"email": "MARIA@EXAMPLE.COM", "password": PASSWORD})
+check("Login ignores letter case in the email", r.status_code == 200, f"{r.status_code}")
+TestClient(app).post("/login", json={"email": "maria@example.com", "password": "Wrong-pass1"})
+
+profile_update = {k: v for k, v in reg("Maria Clara", "Santos", "x").items() if k not in ("email", "password")}
+r = asker.patch("/users/me", json={**profile_update, "suffix": "Sr."})
+check("Users can edit their profile, and the display name follows",
+      r.status_code == 200 and r.json()["name"] == "Maria Clara Santos Sr.", f"{r.json().get('name')}")
+
+lito, lito_id = verified_client("Lito Cruz", "lito@example.com")
+r = lito.post("/users/me/deactivate", json={"password": "Not-it-123"})
+check("Deactivation needs the right password", r.status_code == 400 and r.json()["detail"]["code"] == "wrong_password", f"{r.json()}")
+r = lito.post("/users/me/deactivate", json={"password": PASSWORD})
+check("A user can deactivate their account", r.status_code == 200, f"{r.json()}")
+r = TestClient(app).post("/login", json={"email": "lito@example.com", "password": PASSWORD})
+check("A deactivated account can't sign in", r.status_code == 403 and r.json()["detail"]["code"] == "account_inactive", f"{r.json()}")
+check("A deactivated user's public profile is hidden", TestClient(app).get(f"/users/{lito_id}/profile").status_code == 404)
+
+d = SessionLocal()
+actions = {a for (a,) in d.query(AuditLog.action).all()}
+d.close()
+check("Account activity is logged (sign-ups, logins, failed logins, verification, edits, deactivation)",
+      {"register", "login_success", "login_failed", "email_verified", "profile_updated", "account_deactivated"} <= actions,
+      f"{sorted(actions)}")
 
 r = asker.post("/resend-verification")
 check("An already-verified account cannot resend", r.status_code == 400, f"status={r.status_code}")

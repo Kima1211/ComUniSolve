@@ -3,7 +3,19 @@ import sys
 
 from Models.database import SessionLocal
 from Models import user as user_model, problem as problem_model, solution as solution_model
+from datetime import date
+
 from Security.utils import hash_password
+from Services import locations
+
+# Demo users live in San Jorge, Samar.
+_CITY = next(code for code, c in locations.CITIES.items() if c["name"] == "San Jorge")
+DEMO_ADDRESS = {
+    "region_code": locations.CITIES[_CITY]["region"],
+    "province_code": locations.CITIES[_CITY]["province"],
+    "city_code": _CITY,
+    "barangay_code": locations.barangays(_CITY)[0]["code"],
+}
 
 DEMO_DOMAIN = "@demo.comunisolve"
 
@@ -154,8 +166,13 @@ def main():
             if existing:
                 users.append(existing)
                 continue
+            first, last = name.split(" ", 1)
             u = user_model.User(
                 name=name,
+                first_name=first,
+                last_name=last,
+                birth_date=date(2003, 6, 15),
+                **DEMO_ADDRESS,
                 email=email,
                 password=hash_password("demopassword123"),
                 is_verified=True,

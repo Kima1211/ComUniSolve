@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from routers import  problem, rating, solution, user,comment,admin,auth,report,matching
+from routers import  problem, rating, solution, user,comment,admin,auth,report,matching,location
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
@@ -23,6 +23,7 @@ app.include_router(admin.router)
 app.include_router(auth.router)
 app.include_router(matching.router)
 app.include_router(report.router)
+app.include_router(location.router)
 
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 def hello():

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { apiPost } from "../api";
 import { useLanguage } from "../i18n/language-context";
+import { emailError } from "../validation";
 import AuthLayout from "./AuthLayout";
 
 const inputClass =
@@ -19,6 +20,11 @@ function ForgotPassword() {
 
     async function handleSubmit(e) {
         e.preventDefault()
+        const problem = emailError(email)
+        if (problem) {
+            setError({ key: problem })
+            return
+        }
 
         try {
             setError(null)
@@ -47,7 +53,7 @@ function ForgotPassword() {
                 </>
             }
         >
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 <div>
                     <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
                         {t("auth.email")}

@@ -19,19 +19,21 @@ if not FRONTEND_URL:
 
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
-def send_verification_email(to_email: str, to_name: str, token: str) -> bool:
-    verification_link = f"{FRONTEND_URL}/verify/{token}"
-
+# The backend doesn't know which language the user picked, so the email has both.
+def send_verification_code(to_email: str, to_name: str, code: str) -> bool:
     safe_name = html.escape(to_name)
 
     return _send_email(
         to_email, to_name,
-        subject="Verify your ComUniSolve account",
+        subject=f"{code} is your ComUniSolve verification code",
         html_content=(
             f"<p>Hi {safe_name},</p>"
-            f"<p>Click the link below to verify your ComUniSolve account:</p>"
-            f"<p><a href='{verification_link}'>{verification_link}</a></p>"
-            f"<p>This link expires in 24 hours.</p>"
+            f"<p>Your ComUniSolve verification code is:</p>"
+            f"<p style='font-size:28px;font-weight:bold;letter-spacing:6px'>{code}</p>"
+            f"<p>It expires in 10 minutes. If you didn't create an account, ignore this email.</p>"
+            f"<hr>"
+            f"<p>Ang iyong ComUniSolve verification code ay <b>{code}</b>. "
+            f"Mag-e-expire ito sa loob ng 10 minuto. Kung hindi ikaw ang gumawa ng account, huwag pansinin ang email na ito.</p>"
         ),
     )
 

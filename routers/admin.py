@@ -10,6 +10,7 @@ from Schemas.moderation import (
     ModerationActionIn,
     ModerationLogResponse,
     QueueItem,
+    AuditLogResponse,
     ReportNote,
     SuspendUserIn,
 )
@@ -17,6 +18,7 @@ from Schemas.user import AdminUserList, AdminUserRow
 from Models.database import get_db
 from Models.report import Report
 from Models.moderation_log import ModerationLog
+from Models.audit_log import AuditLog, AUDIT_ACTIONS
 from Security.utils import get_current_admin
 from Models import problem, user, solution, comment
 from Services.moderation import active_removal_counts, remove_content, restore_content, suspend_user, unsuspend_user
@@ -380,3 +382,24 @@ def get_moderation_logs(
         for l in logs
     ]
 
+
+
+# Account activity: sign-ups, logins (including failed ones), verification, password resets, profile changes.
+@router.get("/admin/audit", response_model=list[AuditLogResponse])
+def get_audit_logs(
+    limit: int = Query(200, ge=1, le=500),
+    action: Optional[Literal[tuple(AUDIT_ACTIONS)]] = None,
+    db: Session = Depends(get_db),
+    current_user: user.User = Depends(get_current_admin),
+):
+    query = db.query(AuditLog)
+    if action:
+        query = query.filter(AuditLog.action == action)
+    logs = query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit).all()
+
+    ids = {l.user_id for l in logs if l.user_id}
+    names = dict(db.query(user.User.id, user.User.name).filter(user.User.id.in_(ids)).all()) if ids else {}
+    return [
+        AuditLogResponse.model_validate(l).model_copy(update={"user_name": names.get(l.user_id)})
+        for l in logs
+    ]

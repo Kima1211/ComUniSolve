@@ -3,7 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
+import { passwordOk } from "../validation";
 import AuthLayout from "./AuthLayout";
+import PasswordChecklist from "./PasswordChecklist";
 
 const inputClass =
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
@@ -25,6 +27,10 @@ function ResetPassword() {
     async function handleSubmit(e) {
         e.preventDefault()
 
+        if (!passwordOk(password)) {
+            setError({ key: "validation.weakPassword" })
+            return
+        }
         if (password !== confirm) {
             setError({ key: "reset.mismatch" })
             return
@@ -71,7 +77,7 @@ function ResetPassword() {
                 </>
             }
         >
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 <div>
                     <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
                         {t("reset.newPassword")}
@@ -86,7 +92,7 @@ function ResetPassword() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
-                    <p className="mt-1 text-xs text-slate-500">{t("auth.passwordHint")}</p>
+                    <PasswordChecklist password={password} />
                 </div>
 
                 <div>

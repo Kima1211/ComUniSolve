@@ -1,22 +1,112 @@
-from datetime import datetime
-from typing import Optional
+import re
+from datetime import date, datetime
+from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, EmailStr
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 
-class Register(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
+from Models.user import SUFFIXES
+
+# Keep in sync with frontend/src/validation.js.
+# Letters (including ñ and accents), with spaces, periods, hyphens or apostrophes between parts: "Ma. Clara", "Dela Cruz".
+NAME_PATTERN = re.compile(r"[^\W\d_]+(?:[ .'\-]+[^\W\d_]+)*\.?")
+MIN_AGE = 13
+OLDEST_BIRTH_YEAR = 1900
+
+
+def _clean_name(value: Optional[str], required: bool) -> Optional[str]:
+    value = " ".join((value or "").split())
+    if not value:
+        if required:
+            raise ValueError("This name is required")
+        return None
+    if not NAME_PATTERN.fullmatch(value):
+        raise ValueError("Use letters only (spaces, periods, hyphens and apostrophes are allowed)")
+    return value
+
+
+def age_on(birth: date, today: date) -> int:
+    return today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+
+
+# Personal information and address, shared by registration and profile editing.
+class PersonalInfo(BaseModel):
+    first_name: str = Field(..., max_length=100)
+    middle_name: Optional[str] = Field(None, max_length=100)
+    last_name: str = Field(..., max_length=100)
+    suffix: Optional[Literal[tuple(SUFFIXES)]] = None
+    birth_date: date
+    sex: Optional[Literal["male", "female"]] = None
+    region_code: str = Field(..., max_length=10)
+    province_code: Optional[str] = Field(None, max_length=10)
+    city_code: str = Field(..., max_length=10)
+    barangay_code: str = Field(..., max_length=10)
+    street: Optional[str] = Field(None, max_length=255)
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def required_name(cls, v):
+        return _clean_name(v, required=True)
+
+    @field_validator("middle_name", mode="before")
+    @classmethod
+    def optional_name(cls, v):
+        return _clean_name(v, required=False)
+
+    @field_validator("suffix", "sex", "province_code", mode="before")
+    @classmethod
+    def blank_is_none(cls, v):
+        return v or None
+
+    @field_validator("street", mode="before")
+    @classmethod
+    def clean_street(cls, v):
+        return " ".join((v or "").split()) or None
+
+    @field_validator("birth_date")
+    @classmethod
+    def sensible_birth_date(cls, v: date):
+        today = date.today()
+        if v > today:
+            raise ValueError("Birth date can't be in the future")
+        if v.year < OLDEST_BIRTH_YEAR:
+            raise ValueError("Please check the birth year")
+        if age_on(v, today) < MIN_AGE:
+            raise ValueError(f"You must be at least {MIN_AGE} years old")
+        return v
+
+
+class Register(PersonalInfo):
     email: EmailStr
-    password: str = Field(..., min_length=8,max_length=128)
+    password: str = Field(..., min_length=8, max_length=128)
 
-class DeleteUser(BaseModel):
-    user_password: str
+    @field_validator("email")
+    @classmethod
+    def lowercase_email(cls, v: str):
+        return v.strip().lower()
+
+
+class ProfileUpdate(PersonalInfo):
+    pass
+
+
+class VerifyCode(BaseModel):
+    code: str = Field(..., pattern=r"^\d{6}$")
+
+
+class Deactivate(BaseModel):
+    password: str = Field(..., min_length=1, max_length=128)
 
 class Login(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., max_length=255)
+    password: str = Field(..., max_length=128)
 
 class ForgotPassword(BaseModel):
     email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def lowercase_email(cls, v: str):
+        return v.strip().lower()
 
 class ResetPassword(BaseModel):
     token: str = Field(..., min_length=1, max_length=255)

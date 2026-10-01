@@ -422,6 +422,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                                 value={commentText}
                                 onChange={(e) => setCommentText(e.target.value)}
                                 placeholder={t("solution.addComment")}
+                                maxLength={2000}
                                 className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
                             />
                             <button

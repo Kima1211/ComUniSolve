@@ -1,3 +1,4 @@
+import hmac
 from fastapi import APIRouter, HTTPException, status, Depends, Request, Response
 from sqlalchemy.orm import Session
 from Models.database import get_db
@@ -10,16 +11,20 @@ from Security.utils import (
     issue_refresh_token,
     revoke_refresh_token,
     clear_auth_cookies,
-    issue_verification_token,
+    issue_verification_code,
+    hash_verification_code,
     issue_password_reset_token,
     revoke_all_refresh_tokens,
     hash_password,
     get_current_user,
     PASSWORD_RESET_EXPIRE_MINUTES,
+    VERIFICATION_MAX_ATTEMPTS,
 )
 from Models.user import User
-from Schemas.user import ForgotPassword, ResetPassword
-from Services.email import send_verification_email, send_password_reset_email
+from Schemas.user import ForgotPassword, ResetPassword, VerifyCode
+from Services.email import send_verification_code, send_password_reset_email
+from Services.audit import record
+from routers.user import check_password_strength, find_by_email
 from Security.rate_limit import FORGOT_PASSWORD_PER_IP, client_ip, enforce
 from Services.errors import api_error
 
@@ -35,17 +40,52 @@ def resend_verification(current_user: User = Depends(get_current_user), db: Sess
     if current_user.is_verified:
         raise api_error(status.HTTP_400_BAD_REQUEST, "already_verified", "This account is already verified")
 
-    expires_at = current_user.verification_token_expires_at
-    if expires_at is not None:
-        issued_at = expires_at - timedelta(hours=24)
-        if datetime.now(timezone.utc) - issued_at < RESEND_COOLDOWN:
-            raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "email_cooldown", "Please wait a minute before requesting another email")
+    sent_at = current_user.verification_sent_at
+    if sent_at is not None and datetime.now(timezone.utc) - sent_at < RESEND_COOLDOWN:
+        raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "email_cooldown", "Please wait a minute before requesting another email")
 
-    token = issue_verification_token(current_user, db)
-    if not send_verification_email(current_user.email, current_user.name, token):
+    code = issue_verification_code(current_user, db)
+    if not send_verification_code(current_user.email, current_user.name, code):
         raise api_error(status.HTTP_502_BAD_GATEWAY, "email_send_failed", "We couldn't send the email right now. Please try again in a minute.")
 
-    return {"message": f"Verification email sent to {current_user.email}"}
+    return {"message": f"Verification code sent to {current_user.email}"}
+
+
+# 5 wrong tries per code, and a new code at most once a minute: guessing 1 in a million is hopeless.
+@router.post("/verify-code")
+def verify_code(body: VerifyCode, request: Request, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    if current_user.is_verified:
+        return {"message": "Email verified successfully"}
+
+    if current_user.verification_token_hash is None or current_user.verification_token_expires_at is None:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "code_expired", "This code has expired. Request a new one.")
+    if current_user.verification_attempts >= VERIFICATION_MAX_ATTEMPTS:
+        raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "code_locked", "Too many wrong codes. Request a new one.")
+    if datetime.now(timezone.utc) >= current_user.verification_token_expires_at:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "code_expired", "This code has expired. Request a new one.")
+
+    expected = current_user.verification_token_hash
+    if not hmac.compare_digest(expected, hash_verification_code(current_user.id, body.code)):
+        current_user.verification_attempts += 1
+        db.commit()
+        left = VERIFICATION_MAX_ATTEMPTS - current_user.verification_attempts
+        if left <= 0:
+            raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "code_locked", "Too many wrong codes. Request a new one.")
+        raise api_error(status.HTTP_400_BAD_REQUEST, "code_invalid", "That code is not correct.", {"left": left})
+
+    current_user.is_verified = True
+    current_user.verification_token_hash = None
+    current_user.verification_token_expires_at = None
+    current_user.verification_attempts = 0
+    record(db, "email_verified", request, user=current_user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to verify account")
+
+    return {"message": "Email verified successfully"}
 
 @router.post("/refresh")
 def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
@@ -111,33 +151,6 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 
     return {"message": "Logged out"}
 
-@router.get("/verify/{token}")
-def verify_email(token: str, db: Session = Depends(get_db)):
-    hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
-    
-    db_user = db.query(User).filter(User.verification_token_hash == hashed_token).first()
-    
-    if db_user is None:
-        raise api_error(status.HTTP_400_BAD_REQUEST, "verify_invalid", "Invalid verification token")
-
-    if db_user.is_verified:
-        return {"message": "Email verified successfully"}
-
-    current_time = datetime.now(timezone.utc)
-    if db_user.verification_token_expires_at is None or current_time >= db_user.verification_token_expires_at:
-        raise api_error(status.HTTP_400_BAD_REQUEST, "verify_expired", "Verification token has expired")
-
-    db_user.is_verified=True
-
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to verify account")
-    
-    return {"message": "Email verified successfully"}
-
-
 # Same answer for every email, so nobody can check which emails have accounts.
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, we sent a link to reset the password."
 
@@ -147,7 +160,7 @@ def forgot_password(body: ForgotPassword, request: Request, db: Session = Depend
     enforce(FORGOT_PASSWORD_PER_IP, client_ip(request),
             "Too many reset requests from your network. Please try again in 15 minutes.")
 
-    db_user = db.query(User).filter(User.email == body.email).first()
+    db_user = find_by_email(db, body.email)
 
     if db_user is None or not db_user.is_active:
         return {"message": FORGOT_PASSWORD_MESSAGE}
@@ -165,7 +178,7 @@ def forgot_password(body: ForgotPassword, request: Request, db: Session = Depend
 
 
 @router.post("/reset-password")
-def reset_password(body: ResetPassword, response: Response, db: Session = Depends(get_db)):
+def reset_password(body: ResetPassword, request: Request, response: Response, db: Session = Depends(get_db)):
     hashed_token = hashlib.sha256(body.token.encode('utf-8')).hexdigest()
 
     db_user = db.query(User).filter(User.password_reset_token_hash == hashed_token).first()
@@ -177,6 +190,7 @@ def reset_password(body: ResetPassword, response: Response, db: Session = Depend
     if db_user.password_reset_expires_at is None or current_time >= db_user.password_reset_expires_at:
         raise api_error(status.HTTP_400_BAD_REQUEST, "reset_expired", "This reset link has expired. Please request a new one.")
 
+    check_password_strength(body.new_password)
     db_user.password = hash_password(body.new_password)
 
     # Single-use: unlike verification, a reset link must stop working once used.
@@ -187,6 +201,7 @@ def reset_password(body: ResetPassword, response: Response, db: Session = Depend
 
     revoke_all_refresh_tokens(db_user.id, db)
     db_user.session_version += 1
+    record(db, "password_reset", request, user=db_user)
 
     try:
         db.commit()

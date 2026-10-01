@@ -11,6 +11,7 @@ from Models.database import get_db
 import Models.user as db_models
 import secrets
 import hashlib
+import hmac
 from Models.refresh_token import RefreshToken
 from Models.user import User
 from Services.reputation import is_currently_suspended
@@ -34,6 +35,8 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 PASSWORD_RESET_EXPIRE_MINUTES = 30
+VERIFICATION_CODE_MINUTES = 10
+VERIFICATION_MAX_ATTEMPTS = 5
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -115,16 +118,23 @@ def clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(key="access_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
     response.delete_cookie(key="refresh_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
 
-def issue_verification_token(user, db:Session) -> str:
-    token = secrets.token_urlsafe(32)
-    hashed_token = hashlib.sha256(token.encode('utf-8')).hexdigest()
-    
-    user.verification_token_hash = hashed_token
-    user.verification_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+# Keyed with SECRET_KEY: a 6-digit code has only a million possibilities, so a plain hash
+# could be reversed by trying them all if the database leaked.
+def hash_verification_code(user_id: int, code: str) -> str:
+    return hmac.new(SECRET_KEY.encode(), f"{user_id}:{code}".encode(), hashlib.sha256).hexdigest()
+
+def issue_verification_code(user, db: Session) -> str:
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    now = datetime.now(timezone.utc)
+
+    user.verification_token_hash = hash_verification_code(user.id, code)
+    user.verification_token_expires_at = now + timedelta(minutes=VERIFICATION_CODE_MINUTES)
+    user.verification_sent_at = now
+    user.verification_attempts = 0
 
     db.commit()
 
-    return token
+    return code
 
 def issue_password_reset_token(user, db: Session) -> str:
     token = secrets.token_urlsafe(32)

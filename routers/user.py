@@ -1,17 +1,27 @@
-from fastapi import APIRouter, HTTPException, status, Request, Response, Depends
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, status, Request, Response, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
-from Schemas.user import Register, DeleteUser, Login, UserProfile
+from Schemas.user import Register, Login, UserProfile, ProfileUpdate, Deactivate
 from Models import user, problem, solution
+from Models.user import build_display_name
 from Models.database import get_db
 from Security.utils import (
-    hash_password, 
+    hash_password,
     verify_password,
-    get_current_user, 
-    issue_auth_cookie,  
-    issue_refresh_token, 
-    issue_verification_token)
-from Services.email import send_verification_email
+    get_current_user,
+    issue_auth_cookie,
+    issue_refresh_token,
+    issue_verification_code,
+    revoke_all_refresh_tokens,
+    clear_auth_cookies,
+)
+from Security.passwords import password_problems
+from Services.email import send_verification_code
 from Services.reputation import get_tier
+from Services import locations
+from Services.audit import record
 from Security.rate_limit import (
     LOGIN_PER_IP,
     LOGIN_FAILURES_PER_EMAIL,
@@ -23,35 +33,60 @@ from Services.errors import api_error
 
 router = APIRouter()
 
+
+def check_password_strength(password: str) -> None:
+    problems = password_problems(password)
+    if problems:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "weak_password",
+            "Use at least 8 characters with uppercase, lowercase and a number, and avoid common passwords.",
+            {"missing": problems},
+        )
+
+
+def check_address(body) -> None:
+    if not locations.is_valid(body.region_code, body.province_code, body.city_code, body.barangay_code):
+        raise api_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_address",
+                        "Please choose your region, province, city/municipality and barangay again.")
+
+
+def apply_personal_info(target, body) -> None:
+    for field in ("first_name", "middle_name", "last_name", "suffix", "birth_date", "sex",
+                  "region_code", "province_code", "city_code", "barangay_code", "street"):
+        setattr(target, field, getattr(body, field))
+    target.name = build_display_name(body.first_name, body.last_name, body.suffix)
+
+
+def find_by_email(db: Session, email: str):
+    return db.query(user.User).filter(func.lower(user.User.email) == email.strip().lower()).first()
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def reg_body(register: Register, request: Request, response: Response, db: Session = Depends(get_db)):
     enforce(REGISTER_PER_IP, client_ip(request),
             "Too many accounts created from your network. Please try again later.")
 
-    existing = db.query(user.User).filter(user.User.email == register.email).first()
-    if existing: 
+    if find_by_email(db, register.email):
         raise api_error(status.HTTP_400_BAD_REQUEST, "email_taken", "Email already exist")
-    
-    hashed = hash_password(register.password)
+    check_password_strength(register.password)
+    check_address(register)
 
-    new_user = user.User(
-        name = register.name,
-        email = register.email,
-        password = hashed,
-    )
+    new_user = user.User(email=register.email, password=hash_password(register.password))
+    apply_personal_info(new_user, register)
     try:
         db.add(new_user)
+        db.flush()
+        record(db, "register", request, user=new_user)
         db.commit()
         db.refresh(new_user)
-        
     except Exception:
         db.rollback()
         raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to register")
-    
-    issue_auth_cookie(response,new_user)
-    issue_refresh_token(response, new_user,db)
-    token = issue_verification_token(new_user, db)
-    email_sent = send_verification_email(new_user.email, new_user.name, token)
+
+    issue_auth_cookie(response, new_user)
+    issue_refresh_token(response, new_user, db)
+    code = issue_verification_code(new_user, db)
+    email_sent = send_verification_code(new_user.email, new_user.name, code)
 
     return {
         "message": "Account successfully registered",
@@ -62,7 +97,7 @@ def reg_body(register: Register, request: Request, response: Response, db: Sessi
             "email": new_user.email,
         }
     }
-    
+
 @router.post("/login")
 def login(login: Login, request: Request, response: Response,db: Session = Depends(get_db)):
     enforce(LOGIN_PER_IP, client_ip(request),
@@ -72,18 +107,23 @@ def login(login: Login, request: Request, response: Response,db: Session = Depen
     if LOGIN_FAILURES_PER_EMAIL.is_blocked(email_key):
         raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "login_locked", "Too many failed attempts for this email. Please wait 15 minutes, or reset your password.", {"minutes": 15})
 
-    val_user = db.query(user.User).filter(user.User.email == login.email).first()
+    val_user = find_by_email(db, email_key)
 
     if not val_user or not verify_password(login.password, val_user.password):
         LOGIN_FAILURES_PER_EMAIL.hit(email_key)
+        record(db, "login_failed", request, user=val_user, email=email_key)
+        db.commit()
         raise api_error(status.HTTP_401_UNAUTHORIZED, "invalid_login", "Invalid email or password")
 
+    if not val_user.is_active:
+        raise api_error(status.HTTP_403_FORBIDDEN, "account_inactive", "Account is inactive")
+
     LOGIN_FAILURES_PER_EMAIL.reset(email_key)
+    record(db, "login_success", request, user=val_user)
 
     issue_auth_cookie(response, val_user)
-    issue_refresh_token(response, val_user,db)
-    
-    
+    issue_refresh_token(response, val_user, db)
+
     return {
         "user": {
             "id": val_user.id,
@@ -91,19 +131,79 @@ def login(login: Login, request: Request, response: Response,db: Session = Depen
             "email": val_user.email
         }
     }
-    
+
+
+# Everything the signed-in user may see about themselves (never sent to anyone else).
+def me_payload(u) -> dict:
+    return {
+        "id": u.id,
+        "name": u.name,
+        "email": u.email,
+        "role": u.role,
+        "is_verified": u.is_verified,
+        "points": u.points,
+        "tier": get_tier(u.points),
+        "verification_sent_at": u.verification_sent_at,
+        "first_name": u.first_name,
+        "middle_name": u.middle_name,
+        "last_name": u.last_name,
+        "suffix": u.suffix,
+        "birth_date": u.birth_date,
+        "sex": u.sex,
+        "region_code": u.region_code,
+        "province_code": u.province_code,
+        "city_code": u.city_code,
+        "barangay_code": u.barangay_code,
+        "street": u.street,
+        "address": locations.describe(u.region_code, u.province_code, u.city_code, u.barangay_code),
+    }
+
+
 @router.get("/users/me")
 def get_profile(current_user: user.User = Depends(get_current_user)):
-    return {
-        "id": current_user.id,
-        "name": current_user.name,
-        "email": current_user.email,
-        "role": current_user.role,
-        "is_verified": current_user.is_verified,
-        "points": current_user.points,
-        "tier": get_tier(current_user.points),
-        "verification_expires_at": current_user.verification_token_expires_at,
-    }
+    return me_payload(current_user)
+
+
+@router.patch("/users/me")
+def update_profile(body: ProfileUpdate, request: Request, db: Session = Depends(get_db),
+                   current_user: user.User = Depends(get_current_user)):
+    check_address(body)
+    apply_personal_info(current_user, body)
+    record(db, "profile_updated", request, user=current_user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update profile")
+    db.refresh(current_user)
+    return me_payload(current_user)
+
+
+# Deactivate, not delete: the user's posts stay (others' solutions and ratings depend on them),
+# but the account can no longer sign in and every session ends now.
+@router.post("/users/me/deactivate")
+def deactivate_account(body: Deactivate, request: Request, response: Response, db: Session = Depends(get_db),
+                       current_user: user.User = Depends(get_current_user)):
+    if current_user.role == "admin":
+        raise api_error(status.HTTP_400_BAD_REQUEST, "admin_cannot_deactivate", "Admin accounts can't be deactivated here")
+    # 400, not 401: a 401 would make the frontend try to refresh the session first.
+    if not verify_password(body.password, current_user.password):
+        raise api_error(status.HTTP_400_BAD_REQUEST, "wrong_password", "Password doesn't match")
+
+    current_user.is_active = False
+    current_user.deactivated_at = datetime.now(timezone.utc)
+    current_user.session_version += 1
+    revoke_all_refresh_tokens(current_user.id, db)
+    record(db, "account_deactivated", request, user=current_user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to deactivate account")
+
+    clear_auth_cookies(response)
+    return {"message": "Account deactivated"}
+
 
 @router.get("/users/{user_id}/profile", response_model=UserProfile)
 def get_public_profile(user_id: int, db: Session = Depends(get_db)):
@@ -161,23 +261,3 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
         "problems": problems,
         "solutions": solutions,
     }
-
-@router.delete("/users/{user_id}")
-def user_delete(user_id: int , user_del: DeleteUser, db: Session = Depends(get_db),current_user: user.User=Depends(get_current_user)):
-    find_id = db.query(user.User).filter(user.User.id == user_id).first()
-    
-    if not find_id:
-        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "User not found")
-    if user_id != current_user.id:
-        raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "Current User doesnt belong to this ID")
-    if not verify_password(user_del.user_password, find_id.password):
-        raise api_error(status.HTTP_401_UNAUTHORIZED, "wrong_password", "Password doesn't match")
-
-    try:
-        db.delete(find_id)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to delete user")
-    
-    return{"message": "Account deleted successfully"}

@@ -109,7 +109,8 @@ function QueueRow({ item, onAction, busy }) {
                 <button
                     type="button" disabled={busy}
                     onClick={() => {
-                        const reason = window.prompt(t("admin.promptRemove")) ?? ""
+                        const reason = window.prompt(t("admin.promptRemove"))
+                        if (reason === null) return
                         onAction(item, "removed", reason)
                     }}
                     className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs
@@ -120,7 +121,8 @@ function QueueRow({ item, onAction, busy }) {
                 <button
                     type="button" disabled={busy}
                     onClick={() => {
-                        const reason = window.prompt(t("admin.promptRemoveNoPenalty")) ?? ""
+                        const reason = window.prompt(t("admin.promptRemoveNoPenalty"))
+                        if (reason === null) return
                         onAction(item, "removed_no_penalty", reason)
                     }}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs
@@ -255,6 +257,7 @@ function UserStatus({ u }) {
     return (
         <div className="flex flex-wrap gap-1">
             {u.role === "admin" && <Badge tone="purple">{t("admin.badge.admin")}</Badge>}
+            {!u.is_active && <Badge tone="slate">{t("admin.badge.deactivated")}</Badge>}
             {u.is_verified
                 ? <Badge tone="green">{t("admin.badge.verified")}</Badge>
                 : <Badge tone="amber">{t("admin.badge.unverified")}</Badge>}
@@ -602,7 +605,82 @@ function ActivityTab() {
     )
 }
 
-const TABS = ["overview", "users", "activity"]
+const AUDIT_ACTIONS = [
+    "login_success", "login_failed", "register", "email_verified",
+    "password_reset", "profile_updated", "account_deactivated",
+]
+
+const AUDIT_TONES = {
+    login_failed: "red",
+    account_deactivated: "amber",
+    register: "green",
+    email_verified: "green",
+    password_reset: "sky",
+    profile_updated: "sky",
+}
+
+// Account activity (sign-ups, logins, failed logins, profile changes) - separate from moderation.
+function AccountsTab() {
+    const { t, formatDateTime } = useLanguage()
+    const [action, setAction] = useState("")
+    const [logs, setLogs] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(null)
+
+    useEffect(() => {
+        let cancelled = false
+        const timer = setTimeout(() => {
+            setLoading(true)
+            const params = new URLSearchParams({ limit: 200 })
+            if (action) params.set("action", action)
+            apiGet(`/admin/audit?${params}`)
+                .then((d) => { if (!cancelled) { setLogs(d); setError(null) } })
+                .catch((e) => { if (!cancelled) setError(e.code ? e : { key: "admin.couldNotLoadAudit" }) })
+                .finally(() => { if (!cancelled) setLoading(false) })
+        }, 0)
+        return () => { cancelled = true; clearTimeout(timer) }
+    }, [action])
+
+    return (
+        <>
+            <div className="mt-6">
+                <select
+                    value={action}
+                    onChange={(e) => setAction(e.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none
+                               focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                >
+                    <option value="">{t("admin.audit.all")}</option>
+                    {AUDIT_ACTIONS.map((value) => <option key={value} value={value}>{t(`admin.audit.${value}`)}</option>)}
+                </select>
+            </div>
+
+            <Message error={error} />
+
+            {!loading && logs.length === 0 && (
+                <p className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+                    {t("admin.audit.empty")}
+                </p>
+            )}
+
+            <div className={`mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white ${loading ? "opacity-50" : ""}`}>
+                {logs.map((log) => (
+                    <div key={log.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
+                        <Badge tone={AUDIT_TONES[log.action] || "slate"}>{t(`admin.audit.${log.action}`)}</Badge>
+                        <span className="text-slate-900">{log.user_name || log.email || t("admin.audit.unknown")}</span>
+                        {log.user_name && log.email && <span className="text-xs text-slate-500">{log.email}</span>}
+                        <span className="ml-auto flex gap-3 text-xs text-slate-500">
+                            {log.ip && <span>{t("admin.audit.ip", { ip: log.ip })}</span>}
+                            <span>{formatDateTime(log.created_at)}</span>
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </>
+    )
+}
+
+const TABS = ["overview", "users", "activity", "accounts"]
 
 function AdminDashboard() {
     const { t } = useLanguage()
@@ -635,6 +713,7 @@ function AdminDashboard() {
             {tab === "overview" && <OverviewTab />}
             {tab === "users" && <UsersTab />}
             {tab === "activity" && <ActivityTab />}
+            {tab === "accounts" && <AccountsTab />}
         </Layout>
     )
 }

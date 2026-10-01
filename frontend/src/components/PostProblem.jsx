@@ -139,7 +139,7 @@ function PostProblem() {
                     <div>
                         <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-1">{t("post.titleLabel")}</label>
                         <input
-                            id="title" type="text" className={inputClass} disabled={submitting}
+                            id="title" type="text" className={inputClass} disabled={submitting} maxLength={255}
                             placeholder={t("post.titlePlaceholder")}
                             value={title} onChange={(e) => setTitle(e.target.value)}
                         />
@@ -148,7 +148,7 @@ function PostProblem() {
                     <div>
                         <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-1">{t("post.description")}</label>
                         <textarea
-                            id="description" rows={6} className={inputClass} disabled={submitting}
+                            id="description" rows={6} className={inputClass} disabled={submitting} maxLength={5000}
                             placeholder={t("post.descriptionPlaceholder")}
                             value={description} onChange={(e) => setDescription(e.target.value)}
                         />

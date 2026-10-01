@@ -55,6 +55,18 @@ class ReportNote(BaseModel):
     details: Optional[str] = None
 
 
+class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: Optional[int] = None
+    user_name: Optional[str] = None
+    email: Optional[str] = None
+    action: str
+    ip: Optional[str] = None
+    created_at: datetime
+
+
 class QueueItem(BaseModel):
     target_type: Literal["problem", "solution", "comment"]
     id: int
