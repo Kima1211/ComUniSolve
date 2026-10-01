@@ -1,9 +1,12 @@
 // Bump the version whenever this file's caching logic changes; old caches are deleted on activate.
-const CACHE = "comunisolve-v1"
+const CACHE = "comunisolve-v2"
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png"]
 
 self.addEventListener("install", (event) => {
-    event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)))
+    // One file failing must not stop the new version from installing.
+    event.waitUntil(
+        caches.open(CACHE).then((cache) => Promise.all(APP_SHELL.map((url) => cache.add(url).catch(() => {}))))
+    )
     self.skipWaiting()
 })
 
@@ -42,7 +45,10 @@ self.addEventListener("fetch", (event) => {
         caches.match(request).then((cached) => {
             if (cached) return cached
             return fetch(request).then((response) => {
-                if (response.ok && (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/"))) {
+                // Vercel answers a missing file with index.html (status 200). Caching that under a .js name
+                // would serve HTML as JavaScript on every later visit: a blank page.
+                const isHtml = (response.headers.get("content-type") || "").includes("text/html")
+                if (response.ok && !isHtml && (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/"))) {
                     const copy = response.clone()
                     caches.open(CACHE).then((cache) => cache.put(request, copy))
                 }
