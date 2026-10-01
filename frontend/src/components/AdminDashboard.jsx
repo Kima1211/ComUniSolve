@@ -66,13 +66,36 @@ function QueueRow({ item, onAction, busy }) {
                 {item.ai_status === "unchecked" && <Badge tone="slate">AI: not checked</Badge>}
             </div>
 
+            {item.problem_title && (
+                <p className="mt-2 text-xs text-slate-500">
+                    {item.target_type === "comment" ? "Comment under an answer to: " : "Answer to: "}
+                    <a href={`/problems/${item.problem_id}`} target="_blank" rel="noreferrer"
+                       className="font-medium text-brand-700 hover:underline">
+                        {item.problem_title}
+                    </a>
+                </p>
+            )}
             {item.title && <p className="mt-2 font-semibold text-slate-900">{item.title}</p>}
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{item.excerpt}</p>
 
             <p className="mt-2 text-xs text-slate-500">
                 by {item.author_name} (#{item.author_id})
-                {reported && <> · reported for {item.report_reasons.join(", ")}</>}
+                {reported && <> · reported for {item.report_reasons.join(", ").replaceAll("_", "-")}</>}
+                {item.problem_id && (
+                    <> · <a href={`/problems/${item.problem_id}`} target="_blank" rel="noreferrer"
+                            className="font-medium text-brand-700 hover:underline">view on site</a></>
+                )}
             </p>
+
+            {item.reports.some((r) => r.details) && (
+                <ul className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
+                    {item.reports.filter((r) => r.details).map((r, i) => (
+                        <li key={i}>
+                            <span className="font-medium">{r.reason.replaceAll("_", "-")}:</span> {r.details}
+                        </li>
+                    ))}
+                </ul>
+            )}
 
             <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -94,15 +117,18 @@ function QueueRow({ item, onAction, busy }) {
                 >
                     Remove
                 </button>
-                {reported && (
-                    <button
-                        type="button" disabled={busy}
-                        onClick={() => onAction(item, "dismissed")}
-                        className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50"
-                    >
-                        Dismiss reports
-                    </button>
-                )}
+                <button
+                    type="button" disabled={busy}
+                    onClick={() => {
+                        const reason = window.prompt("Reason for removing this without penalty? (optional)") ?? ""
+                        onAction(item, "removed_no_penalty", reason)
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs
+                               font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    title="Hide it without taking points or counting toward suspension"
+                >
+                    Remove without penalty
+                </button>
             </div>
         </div>
     )
@@ -164,6 +190,8 @@ function OverviewTab() {
                     msg += ` (${result.removals} removal${result.removals === 1 ? "" : "s"} total).`
                 }
                 setNotice(msg)
+            } else if (action === "removed_no_penalty") {
+                setNotice(`Removed without penalty. ${item.author_name} keeps ${result.points_after} points and this doesn't count toward suspension.`)
             } else {
                 setNotice("Done.")
             }
@@ -445,6 +473,7 @@ function UsersTab() {
 const LOG_FILTERS = [
     ["", "All actions"],
     ["removed", "Removed"],
+    ["removed_no_penalty", "Removed without penalty"],
     ["restored", "Restored"],
     ["suspended", "Suspended"],
     ["unsuspended", "Unsuspended"],
@@ -452,6 +481,7 @@ const LOG_FILTERS = [
 
 const ACTION_TONES = {
     removed: "red",
+    removed_no_penalty: "slate",
     restored: "green",
     suspended: "amber",
     unsuspended: "sky",
@@ -462,6 +492,7 @@ function describe(log) {
     const target = log.target_user_name || "a deleted user"
     if (log.action === "suspended") return `${who} suspended ${target}`
     if (log.action === "unsuspended") return `${who} lifted ${target}'s suspension`
+    if (log.action === "removed_no_penalty") return `${who} removed a ${log.target_type} by ${target} without penalty`
     return `${who} ${log.action} a ${log.target_type} by ${target}`
 }
 
@@ -535,7 +566,7 @@ function ActivityTab() {
                 {logs.map((log) => (
                     <div key={log.id} className="rounded-xl border border-slate-200 bg-white p-4">
                         <div className="flex flex-wrap items-center gap-2">
-                            <Badge tone={ACTION_TONES[log.action] || "slate"}>{log.action}</Badge>
+                            <Badge tone={ACTION_TONES[log.action] || "slate"}>{log.action.replaceAll("_", " ")}</Badge>
                             <span className="text-sm text-slate-900">{describe(log)}</span>
                             <span className="ml-auto text-xs text-slate-500">{formatDate(log.created_at)}</span>
                         </div>
@@ -557,7 +588,7 @@ function ActivityTab() {
                             </details>
                         )}
 
-                        {log.action === "removed" && log.target_status === "removed" && (
+                        {(log.action === "removed" || log.action === "removed_no_penalty") && log.target_status === "removed" && (
                             <button
                                 type="button"
                                 disabled={busyId === log.id}

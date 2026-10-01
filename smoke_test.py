@@ -55,9 +55,12 @@ print("=" * 70)
 asker, asker_id = verified_client("Maria Santos", "maria@example.com")
 helper, helper_id = verified_client("Ben Cruz", "ben@example.com")
 
-r = asker.post("/problems", json={"title": "Street light is out", "description": "Dark for weeks", "category": "Public"})
+r = asker.post("/problems", json={"title": "Street light is out", "description": "Dark for weeks", "category": "Other"})
 check("Post a problem", r.status_code == 201)
 pid = r.json()["id"]
+
+r = asker.post("/problems", json={"title": "Old category", "description": "x", "category": "Public"})
+check("A category outside the list is rejected", r.status_code == 422, f"status={r.status_code}")
 
 r = asker.get(f"/problems/{pid}")
 body = r.json()
@@ -99,8 +102,15 @@ r = asker.post(f"/solutions/{sid}/upvote")
 check("Upvote works and increments the counter",
       r.status_code == 200 and r.json()["upvote_count"] == 1, f"{r.json()}")
 
+r = asker.get(f"/solutions/problem/{pid}")
+check("The list shows the viewer's upvote", r.json()[0]["upvoted"] is True, f"{r.json()[0].get('upvoted')}")
+
 r = asker.post(f"/solutions/{sid}/upvote")
-check("The same user cannot upvote twice", r.status_code == 400)
+check("Clicking upvote again removes it",
+      r.status_code == 200 and r.json()["upvote_count"] == 0 and r.json()["upvoted"] is False, f"{r.json()}")
+
+r = asker.post(f"/solutions/{sid}/upvote")
+check("Upvoting again after removing works", r.status_code == 200 and r.json()["upvote_count"] == 1)
 
 r = asker.post(f"/comment/{sid}", json={"content": "Thank you, this worked!", "parent_id": None})
 check("Comment can be posted", r.status_code == 200)
@@ -132,7 +142,7 @@ check("An unverified account is authenticated but flagged unverified",
       r.status_code == 200 and r.json()["is_verified"] is False,
       f"is_verified={r.json().get('is_verified')}")
 
-r = unverified.post("/problems", json={"title": "Should be blocked", "description": "x", "category": "Public"})
+r = unverified.post("/problems", json={"title": "Should be blocked", "description": "x", "category": "Other"})
 check("An unverified account cannot post a problem", r.status_code == 403, f"status={r.status_code}")
 
 r = unverified.post("/resend-verification")
@@ -159,7 +169,7 @@ check("An already-verified account cannot resend", r.status_code == 400, f"statu
 asker.post("/problems", json={
     "title": "Barangay streetlight not working near the basketball court",
     "description": "Another dark corner at night. Who do we report a broken street light to?",
-    "category": "Public"})
+    "category": "Other"})
 
 r = asker.post("/problems/match", json={
     "title": "Our street light is broken",

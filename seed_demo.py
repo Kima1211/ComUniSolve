@@ -1,3 +1,4 @@
+import os
 import sys
 
 from Models.database import SessionLocal
@@ -15,84 +16,27 @@ USERS = [
 
 PROBLEMS = [
     (
-        "Street light on Rizal St. has been out for weeks",
-        "The lamp near the corner has been dark since the start of the month. It is hard to "
-        "walk home safely after the evening shift, especially for the students coming back "
-        "from review classes.",
-        "Public", 0,
+        "Hindi maibigay ng dating school ang Form 137 ko",
+        "Lilipat ako ng school ngayong semester pero sabi ng dati kong school, matagal pa daw "
+        "bago nila maibigay ang Form 137. Baka hindi ako makapag-enroll sa tamang oras.",
+        "Enrollment & Requirements", 0,
         [
-            ("File a report at the barangay hall and ask for the ticket number. They forward "
-             "it to the city electrical office every Monday. Mine was fixed in nine days once "
-             "I had the ticket number to follow up with.", 2, True),
-            ("You can also message the city's Facebook page. Slower, but it works if you "
-             "cannot get to the hall during office hours.", 1, False),
+            ("Hindi mo na kailangang ikaw ang kumuha. Mag-enroll ka gamit ang report card mo "
+             "(Form 138), tapos ang bagong school mismo ang magre-request ng Form 137 sa dati "
+             "mong school. Ganyan ang ginawa sa akin at natanggap ako agad.", 2, True),
         ],
     ),
     (
-        "Mababa ang presyon ng tubig tuwing hapon",
-        "Simula bandang alas-dos ng hapon, halos walang lumalabas na tubig sa gripo. "
-        "Ganoon din daw sa mga kapitbahay namin sa parehong kalye.",
-        "Household", 1,
-        [
-            ("Tumawag kayo sa water district at i-report ang address. Kapag marami kayong "
-             "nag-report sa parehong kalye, mas mabilis nila inaasikaso. Nag-improve sa amin "
-             "pagkatapos ng dalawang linggo.", 3, True),
-        ],
-    ),
-    (
-        "Looking for a weekend tutor for Grade 8 math",
-        "My daughter is struggling with algebra and I cannot help her with it myself. Is "
-        "anyone available near the plaza on Saturdays? We can pay the usual rate.",
-        "School", 0,
-        [
-            ("Try asking at the high school - some of the senior students tutor on weekends "
-             "for pocket money, and they are good with algebra because they just finished it.", 2, False),
-        ],
-    ),
-    (
-        "Garbage has not been collected on our street for two weeks",
-        "The truck used to come every Tuesday and Friday. It has not come at all this month "
-        "and the pile at the corner is starting to smell.",
-        "Public", 1,
-        [
-            ("There was a change in the collection route. The barangay posted the new schedule "
-             "on their bulletin board - ours moved to Wednesday and Saturday.", 3, False),
-        ],
-    ),
-    (
-        "What documents do I need for a barangay clearance?",
-        "I need one for a job application next week and I do not want to make two trips. "
-        "What should I bring with me?",
-        "Public", 2,
-        [
-            ("Bring a valid ID, proof that you live here such as a utility bill, and the fee - "
-             "it was 50 pesos when I got mine last month. Go early, before 9am, or the queue "
-             "gets long.", 1, True),
-        ],
-    ),
-    (
-        "Paano mag-apply ng permit para sa maliit na sari-sari store?",
-        "Balak kong magbukas ng maliit na tindahan sa harap ng bahay namin. Hindi ko alam "
-        "kung saan magsisimula o magkano ang babayaran.",
-        "Livelihood", 3, [],
-    ),
-    (
-        "When is the next fogging schedule for dengue?",
-        "There have been three cases in our purok this month. Does anyone know when the "
-        "health center does the fogging, or how we request it?",
-        "Health", 0, [],
-    ),
-    (
-        "Our street floods whenever it rains hard",
-        "The water reaches the doorstep within an hour of heavy rain. The drainage at the end "
-        "of the street looks blocked but nobody seems to be clearing it.",
-        "Public", 1, [],
+        "How do I apply for a CHED scholarship?",
+        "I am an incoming first-year student and my family cannot afford the full tuition. "
+        "Where do I get the form and what documents do they usually ask for?",
+        "Tuition & Scholarships", 1, [],
     ),
     (
         "Tutdu-e daw ako if-else ha C++",
         "Diri ko maintindihan an if-else ha C++. Ano an kaibahan han if ngan else if? "
         "May exam kami ha Biyernes.",
-        "School", 0,
+        "Learning & Academics", 0,
         [
             ("Isipin mo na parang checkpoint. Ang if ang unang tanong - kapag totoo, doon "
              "papasok at hindi na titingnan ang iba. Ang else if ay susunod na tanong lang "
@@ -103,12 +47,104 @@ PROBLEMS = [
         "How do I use if-else statements in C++?",
         "We just started conditionals in our programming subject and I keep getting the "
         "logic wrong when there is more than one condition to check.",
-        "School", 1, [],
+        "Learning & Academics", 1, [],
+    ),
+    (
+        "No working electric fans in our classroom",
+        "Three of the four fans in Room 204 have been broken since August. It gets very hot "
+        "in the afternoon and it is hard to focus during long classes.",
+        "School Facilities & Access", 3,
+        [
+            ("Ask your class officers to write a short letter to the building custodian with "
+             "the room number and how many fans are broken. A written request gets logged, a "
+             "verbal one gets forgotten. Ours were replaced within two weeks.", 2, False),
+        ],
+    ),
+    (
+        "Walang pambili ng bond paper at ink para sa mga project",
+        "Ang daming kailangang i-print ngayong buwan. Mahal ang printing sa labas at wala "
+        "kaming printer sa bahay.",
+        "School Supplies & Costs", 1, [],
+    ),
+    (
+        "My classmate is being bullied in our group chat",
+        "Some classmates keep posting edited photos of her and making fun of her. She does "
+        "not want to tell the teacher because she is afraid it will get worse.",
+        "Student Welfare & Safety", 2,
+        [
+            ("Take screenshots before the messages are deleted, then go with her to the "
+             "guidance office. They handle this confidentially, and she does not have to face "
+             "the others alone.", 3, True),
+        ],
+    ),
+    (
+        "Laptop became very slow after a Windows update",
+        "It takes almost five minutes to start and the browser freezes when I open Google "
+        "Classroom. It was fine before the update last week.",
+        "Devices & Repair", 0,
+        [
+            ("Open Task Manager (Ctrl+Shift+Esc), go to the Startup tab and disable the apps "
+             "you do not need. Also check that the disk has at least 10 GB free - Windows "
+             "updates slow everything down when the drive is almost full.", 3, True),
+        ],
+    ),
+    (
+        "Walang signal sa bahay, hindi maka-attend ng online class",
+        "Isang bar lang ang signal sa loob ng bahay at palaging nawawala ang tawag sa Google "
+        "Meet. Sa labas lang may signal.",
+        "Internet & Connectivity", 1,
+        [
+            ("Subukan mong ilagay ang phone malapit sa bintana at gawing hotspot para sa laptop. "
+             "I-off din ang video kapag hindi kailangan, mas kaunti ang data na kailangan.", 0, False),
+        ],
+    ),
+    (
+        "Na-hack ang Facebook account ko, paano ma-recover?",
+        "Napalitan ang password at email ng account ko. May nagme-message na sa mga kaibigan "
+        "ko at humihingi ng pera.",
+        "Accounts & Passwords", 3,
+        [
+            ("Pumunta ka sa facebook.com/hacked mula sa ibang device at sundan ang steps. "
+             "Habang inaayos, mag-post ang kaibigan mo o i-message ang mga contact mo na huwag "
+             "magpadala ng pera. Kapag na-recover, i-on agad ang two-factor authentication.", 2, True),
+        ],
+    ),
+    (
+        "How do I get my ePhilID?",
+        "I registered for the national ID last year but the card has not arrived. I need a "
+        "valid ID for my scholarship application.",
+        "Online Services & Apps", 2, [],
+    ),
+    (
+        "Paano gumawa ng automatic table of contents sa Word?",
+        "Mano-mano kong tina-type ang table of contents ng thesis namin at nagugulo tuwing "
+        "may nadadagdag na page.",
+        "Software & Office Tools", 0,
+        [
+            ("Gamitin mo ang Heading 1 at Heading 2 styles sa mga chapter title, tapos pumunta "
+             "sa References > Table of Contents. Kapag may binago ka, i-right click lang ang "
+             "table at piliin ang Update Field.", 1, True),
+        ],
+    ),
+    (
+        "May nag-text na nanalo daw ako sa GCash raffle",
+        "Pinapa-send sa akin ang OTP para ma-claim daw ang premyo. Hindi naman ako sumali "
+        "sa kahit anong raffle.",
+        "Online Safety & Scams", 1,
+        [
+            ("Scam iyan. Huwag mong ibibigay ang OTP o MPIN mo kahit kanino - hindi iyan "
+             "hinihingi ng GCash. I-block ang number at i-report sa GCash Help Center.", 3, True),
+        ],
     ),
 ]
 
 
 def main():
+    # Neon is for real users only (decided 2026-10-01); seed a local database instead.
+    if "neon.tech" in os.getenv("DATABASE_URL", ""):
+        print("Refusing to seed: DATABASE_URL points to Neon.")
+        sys.exit(1)
+
     db = SessionLocal()
     try:
         users = []

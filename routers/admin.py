@@ -10,6 +10,7 @@ from Schemas.moderation import (
     ModerationActionIn,
     ModerationLogResponse,
     QueueItem,
+    ReportNote,
     SuspendUserIn,
 )
 from Schemas.user import AdminUserList, AdminUserRow
@@ -120,97 +121,74 @@ def get_problem_overview(db: Session = Depends(get_db), current_user: user.User 
     }
 
 
+def _pending_reports(db: Session) -> dict[str, dict[int, list[Report]]]:
+    grouped: dict[str, dict[int, list[Report]]] = {"problem": {}, "solution": {}, "comment": {}}
+    for r in db.query(Report).filter(Report.status == "pending").order_by(Report.created_at).all():
+        if r.problem_id is not None:
+            grouped["problem"].setdefault(r.problem_id, []).append(r)
+        elif r.solution_id is not None:
+            grouped["solution"].setdefault(r.solution_id, []).append(r)
+        else:
+            grouped["comment"].setdefault(r.comment_id, []).append(r)
+    return grouped
+
+
 @router.get("/admin/queue", response_model=list[QueueItem])
 def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_admin)):
-    pending = db.query(Report).filter(Report.status == "pending").all()
+    due = _pending_reports(db)
+    models = {"problem": problem.Problem, "solution": solution.Solution, "comment": comment.Comment}
 
-    problem_reports: dict[int, list[str]] = {}
-    solution_reports: dict[int, list[str]] = {}
-    comment_reports: dict[int, list[str]] = {}
-    for r in pending:
-        if r.problem_id is not None:
-            problem_reports.setdefault(r.problem_id, []).append(r.reason)
-        elif r.solution_id is not None:
-            solution_reports.setdefault(r.solution_id, []).append(r.reason)
-        else:
-            comment_reports.setdefault(r.comment_id, []).append(r.reason)
+    targets = {
+        kind: (
+            db.query(model)
+            .filter(model.moderation_status != "removed")
+            .filter((model.moderation_status == "flagged") | (model.id.in_(due[kind].keys() or [-1])))
+            .all()
+        )
+        for kind, model in models.items()
+    }
+
+    # Which problem each post belongs to, so the admin can judge it in context.
+    solution_problem = {s.id: s.problem_id for s in targets["solution"]}
+    comment_solution = {c.id: c.solution_id for c in targets["comment"]}
+    if comment_solution:
+        solution_problem.update(dict(
+            db.query(solution.Solution.id, solution.Solution.problem_id)
+            .filter(solution.Solution.id.in_(set(comment_solution.values()))).all()
+        ))
+    problem_ids = set(solution_problem.values())
+    titles = dict(
+        db.query(problem.Problem.id, problem.Problem.title).filter(problem.Problem.id.in_(problem_ids)).all()
+    ) if problem_ids else {}
 
     items: list[QueueItem] = []
+    for kind, rows in targets.items():
+        for t in rows:
+            reports = due[kind].get(t.id, [])
+            if kind == "problem":
+                problem_id, title, text, ai_status = t.id, t.title, t.description, t.ai_status
+            elif kind == "solution":
+                problem_id, title, text, ai_status = t.problem_id, None, t.solution_text, t.ai_status
+            else:
+                problem_id = solution_problem.get(t.solution_id)
+                title, text, ai_status = None, t.content, "unchecked"
 
-    problems = (
-        db.query(problem.Problem)
-        .filter(problem.Problem.moderation_status != "removed")
-        .filter(
-            (problem.Problem.moderation_status == "flagged")
-            | (problem.Problem.id.in_(problem_reports.keys() or [-1]))
-        )
-        .all()
-    )
-    for p in problems:
-        reasons = problem_reports.get(p.id, [])
-        items.append(QueueItem(
-            target_type="problem",
-            id=p.id,
-            title=p.title,
-            excerpt=(p.description or "")[:300],
-            author_id=p.user_id,
-            author_name=p.author.name if p.author else "(unknown)",
-            ai_status=p.ai_status,
-            moderation_status=p.moderation_status,
-            report_count=len(reasons),
-            report_reasons=sorted(set(reasons)),
-            created_at=p.created_at,
-        ))
-
-    solutions = (
-        db.query(solution.Solution)
-        .filter(solution.Solution.moderation_status != "removed")
-        .filter(
-            (solution.Solution.moderation_status == "flagged")
-            | (solution.Solution.id.in_(solution_reports.keys() or [-1]))
-        )
-        .all()
-    )
-    for s in solutions:
-        reasons = solution_reports.get(s.id, [])
-        items.append(QueueItem(
-            target_type="solution",
-            id=s.id,
-            title=None,
-            excerpt=(s.solution_text or "")[:300],
-            author_id=s.user_id,
-            author_name=s.author.name if s.author else "(unknown)",
-            ai_status=s.ai_status,
-            moderation_status=s.moderation_status,
-            report_count=len(reasons),
-            report_reasons=sorted(set(reasons)),
-            created_at=s.created_at,
-        ))
-
-    comments = (
-        db.query(comment.Comment)
-        .filter(comment.Comment.moderation_status != "removed")
-        .filter(
-            (comment.Comment.moderation_status == "flagged")
-            | (comment.Comment.id.in_(comment_reports.keys() or [-1]))
-        )
-        .all()
-    )
-    for c in comments:
-        reasons = comment_reports.get(c.id, [])
-        items.append(QueueItem(
-            target_type="comment",
-            id=c.id,
-            title=None,
-            excerpt=(c.content or "")[:300],
-            author_id=c.user_id,
-            author_name=c.author.name if c.author else "(unknown)",
-            ai_status="unchecked",
-            moderation_status=c.moderation_status,
-            report_count=len(reasons),
-            report_reasons=sorted(set(reasons)),
-            created_at=c.created_at,
-        ))
+            items.append(QueueItem(
+                target_type=kind,
+                id=t.id,
+                title=title,
+                excerpt=(text or "")[:300],
+                author_id=t.user_id,
+                author_name=t.author.name if t.author else "(unknown)",
+                ai_status=ai_status,
+                moderation_status=t.moderation_status,
+                report_count=len(reports),
+                report_reasons=sorted({r.reason for r in reports}),
+                reports=[ReportNote(reason=r.reason, details=r.details) for r in reports],
+                problem_id=problem_id,
+                problem_title=titles.get(problem_id) if kind != "problem" else None,
+                created_at=t.created_at,
+            ))
 
     items.sort(key=lambda i: (i.report_count, i.created_at), reverse=True)
     return items
@@ -243,10 +221,11 @@ def _moderate(db: Session, admin, target_type: str, target_id: int, body: Modera
     outcome: dict = {"action": body.action, "target_type": target_type, "id": target_id}
 
     try:
-        if body.action == "removed":
+        if body.action in ("removed", "removed_no_penalty"):
             if target.moderation_status == "removed":
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Already removed")
-            outcome.update(remove_content(db, admin.id, target, target_type, author, body.reason))
+            outcome.update(remove_content(db, admin.id, target, target_type, author, body.reason,
+                                          penalize=body.action == "removed"))
             outcome["reports_closed"] = _close_reports(db, target_type, target_id, "actioned")
 
         elif body.action == "restored":
@@ -359,7 +338,7 @@ def set_user_suspension(
 def get_moderation_logs(
     limit: int = Query(100, ge=1, le=500),
     target_user_id: Optional[int] = None,
-    action: Optional[Literal["removed", "restored", "suspended", "unsuspended"]] = None,
+    action: Optional[Literal["removed", "removed_no_penalty", "restored", "suspended", "unsuspended"]] = None,
     db: Session = Depends(get_db),
     current_user: user.User = Depends(get_current_admin),
 ):

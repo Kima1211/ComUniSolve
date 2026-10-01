@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from Models.comment import Comment
-from Models.moderation_log import ModerationLog
+from Models.moderation_log import ModerationLog, REMOVAL_ACTIONS
 from Models.problem import Problem
 from Models.solution import Solution
 from Services.keywords import check_text
@@ -105,6 +105,7 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
 
 # A restore undoes the admin's mistake, so only posts that are STILL removed count toward suspension.
 # Counted per post, so a post removed, restored and removed again counts once.
+# Only the post's latest removal decides: if it was last removed without penalty, it doesn't count.
 def active_removal_counts(db: Session, user_ids) -> dict[int, int]:
     user_ids = list(user_ids)
     if not user_ids:
@@ -112,26 +113,44 @@ def active_removal_counts(db: Session, user_ids) -> dict[int, int]:
 
     rows = (
         db.query(ModerationLog.target_user_id, ModerationLog.problem_id,
-                 ModerationLog.solution_id, ModerationLog.comment_id)
+                 ModerationLog.solution_id, ModerationLog.comment_id, ModerationLog.action)
         .outerjoin(Problem, Problem.id == ModerationLog.problem_id)
         .outerjoin(Solution, Solution.id == ModerationLog.solution_id)
         .outerjoin(Comment, Comment.id == ModerationLog.comment_id)
         .filter(
             ModerationLog.target_user_id.in_(user_ids),
-            ModerationLog.action == "removed",
+            ModerationLog.action.in_(REMOVAL_ACTIONS),
             or_(
                 Problem.moderation_status == "removed",
                 Solution.moderation_status == "removed",
                 Comment.moderation_status == "removed",
             ),
         )
+        .order_by(ModerationLog.created_at, ModerationLog.id)
         .all()
     )
 
-    posts: dict[int, set] = {}
-    for user_id, problem_id, solution_id, comment_id in rows:
-        posts.setdefault(user_id, set()).add((problem_id, solution_id, comment_id))
-    return {user_id: len(p) for user_id, p in posts.items()}
+    latest: dict[tuple, str] = {}
+    for user_id, problem_id, solution_id, comment_id, action in rows:
+        latest[(user_id, problem_id, solution_id, comment_id)] = action
+
+    counts: dict[int, int] = {}
+    for (user_id, *_), action in latest.items():
+        if action == "removed":
+            counts[user_id] = counts.get(user_id, 0) + 1
+    return counts
+
+
+def _latest_removal(db: Session, target, target_type: str) -> Optional[str]:
+    column = {"problem": ModerationLog.problem_id, "solution": ModerationLog.solution_id,
+              "comment": ModerationLog.comment_id}[target_type]
+    entry = (
+        db.query(ModerationLog.action)
+        .filter(column == target.id, ModerationLog.action.in_(REMOVAL_ACTIONS))
+        .order_by(ModerationLog.created_at.desc(), ModerationLog.id.desc())
+        .first()
+    )
+    return entry[0] if entry else None
 
 
 def _count_actions(db: Session, user_id: int, action: str) -> int:
@@ -199,7 +218,7 @@ def _target_ids(target, target_type: str) -> dict:
 
 
 def remove_content(db: Session, admin_id: Optional[int], target, target_type: str,
-                   author, reason: Optional[str] = None) -> dict:
+                   author, reason: Optional[str] = None, penalize: bool = True) -> dict:
     target.moderation_status = "removed"
 
     snapshot = getattr(target, "title", None) or ""
@@ -207,8 +226,19 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
             or getattr(target, "content", "") or "")
     snapshot = f"{snapshot}\n{body}".strip()
 
-    _log(db, admin_id, "removed", target_type, author.id, reason=reason, snapshot=snapshot,
-         **_target_ids(target, target_type))
+    _log(db, admin_id, "removed" if penalize else "removed_no_penalty", target_type, author.id,
+         reason=reason, snapshot=snapshot, **_target_ids(target, target_type))
+
+    # For posts that should go but aren't misconduct (e.g. off-topic):
+    # no penalty and no step toward suspension.
+    if not penalize:
+        db.flush()
+        return {
+            "removals": active_removal_counts(db, [author.id]).get(author.id, 0),
+            "points_after": author.points,
+            "suspended": False,
+            "suspended_days": None,
+        }
 
     award_points(author, _penalty(target_type))
 
@@ -234,7 +264,9 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
 
 def restore_content(db: Session, admin_id: Optional[int], target, target_type: str,
                     author, reason: Optional[str] = None) -> None:
+    # Only give points back if the removal actually took them.
+    if _latest_removal(db, target, target_type) == "removed":
+        award_points(author, -_penalty(target_type))
     target.moderation_status = "visible"
-    award_points(author, -_penalty(target_type))
     _log(db, admin_id, "restored", target_type, author.id, reason=reason, **_target_ids(target, target_type))
 

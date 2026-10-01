@@ -11,7 +11,10 @@ from typing import Optional
 from datetime import datetime
 from Models.database import Base
 
-MODERATION_ACTIONS = ["approved", "removed", "restored", "dismissed", "suspended", "unsuspended"]
+MODERATION_ACTIONS = ["approved", "removed", "removed_no_penalty", "restored", "dismissed", "suspended", "unsuspended"]
+# "removed_no_penalty" hides a post like "removed" does, but with no penalty and no step toward suspension
+# (off-topic posts, honest mistakes, or reports with the wrong reason).
+REMOVAL_ACTIONS = ("removed", "removed_no_penalty")
 TARGET_TYPES = ["problem", "solution", "comment", "user"]
 
 AI_STATUSES = ["unchecked", "ok", "unclear", "inappropriate"]

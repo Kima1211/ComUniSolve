@@ -186,6 +186,14 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
             detail="Account is inactive")
     return user
 
+
+# For public pages that show a little more to signed-in users (e.g. which solutions they upvoted).
+def get_optional_user(request: Request, db: Session = Depends(get_db)):
+    try:
+        return get_current_user(request, db)
+    except HTTPException:
+        return None
+
 def get_current_admin(current_user: db_models.User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an admin")

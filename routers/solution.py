@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from Schemas.solution import SolutionCreate, SolutionEdit, SolutionResponse, SolutionAccept
 from Models.database import get_db
 from Models import solution,problem,user
-from Security.utils import get_current_user, get_verified_user, get_active_poster
+from Security.utils import get_current_user, get_verified_user, get_active_poster, get_optional_user
 from Services.reputation import award_points
 from Services.rating import poster_ratings, clear_ratings
 from Services.moderation import run_pre_post_gate
@@ -76,7 +76,7 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
 }
 
 @router.get("/solutions/problem/{problem_id}", response_model=list[SolutionResponse])
-def get_solution(problem_id: int, db: Session=Depends(get_db)):
+def get_solution(problem_id: int, db: Session=Depends(get_db), viewer=Depends(get_optional_user)):
     fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
     if not fnd_problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
@@ -93,8 +93,15 @@ def get_solution(problem_id: int, db: Session=Depends(get_db)):
         .all()
     )
     stars = poster_ratings(db, [s.id for s in solutions])
+    mine = set()
+    if viewer:
+        mine = {sid for (sid,) in db.query(solution.Upvote.solution_id).filter(
+            solution.Upvote.user_id == viewer.id,
+            solution.Upvote.solution_id.in_([s.id for s in solutions] or [-1]),
+        )}
     for s in solutions:
         s.rating = stars.get(s.id)
+        s.upvoted = s.id in mine
     return solutions
 
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
@@ -204,35 +211,30 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
     if not fnd_solution: 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Solution not found")
     
+    # Clicking again takes the upvote back (like Reddit), including the author's point.
     existing_upvote = db.query(solution.Upvote).filter(solution.Upvote.user_id == current_user.id, solution.Upvote.solution_id == solution_id).first()
-    if existing_upvote:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already upvoted!")
-    
-    is_self_upvote = (
-           fnd_solution.user_id == current_user.id
-        )
-    
-    new_upvote = solution.Upvote(
-        user_id = current_user.id,
-        solution_id = solution_id
-    )
-    fnd_solution.upvote_count +=1
-    
+    point = 0 if fnd_solution.user_id == current_user.id else 1
+
     solution_author = db.query(user.User).filter(user.User.id == fnd_solution.user_id).first()
-    if not is_self_upvote:
+    if existing_upvote:
+        db.delete(existing_upvote)
+        fnd_solution.upvote_count = max(0, fnd_solution.upvote_count - 1)
         if solution_author:
-            award_points(solution_author, 1)
-    
+            award_points(solution_author, -point)
+    else:
+        db.add(solution.Upvote(user_id=current_user.id, solution_id=solution_id))
+        fnd_solution.upvote_count += 1
+        if solution_author:
+            award_points(solution_author, point)
+
     try:
-        db.add(new_upvote)
         db.commit()
-        db.refresh(new_upvote)
     except Exception:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail = "Failed to upvote solution")
-    
+
     return {
-        "message": "Upvoted Successfully",
+        "upvoted": existing_upvote is None,
         "upvote_count": fnd_solution.upvote_count
     }
 

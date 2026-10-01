@@ -297,9 +297,13 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     type="button"
                     disabled={!signedIn || busy}
                     onClick={() => run(() => apiPost(`/solutions/${solution.id}/upvote`))}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700
-                               hover:border-brand-400 hover:text-brand-700 disabled:opacity-40"
-                    title={signedIn ? "Upvote this solution" : "Sign in to upvote"}
+                    aria-pressed={solution.upvoted}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${
+                        solution.upvoted
+                            ? "border-brand-500 bg-brand-50 text-brand-700"
+                            : "border-slate-300 text-slate-700 hover:border-brand-400 hover:text-brand-700"
+                    }`}
+                    title={!signedIn ? "Sign in to upvote" : solution.upvoted ? "Remove your upvote" : "Upvote this solution"}
                 >
                     ▲ {solution.upvote_count}
                 </button>

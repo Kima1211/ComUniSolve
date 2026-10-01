@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { apiPatch } from "../api";
-import { CATEGORIES } from "../categories";
+import CategoryOptions from "./CategoryOptions";
 import ModerationNotice from "./ModerationNotice";
 import AiCheckStatus from "./AiCheckStatus";
 
@@ -53,10 +53,10 @@ function EditProblemForm({ problem, onSaved, onCancel }) {
             <div>
                 <label htmlFor="edit-category" className="mb-1 block text-sm font-medium text-slate-700">Category</label>
                 <select
-                    id="edit-category" className={inputClass} disabled={saving}
+                    id="edit-category" className={inputClass} disabled={saving} required
                     value={category} onChange={(e) => setCategory(e.target.value)}
                 >
-                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    <CategoryOptions />
                 </select>
             </div>
             <div>

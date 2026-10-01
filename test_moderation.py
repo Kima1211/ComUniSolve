@@ -70,7 +70,7 @@ def main_test():
     r = client.post("/problems", json={
         "title": "Broken streetlight on Rizal St",
         "description": "It has been dark for three weeks and it is unsafe at night.",
-        "category": "Public",
+        "category": "Other",
     })
     check("clean post is created", r.status_code == 201, f"-> {r.status_code} {r.text[:120]}")
     clean_problem_id = r.json().get("id") if r.status_code == 201 else None
@@ -78,7 +78,7 @@ def main_test():
     r = client.post("/problems", json={
         "title": "putangina this barangay",
         "description": "nothing works here",
-        "category": "Public",
+        "category": "Other",
     })
     check("blocked keyword is refused", r.status_code == 422, f"-> {r.status_code}")
     if r.status_code == 422:
@@ -89,7 +89,7 @@ def main_test():
     r = client.post("/problems", json={
         "title": "putangina this barangay",
         "description": "nothing works here",
-        "category": "Public",
+        "category": "Other",
         "acknowledged": True,
     })
     check("acknowledged=True cannot bypass a keyword block", r.status_code == 422,
@@ -98,7 +98,7 @@ def main_test():
     r = client.post("/problems", json={
         "title": "tanga ang sistema sa kalsada namin",
         "description": "The road repair schedule keeps changing without notice.",
-        "category": "Public",
+        "category": "Other",
     })
     check("flag-tier word publishes", r.status_code == 201, f"-> {r.status_code}")
     flagged_id = r.json().get("id") if r.status_code == 201 else None
@@ -114,7 +114,7 @@ def main_test():
     moderation_service.check_content = lambda t, x, **kw: {
         "verdict": "unclear", "reason": "Too vague.", "suggestion": "Say which street."}
     r = client.post("/problems", json={
-        "title": "help", "description": "problem po", "category": "Public"})
+        "title": "help", "description": "problem po", "category": "Other"})
     check("unclear is refused on the first attempt", r.status_code == 422, f"-> {r.status_code}")
     if r.status_code == 422:
         d = r.json()["detail"]
@@ -122,7 +122,7 @@ def main_test():
         check("a suggested rewrite is returned", bool(d.get("suggestion")), d)
 
     r = client.post("/problems", json={
-        "title": "help", "description": "problem po", "category": "Public",
+        "title": "help", "description": "problem po", "category": "Other",
         "acknowledged": True})
     check("unclear publishes on the second attempt", r.status_code == 201, f"-> {r.status_code}")
     second_try_id = r.json().get("id") if r.status_code == 201 else None
@@ -136,14 +136,14 @@ def main_test():
     moderation_service.check_content = lambda t, x, **kw: {
         "verdict": "inappropriate", "reason": "Harassment.", "suggestion": None}
     r = client.post("/problems", json={
-        "title": "about my neighbour", "description": "...", "category": "Public",
+        "title": "about my neighbour", "description": "...", "category": "Other",
         "acknowledged": True})
     check("inappropriate cannot be acknowledged past", r.status_code == 422, f"-> {r.status_code}")
 
     moderation_service.check_content = lambda t, x, **kw: None
     r = client.post("/problems", json={
         "title": "Clogged canal near the school",
-        "description": "Water rises fast when it rains.", "category": "Public"})
+        "description": "Water rises fast when it rains.", "category": "Other"})
     check("AI outage does not block posting", r.status_code == 201, f"-> {r.status_code}")
     if r.status_code == 201:
         db.expire_all()
@@ -168,6 +168,15 @@ def main_test():
     r = client.post("/reports", json={"reason": "spam"})
     check("a report with no target is rejected", r.status_code == 422, f"-> {r.status_code}")
 
+    r = client.post("/reports", json={"problem_id": flagged_id, "reason": "other"})
+    check("'something else' without details is rejected", r.status_code == 422, f"-> {r.status_code}")
+
+    make_user(db, "Second reporter", "reporter2@test.local")
+    login(client, "reporter2@test.local")
+    r = client.post("/reports", json={"problem_id": clean_problem_id, "reason": "other",
+                                      "details": "wrong phone number"})
+    check("'something else' with details is accepted", r.status_code == 201, f"-> {r.status_code}")
+
     print("\nLayer 5 - admin review")
     login(client, "poster@test.local")
     r = client.get("/admin/queue")
@@ -180,6 +189,10 @@ def main_test():
     check("reported content is in the queue",
           any(i["id"] == clean_problem_id and i["target_type"] == "problem" for i in queue),
           [i["id"] for i in queue])
+    item = next((i for i in queue if i["id"] == clean_problem_id and i["target_type"] == "problem"), {})
+    check("the admin sees each reporter's note",
+          [r["details"] for r in item.get("reports", []) if r["details"]] == ["wrong phone number"],
+          item.get("reports"))
     check("flagged content is in the queue too",
           any(i["id"] == flagged_id for i in queue), [i["id"] for i in queue])
     check("the most-reported item sorts first",
@@ -227,7 +240,7 @@ def main_test():
     for n in range(REMOVALS_BEFORE_SUSPENSION):
         rr = client.post("/problems", json={
             "title": f"Test problem {n}", "description": "A description.",
-            "category": "Public"})
+            "category": "Other"})
         ids.append(rr.json()["id"])
 
     login(client, "admin@test.local")
@@ -245,7 +258,7 @@ def main_test():
 
     login(client, "poster@test.local")
     r = client.post("/problems", json={
-        "title": "Another problem", "description": "Still here.", "category": "Public"})
+        "title": "Another problem", "description": "Still here.", "category": "Other"})
     check("a suspended user cannot post", r.status_code == 403, f"-> {r.status_code}")
 
     r = client.get("/problems")
@@ -255,7 +268,7 @@ def main_test():
     db.commit()
     r = client.post("/problems", json={
         "title": "Back again", "description": "The suspension has expired.",
-        "category": "Public"})
+        "category": "Other"})
     check("an expired suspension lifts itself with no job running",
           r.status_code == 201, f"-> {r.status_code} {r.text[:120]}")
 

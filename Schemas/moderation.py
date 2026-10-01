@@ -3,7 +3,7 @@ from typing import Literal, Optional
 from datetime import datetime
 
 Verdict = Literal["ok", "unclear", "inappropriate", "unchecked"]
-ModerationAction = Literal["approved", "removed", "restored", "dismissed"]
+ModerationAction = Literal["approved", "removed", "removed_no_penalty", "restored", "dismissed"]
 
 
 class ContentCheckResponse(BaseModel):
@@ -49,6 +49,11 @@ class ModerationLogResponse(BaseModel):
     target_status: Optional[str] = None
 
 
+class ReportNote(BaseModel):
+    reason: str
+    details: Optional[str] = None
+
+
 class QueueItem(BaseModel):
     target_type: Literal["problem", "solution", "comment"]
     id: int
@@ -60,5 +65,8 @@ class QueueItem(BaseModel):
     moderation_status: str
     report_count: int
     report_reasons: list[str] = []
+    reports: list[ReportNote] = []
+    problem_id: Optional[int] = None
+    problem_title: Optional[str] = None
     created_at: datetime
 

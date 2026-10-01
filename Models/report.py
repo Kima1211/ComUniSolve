@@ -12,7 +12,7 @@ from typing import Optional
 from datetime import datetime
 from Models.database import Base
 
-REPORT_REASONS = ["spam", "inappropriate", "harassment", "misleading", "other"]
+REPORT_REASONS = ["spam", "inappropriate", "harassment", "misleading", "off_topic", "other"]
 REPORT_STATUSES = ["pending", "actioned", "dismissed"]
 
 

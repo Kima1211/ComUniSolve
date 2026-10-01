@@ -6,6 +6,7 @@ const REASONS = [
     { value: "inappropriate", label: "Inappropriate content" },
     { value: "harassment", label: "Harassment or abuse" },
     { value: "misleading", label: "Misleading or false" },
+    { value: "off_topic", label: "Off-topic", problemOnly: true },
     { value: "other", label: "Something else" },
 ]
 
@@ -63,7 +64,7 @@ function ReportButton({ problemId, solutionId, commentId }) {
             <p className="text-xs font-semibold text-slate-700">Why are you reporting this?</p>
 
             <div className="mt-2 space-y-1">
-                {REASONS.map((r) => (
+                {REASONS.filter((r) => problemId || !r.problemOnly).map((r) => (
                     <label key={r.value} className="flex items-center gap-2 text-xs text-slate-700">
                         <input
                             type="radio"
@@ -81,7 +82,7 @@ function ReportButton({ problemId, solutionId, commentId }) {
                 rows={2}
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
-                placeholder="Anything else the admin should know (optional)"
+                placeholder={reason === "other" ? "What's wrong with it? (required)" : "Anything else the admin should know (optional)"}
                 className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs
                            outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
             />
@@ -92,7 +93,7 @@ function ReportButton({ problemId, solutionId, commentId }) {
                 <button
                     type="button"
                     onClick={submit}
-                    disabled={sending}
+                    disabled={sending || (reason === "other" && !details.trim())}
                     className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white
                                hover:bg-slate-900 disabled:bg-slate-300"
                 >

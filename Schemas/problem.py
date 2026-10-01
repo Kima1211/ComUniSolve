@@ -2,17 +2,18 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 from Schemas.author import AuthorOut
+from Schemas.categories import Category
 
 class ProblemCreate(BaseModel) :
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=5000)
-    category: str = Field(..., min_length=1, max_length=100)
+    category: Category
     acknowledged: bool = False
 
 class ProblemEdit(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=5000)
-    category: str = Field(..., min_length=1, max_length=100)
+    category: Category
     acknowledged: bool = False
     
 class ProblemResponse(BaseModel):
