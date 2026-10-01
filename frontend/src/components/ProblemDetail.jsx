@@ -10,6 +10,7 @@ import ModerationNotice from "./ModerationNotice";
 import ReportButton from "./ReportButton";
 import EditProblemForm from "./EditProblemForm";
 import AiCheckStatus from "./AiCheckStatus";
+import BackLink from "./BackLink";
 
 function ProblemDetail() {
     const { id } = useParams()
@@ -175,9 +176,7 @@ function ProblemDetail() {
 
     return (
         <Layout>
-            <Link to="/" className="text-sm font-medium text-slate-500 hover:text-slate-900">
-                ← {t("common.backToFeed")}
-            </Link>
+            <BackLink />
 
             {imageError && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

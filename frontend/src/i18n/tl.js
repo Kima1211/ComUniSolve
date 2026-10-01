@@ -20,6 +20,7 @@ const tl = {
     "common.by": "ni {name}",
     "common.checkSpam": "Tingnan din ang spam folder mo.",
     "common.backToFeed": "Bumalik sa listahan",
+    "common.back": "Bumalik",
     "common.solutions_one": "{count} solusyon",
     "common.solutions_other": "{count} solusyon",
     "common.stars": "{count} sa 5 bituin",

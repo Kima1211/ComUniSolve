@@ -7,6 +7,7 @@ import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
 import AiCheckStatus from "./AiCheckStatus";
 import CategoryOptions from "./CategoryOptions";
+import BackLink from "./BackLink";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -130,7 +131,8 @@ function PostProblem() {
     return (
         <Layout>
             <div className="mx-auto max-w-2xl">
-                <h1 className="text-xl font-bold text-slate-900">{t("post.title")}</h1>
+                <BackLink />
+                <h1 className="mt-4 text-xl font-bold text-slate-900">{t("post.title")}</h1>
                 <p className="mt-1 text-sm text-slate-500">{t("post.intro")}</p>
 
                 <form onSubmit={handleSubmit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6">

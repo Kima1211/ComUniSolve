@@ -19,6 +19,7 @@ const en = {
     "common.by": "by {name}",
     "common.checkSpam": "Check your spam folder too.",
     "common.backToFeed": "Back to the feed",
+    "common.back": "Back",
     "common.solutions_one": "{count} solution",
     "common.solutions_other": "{count} solutions",
     "common.stars": "{count} out of 5 stars",

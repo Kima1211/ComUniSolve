@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api";
 import { useLanguage } from "../i18n/language-context";
 import Layout, { TierBadge } from "./Layout";
+import BackLink from "./BackLink";
 
 const PAGE_SIZE = 50
 
@@ -610,7 +611,8 @@ function AdminDashboard() {
 
     return (
         <Layout>
-            <h1 className="text-xl font-bold text-slate-900">{t("admin.title")}</h1>
+            <BackLink />
+            <h1 className="mt-4 text-xl font-bold text-slate-900">{t("admin.title")}</h1>
             <p className="mt-1 text-sm text-slate-500">{t("admin.subtitle")}</p>
 
             <div className="mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">

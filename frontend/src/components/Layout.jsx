@@ -19,6 +19,9 @@ function TierBadge({ tier }) {
     )
 }
 
+const navLink = "text-sm font-medium text-slate-600 hover:text-slate-900"
+const primaryButton = "rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
+
 function Layout({ children }) {
     const { user, loading, logout } = useAuth()
     const { t } = useLanguage()
@@ -29,60 +32,74 @@ function Layout({ children }) {
         navigate("/")
     }
 
+    const logoutButton = (
+        <button type="button" onClick={handleLogout} className="text-sm font-medium text-slate-500 hover:text-slate-900">
+            {t("nav.logout")}
+        </button>
+    )
+
     return (
         <div className="min-h-screen bg-slate-50">
             <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
-                <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-                    <Link to="/" className="flex items-center gap-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-                            C
-                        </span>
-                        <span className="text-lg font-bold tracking-tight text-slate-900">ComUniSolve</span>
-                    </Link>
+                <div className="mx-auto max-w-5xl px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <Link to="/" className="flex items-center gap-2">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+                                C
+                            </span>
+                            <span className="text-lg font-bold tracking-tight text-slate-900">ComUniSolve</span>
+                        </Link>
 
-                    {loading ? null : user ? (
-                        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                        <div className="flex items-center gap-2 lg:gap-3">
                             <LanguageSwitcher />
                             <HeaderInstallButton />
-                            <Link
-                                to="/postproblem"
-                                className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
-                            >
-                                {t("nav.postProblem")}
-                            </Link>
-                            {user.role === "admin" && (
-                                <Link to="/admin/overview" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-                                    {t("nav.admin")}
-                                </Link>
+
+                            {/* Wide screens: everything on one row. */}
+                            {!loading && (
+                                <div className="hidden items-center gap-3 lg:flex">
+                                    {user ? (
+                                        <>
+                                            <Link to="/postproblem" className={primaryButton}>{t("nav.postProblem")}</Link>
+                                            {user.role === "admin" && (
+                                                <Link to="/admin/overview" className={navLink}>{t("nav.admin")}</Link>
+                                            )}
+                                            <Link to="/profile" title={t("nav.myProfile")} className="flex items-center gap-2 hover:opacity-80">
+                                                <span className="text-sm font-medium text-slate-700">{user.name}</span>
+                                                <TierBadge tier={user.tier} />
+                                            </Link>
+                                            {logoutButton}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Link to="/login" className={navLink}>{t("nav.login")}</Link>
+                                            <Link to="/register" className={primaryButton}>{t("nav.register")}</Link>
+                                        </>
+                                    )}
+                                </div>
                             )}
-                            <Link to="/profile" className="text-sm font-medium text-slate-600 hover:text-slate-900 sm:hidden">
-                                {t("nav.myProfile")}
-                            </Link>
-                            <Link to="/profile" title={t("nav.myProfile")} className="hidden sm:flex items-center gap-2 hover:opacity-80">
-                                <span className="text-sm font-medium text-slate-700">{user.name}</span>
-                                <TierBadge tier={user.tier} />
-                            </Link>
-                            <button
-                                type="button"
-                                onClick={handleLogout}
-                                className="text-sm font-medium text-slate-500 hover:text-slate-900"
-                            >
-                                {t("nav.logout")}
-                            </button>
                         </div>
-                    ) : (
-                        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
-                            <LanguageSwitcher />
-                            <HeaderInstallButton />
-                            <Link to="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-                                {t("nav.login")}
-                            </Link>
-                            <Link
-                                to="/register"
-                                className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
-                            >
-                                {t("nav.register")}
-                            </Link>
+                    </div>
+
+                    {/* Phones and tablets: actions get their own second row instead of wrapping unevenly. */}
+                    {!loading && (
+                        <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 lg:hidden ${user ? "justify-between" : "justify-end"}`}>
+                            {user ? (
+                                <>
+                                    <Link to="/postproblem" className={primaryButton}>{t("nav.postProblem")}</Link>
+                                    <div className="flex items-center gap-3">
+                                        {user.role === "admin" && (
+                                            <Link to="/admin/overview" className={navLink}>{t("nav.admin")}</Link>
+                                        )}
+                                        <Link to="/profile" className={navLink}>{t("nav.myProfile")}</Link>
+                                        {logoutButton}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <Link to="/login" className={navLink}>{t("nav.login")}</Link>
+                                    <Link to="/register" className={primaryButton}>{t("nav.register")}</Link>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

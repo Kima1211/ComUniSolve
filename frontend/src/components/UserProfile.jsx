@@ -5,6 +5,7 @@ import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import Layout, { TierBadge } from "./Layout";
 import { InstallSection } from "./InstallButton";
+import BackLink from "./BackLink";
 
 function Stat({ label, value }) {
     return (
@@ -68,7 +69,8 @@ function UserProfile({ own = false }) {
     if (error || !profile) {
         return (
             <Layout>
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <BackLink />
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                     {error ? errorText(error, "profile.notFound") : t("profile.notFound")}
                 </div>
             </Layout>
@@ -77,7 +79,8 @@ function UserProfile({ own = false }) {
 
     return (
         <Layout>
-            <section className="rounded-xl border border-slate-200 bg-white p-6">
+            <BackLink />
+            <section className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
                 <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-xl font-bold text-slate-900">{profile.name}</h1>
                     <TierBadge tier={profile.tier} />
