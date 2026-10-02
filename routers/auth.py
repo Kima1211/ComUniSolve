@@ -149,6 +149,23 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 
     return {"message": "Logged out"}
 
+@router.post("/logout-all")
+def logout_all(request: Request, response: Response, current_user: User = Depends(get_current_user),
+               db: Session = Depends(get_db)):
+    revoke_all_refresh_tokens(current_user.id, db)
+    current_user.session_version += 1
+    record(db, "logout_all", request, user=current_user)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to log out of all devices")
+
+    clear_auth_cookies(response)
+
+    return {"message": "Logged out of all devices"}
+
 # Same answer for every email, so nobody can check which emails have accounts.
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, we sent a link to reset the password."
 

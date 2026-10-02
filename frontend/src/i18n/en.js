@@ -420,6 +420,7 @@ const en = {
     "profile.fullName": "Full name",
     "profile.notSet": "Not set",
     "profile.completeHint": "Some of your details are missing. Please complete your profile.",
+    "profile.logoutAll": "Log out of all devices",
     "edit.title": "Edit profile",
     "edit.emailNote": "Your email ({email}) can't be changed here.",
     "deactivate.title": "Deactivate account",
@@ -573,6 +574,7 @@ const en = {
     "delete.button": "Delete my account permanently",
     "admin.badge.deleted": "deleted",
     "admin.audit.account_deleted": "Deleted account",
+    "admin.audit.logout_all": "Logged out of all devices",
     "error.admin_cannot_delete": "Admin accounts can't be deleted here.",
     "error.account_deleted": "This account was deleted and can't be reactivated.",
     "post.matching": "Looking for similar problems...",
@@ -607,6 +609,9 @@ const en = {
     "confirm.reactivate.body": "They can sign in and post again.",
     "confirm.restore.title": "Restore this post?",
     "confirm.restore.body": "It becomes visible again and the removal no longer counts toward suspension.",
+    "confirm.logoutAll.title": "Log out of all devices?",
+    "confirm.logoutAll.body": "You'll be signed out on every phone and computer, including this one. Use this if you signed in on a device that isn't yours.",
+    "confirm.logoutAll.button": "Log out everywhere",
 }
 
 export default en

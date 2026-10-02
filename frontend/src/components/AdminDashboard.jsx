@@ -653,6 +653,7 @@ function ActivityTab() {
 const AUDIT_ACTIONS = [
     "login_success", "login_failed", "register", "email_verified",
     "password_reset", "profile_updated", "account_deactivated", "account_reactivated", "account_deleted",
+    "logout_all",
 ]
 
 const AUDIT_TONES = {
@@ -664,6 +665,7 @@ const AUDIT_TONES = {
     email_verified: "green",
     password_reset: "sky",
     profile_updated: "sky",
+    logout_all: "amber",
 }
 
 function AccountsTab() {

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { LogOut } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import { useAuth } from "../auth-context";
+import { useConfirm } from "../confirm-context";
 import { useLanguage } from "../i18n/language-context";
 import { alertError, alertNote, btnPrimary, btnSecondary, chip, pageTitle, panel, panelTitle } from "../ui";
 import Layout, { TierBadge } from "./Layout";
@@ -23,6 +25,7 @@ function UserProfile({ own = false }) {
     const params = useParams()
     const navigate = useNavigate()
     const { user, logout } = useAuth()
+    const confirm = useConfirm()
     const { t, label, formatDate, errorText } = useLanguage()
     const userId = own ? user?.id : params.id
 
@@ -34,6 +37,7 @@ function UserProfile({ own = false }) {
     const [resetError, setResetError] = useState(null)
     const [sendingReset, setSendingReset] = useState(false)
     const [activeTab, setActiveTab] = useState("problems")
+    const [logoutAllError, setLogoutAllError] = useState(null)
 
     useEffect(() => {
         if (!userId) return
@@ -65,6 +69,25 @@ function UserProfile({ own = false }) {
     async function handleLogout() {
         navigate("/", { replace: true })
         await logout()
+    }
+
+    // The request comes first: if it fails, the user must stay here and see that other devices are still signed in.
+    async function handleLogoutAll() {
+        const ok = await confirm({
+            title: t("confirm.logoutAll.title"),
+            body: t("confirm.logoutAll.body"),
+            confirmLabel: t("confirm.logoutAll.button"),
+            Icon: LogOut,
+        })
+        if (!ok) return
+        try {
+            setLogoutAllError(null)
+            await apiPost("/logout-all")
+        } catch (e) {
+            setLogoutAllError(e)
+            return
+        }
+        await handleLogout()
     }
 
     if (loading) {
@@ -153,7 +176,11 @@ function UserProfile({ own = false }) {
                         <button type="button" onClick={handleLogout} className={btnSecondary}>
                             {t("nav.logout")}
                         </button>
+                        <button type="button" onClick={handleLogoutAll} className={btnSecondary}>
+                            {t("profile.logoutAll")}
+                        </button>
                     </div>
+                    {logoutAllError && <p role="alert" className={`${alertError} mt-3`}>{errorText(logoutAllError)}</p>}
                     {resetSent && (
                         <p role="status" className={`${alertNote} mt-3`}>{t("forgot.sent")} {t("common.checkSpam")}</p>
                     )}

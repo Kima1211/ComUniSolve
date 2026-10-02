@@ -421,6 +421,7 @@ const tl = {
     "profile.fullName": "Buong pangalan",
     "profile.notSet": "Hindi pa nakalagay",
     "profile.completeHint": "May kulang sa iyong detalye. Pakikumpleto ang profile mo.",
+    "profile.logoutAll": "Mag-log out sa lahat ng device",
     "edit.title": "I-edit ang profile",
     "edit.emailNote": "Hindi mababago dito ang email mo ({email}).",
     "deactivate.title": "I-deactivate ang account",
@@ -574,6 +575,7 @@ const tl = {
     "delete.button": "Burahin nang permanente ang account ko",
     "admin.badge.deleted": "binura",
     "admin.audit.account_deleted": "Nagbura ng account",
+    "admin.audit.logout_all": "Nag-log out sa lahat ng device",
     "error.admin_cannot_delete": "Hindi mabubura dito ang admin account.",
     "error.account_deleted": "Binura na ang account na ito at hindi na maibabalik.",
     "post.matching": "Naghahanap ng katulad na problema...",
@@ -608,6 +610,9 @@ const tl = {
     "confirm.reactivate.body": "Makakapag-sign in at makakapag-post na siya ulit.",
     "confirm.restore.title": "Ibalik ang post na ito?",
     "confirm.restore.body": "Makikita na ulit ito at hindi na bibilangin ang pagkaalis nito para sa suspension.",
+    "confirm.logoutAll.title": "Mag-log out sa lahat ng device?",
+    "confirm.logoutAll.body": "Masa-sign out ka sa lahat ng phone at computer, kasama ang isang ito. Gamitin ito kung nag-sign in ka sa device na hindi sa iyo.",
+    "confirm.logoutAll.button": "Mag-log out sa lahat",
 }
 
 export default tl
