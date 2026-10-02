@@ -14,6 +14,7 @@ import Layout from "./Layout";
 import BackLink from "./BackLink";
 import PersonalFields from "./PersonalFields";
 import AddressFields from "./AddressFields";
+import PasswordInput from "./PasswordInput";
 
 function DeactivateSection() {
     const { refreshUser } = useAuth()
@@ -58,7 +59,7 @@ function DeactivateSection() {
                 <label htmlFor="deactivate-password" className="block text-sm font-medium text-ink">
                     {t("deactivate.password")}
                 </label>
-                <input id="deactivate-password" type="password" autoComplete="current-password" maxLength={128}
+                <PasswordInput id="deactivate-password" autoComplete="current-password" maxLength={128}
                        className={inputClass(Boolean(error))} disabled={busy}
                        value={password} onChange={(e) => setPassword(e.target.value)} />
                 {error && <p role="alert" className="text-sm text-error">{errorText(error)}</p>}
@@ -126,7 +127,7 @@ function DeleteSection() {
                 <label htmlFor="delete-password" className="block text-sm font-medium text-ink">
                     {t("deactivate.password")}
                 </label>
-                <input id="delete-password" type="password" autoComplete="current-password" maxLength={128}
+                <PasswordInput id="delete-password" autoComplete="current-password" maxLength={128}
                        className={inputClass(Boolean(error))} disabled={busy}
                        value={password} onChange={(e) => setPassword(e.target.value)} />
                 {error && <p role="alert" className="text-sm text-error">{errorText(error)}</p>}

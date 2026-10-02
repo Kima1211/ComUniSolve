@@ -215,6 +215,11 @@ body {
 }
 
 @layer base {
+  /* Edge adds its own eye to password boxes; PasswordInput has one already. */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
   :focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 2px;

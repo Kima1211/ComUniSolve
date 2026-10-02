@@ -6,6 +6,7 @@ import { useLanguage } from "../i18n/language-context";
 import { inputClass } from "../form";
 import { alertError, alertNote, btnPrimary, btnSecondary, link } from "../ui";
 import AuthLayout from "./AuthLayout";
+import PasswordInput from "./PasswordInput";
 
 function Login() {
     const navigate = useNavigate()
@@ -97,9 +98,8 @@ function Login() {
                             {t("auth.forgot")}
                         </Link>
                     </div>
-                    <input
+                    <PasswordInput
                         id="password"
-                        type="password"
                         autoComplete="current-password"
                         placeholder={t("auth.passwordPlaceholder")}
                         className={inputClass()}

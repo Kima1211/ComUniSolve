@@ -9,6 +9,7 @@ import {
 } from "../validation";
 import { alertError, btnPrimary, link } from "../ui";
 import AuthLayout from "./AuthLayout";
+import PasswordInput from "./PasswordInput";
 import FormField from "./FormField";
 import PersonalFields from "./PersonalFields";
 import AddressFields from "./AddressFields";
@@ -27,6 +28,7 @@ function Register() {
     const [address, setAddress] = useState(EMPTY_ADDRESS)
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
+    const [confirm, setConfirm] = useState("")
     const [attempted, setAttempted] = useState(false)
     const [error, setError] = useState(null)
     const [submitting, setSubmitting] = useState(false)
@@ -36,6 +38,7 @@ function Register() {
         const emailProblem = emailError(email)
         if (emailProblem) problems.email = emailProblem
         if (!passwordOk(password)) problems.password = "validation.weakPassword"
+        if (confirm !== password) problems.confirm = "reset.mismatch"
         return problems
     }
 
@@ -100,10 +103,15 @@ function Register() {
                                value={email} onChange={(e) => setEmail(e.target.value)} />
                     </FormField>
                     <FormField id="password" label={t("auth.password")} error={fieldErrors.password}>
-                        <input id="password" type="password" autoComplete="new-password" placeholder={t("auth.newPasswordPlaceholder")}
-                               className={inputClass(fieldErrors.password)} disabled={submitting} maxLength={128}
-                               value={password} onChange={(e) => setPassword(e.target.value)} />
+                        <PasswordInput id="password" autoComplete="new-password" placeholder={t("auth.newPasswordPlaceholder")}
+                                       className={inputClass(fieldErrors.password)} disabled={submitting} maxLength={128}
+                                       value={password} onChange={(e) => setPassword(e.target.value)} />
                         <PasswordChecklist password={password} />
+                    </FormField>
+                    <FormField id="confirm" label={t("auth.confirmPassword")} error={fieldErrors.confirm}>
+                        <PasswordInput id="confirm" autoComplete="new-password" placeholder={t("reset.confirmPlaceholder")}
+                                       className={inputClass(fieldErrors.confirm)} disabled={submitting} maxLength={128}
+                                       value={confirm} onChange={(e) => setConfirm(e.target.value)} />
                     </FormField>
                 </section>
 

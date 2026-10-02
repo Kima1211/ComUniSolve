@@ -7,6 +7,7 @@ import { passwordOk } from "../validation";
 import { inputClass } from "../form";
 import { alertError, btnPrimary, link } from "../ui";
 import AuthLayout from "./AuthLayout";
+import PasswordInput from "./PasswordInput";
 import PasswordChecklist from "./PasswordChecklist";
 
 function ResetPassword() {
@@ -78,9 +79,8 @@ function ResetPassword() {
                     <label htmlFor="password" className="mb-1 block text-sm font-medium text-ink">
                         {t("reset.newPassword")}
                     </label>
-                    <input
+                    <PasswordInput
                         id="password"
-                        type="password"
                         autoComplete="new-password"
                         placeholder={t("auth.newPasswordPlaceholder")}
                         className={inputClass()}
@@ -95,9 +95,8 @@ function ResetPassword() {
                     <label htmlFor="confirm" className="mb-1 block text-sm font-medium text-ink">
                         {t("reset.confirm")}
                     </label>
-                    <input
+                    <PasswordInput
                         id="confirm"
-                        type="password"
                         autoComplete="new-password"
                         placeholder={t("reset.confirmPlaceholder")}
                         className={inputClass()}
