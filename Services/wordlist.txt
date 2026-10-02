@@ -28,6 +28,7 @@
 [block]
 putangina
 putang ina
+potang ina
 tangina
 kingina
 punyeta

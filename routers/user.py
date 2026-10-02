@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, status, Request, Response, Depends
@@ -5,7 +6,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from Schemas.user import Register, Login, UserProfile, ProfileUpdate, Deactivate
 from Models import user, problem, solution
-from Models.user import build_display_name
+from Models.user import build_display_name, DELETED_EMAIL_DOMAIN, DELETED_NAME
+from Models.audit_log import AuditLog
 from Models.database import get_db
 from Security.utils import (
     hash_password,
@@ -230,6 +232,51 @@ def deactivate_account(body: Deactivate, request: Request, response: Response, d
 
     clear_auth_cookies(response)
     return {"message": "Account deactivated"}
+
+
+# Permanent delete, Reddit-style: the account is anonymised, not removed. Problems, solutions and comments
+# stay (threads and accepted answers keep working) but show "Deleted user". Name, email, password and personal
+# details are wiped, so the person can't sign in again and their email is free for a brand-new account.
+# Points other users earned from these posts are untouched; this account's own points go to 0.
+@router.post("/users/me/delete")
+def delete_account(body: Deactivate, request: Request, response: Response, db: Session = Depends(get_db),
+                   current_user: user.User = Depends(get_current_user)):
+    if current_user.role == "admin":
+        raise api_error(status.HTTP_400_BAD_REQUEST, "admin_cannot_delete", "Admin accounts can't be deleted here")
+    # 400, not 401: a 401 would make the frontend try to refresh the session first.
+    if not verify_password(body.password, current_user.password):
+        raise api_error(status.HTTP_400_BAD_REQUEST, "wrong_password", "Password doesn't match")
+
+    placeholder = f"deleted-{current_user.id}@{DELETED_EMAIL_DOMAIN}"
+    for field in PRIVATE_FIELDS + ("first_name", "last_name", "suffix"):
+        setattr(current_user, field, None)
+    current_user.name = DELETED_NAME
+    current_user.email = placeholder
+    # A random password nobody knows: the account can never be signed in to again.
+    current_user.password = hash_password(secrets.token_urlsafe(32))
+    current_user.verification_token_hash = None
+    current_user.verification_token_expires_at = None
+    current_user.password_reset_token_hash = None
+    current_user.password_reset_expires_at = None
+    current_user.points = 0
+    current_user.is_active = False
+    current_user.deactivated_at = None  # deleted, not deactivated: nothing to reactivate
+    current_user.session_version += 1
+    revoke_all_refresh_tokens(current_user.id, db)
+
+    # Older audit rows still hold the real email; replace it too. IPs stay for security checks.
+    db.query(AuditLog).filter(AuditLog.user_id == current_user.id).update(
+        {AuditLog.email: placeholder}, synchronize_session=False
+    )
+    record(db, "account_deleted", request, user=current_user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to delete account")
+
+    clear_auth_cookies(response)
+    return {"message": "Account deleted"}
 
 
 # Sign back in to a deactivated account. A suspension still applies afterwards (it's stored separately).

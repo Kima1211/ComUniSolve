@@ -28,6 +28,7 @@ class ProblemResponse(BaseModel):
     user_id: int
     author: Optional[AuthorOut] = None
     solution_count: int = 0
+    accepted_rating: Optional[int] = None
     image_url: Optional[str] = None
     edited_at: Optional[datetime] = None
 

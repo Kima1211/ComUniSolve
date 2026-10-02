@@ -11,6 +11,7 @@ from Models import problem, user, solution
 from Services.moderation import run_pre_post_gate
 from Services import images
 from Services.errors import api_error
+from Services.rating import poster_ratings
 
 router = APIRouter()
 
@@ -34,7 +35,8 @@ def _visible(query):
         problem.Problem.deleted_at.is_(None),
     )
 
-def _attach_solution_counts(problems, db):
+# Adds what the feed shows beside each problem: how many solutions it has, and the accepted solution's rating.
+def _attach_summary(problems, db):
     if not problems:
         return problems
 
@@ -51,6 +53,22 @@ def _attach_solution_counts(problems, db):
     )
     for p in problems:
         p.solution_count = counts.get(p.id, 0)
+
+    # The poster's star rating of each accepted solution, so the feed can show it next to "Solved".
+    accepted = dict(
+        db.query(solution.Solution.id, solution.Solution.problem_id)
+        .filter(
+            solution.Solution.problem_id.in_(ids),
+            solution.Solution.status == "accepted",
+            solution.Solution.moderation_status != "removed",
+            solution.Solution.deleted_at.is_(None),
+        )
+        .all()
+    )
+    stars = poster_ratings(db, accepted.keys())
+    by_problem = {accepted[sid]: score for sid, score in stars.items()}
+    for p in problems:
+        p.accepted_rating = by_problem.get(p.id)
     return problems
 
 
@@ -70,7 +88,7 @@ def get_problems(
 
     query = query.order_by(problem.Problem.created_at.desc())
 
-    return _attach_solution_counts(query.all(), db)
+    return _attach_summary(query.all(), db)
 
 
 @router.get("/problems/{problem_id}", response_model=ProblemResponse)
@@ -79,7 +97,7 @@ def get_problem(problem_id: int, db: Session = Depends(get_db)):
 
     if not fnd_prob:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", f"Problem with id {problem_id} not found")
-    _attach_solution_counts([fnd_prob], db)
+    _attach_summary([fnd_prob], db)
     return fnd_prob
 
 @router.post("/problems/check", response_model=ContentCheckResponse)
@@ -214,7 +232,7 @@ def edit_problem(
         db.rollback()
         raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update problem")
 
-    _attach_solution_counts([fnd_prob], db)
+    _attach_summary([fnd_prob], db)
     return fnd_prob
 
 

@@ -92,6 +92,7 @@ def list_users(
             tier=get_tier(u.points),
             is_verified=u.is_verified,
             is_active=u.is_active,
+            is_deleted=u.is_deleted,
             is_suspended=is_currently_suspended(u),
             suspended_until=u.suspended_until,
             suspension_reason=u.suspension_reason,
@@ -416,6 +417,8 @@ def admin_reactivate_user(
     target = db.query(user.User).filter(user.User.id == user_id).first()
     if not target:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "User not found")
+    if target.is_deleted:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "account_deleted", "This account was deleted and can't be reactivated")
     if target.is_active:
         raise api_error(status.HTTP_400_BAD_REQUEST, "not_deactivated", "This account is not deactivated")
 

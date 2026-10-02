@@ -121,6 +121,7 @@ class AdminUserRow(BaseModel):
     tier: str
     is_verified: bool
     is_active: bool
+    is_deleted: bool = False
     is_suspended: bool
     suspended_until: Optional[datetime] = None
     suspension_reason: Optional[str] = None

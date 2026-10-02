@@ -8,4 +8,5 @@ class AuthorOut(BaseModel):
     name: str
     points: int
     tier: str
+    is_deleted: bool = False
 

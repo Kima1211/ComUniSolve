@@ -14,6 +14,10 @@ from Services.reputation import get_tier
 from typing import Optional
 from datetime import date
 
+DELETED_EMAIL_DOMAIN = "deleted.invalid"
+DELETED_NAME = "Deleted user"
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -62,6 +66,13 @@ class User(Base):
     @property
     def tier(self) -> str:
         return get_tier(self.points)
+
+    # A deleted account keeps its row (its posts still point to it), but its email is replaced with
+    # deleted-<id>@deleted.invalid. ".invalid" is reserved and can never be a real address, so this
+    # placeholder is how the system recognises a deleted account, with no extra column.
+    @property
+    def is_deleted(self) -> bool:
+        return self.email.endswith("@" + DELETED_EMAIL_DOMAIN)
 
 
 
