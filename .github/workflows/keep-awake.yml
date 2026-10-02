@@ -1,0 +1,17 @@
+name: Keep backend awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}   # lets you run it by hand from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the backend
+        run: |
+          curl --silent --show-error --max-time 90 --retry 2 \
+            --output /dev/null --write-out "backend answered %{http_code} in %{time_total}s\n" \
+            https://comunisolve-api.onrender.com/

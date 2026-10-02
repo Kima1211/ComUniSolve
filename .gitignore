@@ -6,3 +6,7 @@ __pycache__/
 node_modules/
 CLAUDE.local.md
 migrations
+.agents/
+skills-lock.json
+.claude/skills/
+DESIGN.md
