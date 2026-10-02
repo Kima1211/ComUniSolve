@@ -5,8 +5,8 @@ import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import { inputClass } from "../form";
 import { useConfirm } from "../confirm-context";
-import { Trash2, UserX } from "lucide-react";
-import { alertError, btnDanger, btnPrimary, pageSub, pageTitle, panel, panelTitle } from "../ui";
+import { LogOut, Trash2, UserX } from "lucide-react";
+import { alertError, alertNote, btnDanger, btnPrimary, btnSecondary, pageSub, pageTitle, panel, panelTitle } from "../ui";
 import {
     addressErrors, addressFromUser, addressPayload, personErrors, personFromUser, personPayload,
 } from "../validation";
@@ -15,6 +15,72 @@ import BackLink from "./BackLink";
 import PersonalFields from "./PersonalFields";
 import AddressFields from "./AddressFields";
 import PasswordInput from "./PasswordInput";
+
+function SecuritySection() {
+    const { user, logout } = useAuth()
+    const { t, errorText } = useLanguage()
+    const navigate = useNavigate()
+    const confirm = useConfirm()
+    const [linkSent, setLinkSent] = useState(false)
+    const [error, setError] = useState(null)
+    const [busy, setBusy] = useState(false)
+
+    // Reuses the forgot-password flow, so the new password also ends every other session.
+    async function changePassword() {
+        try {
+            setError(null)
+            setLinkSent(false)
+            setBusy(true)
+            await apiPost("/forgot-password", { email: user.email })
+            setLinkSent(true)
+        } catch (e) {
+            setError(e)
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    // The request comes first: if it fails, the user stays here and sees that other devices are still signed in.
+    async function logoutAll() {
+        const ok = await confirm({
+            title: t("confirm.logoutAll.title"),
+            body: t("confirm.logoutAll.body"),
+            confirmLabel: t("confirm.logoutAll.button"),
+            Icon: LogOut,
+        })
+        if (!ok) return
+        try {
+            setError(null)
+            setBusy(true)
+            await apiPost("/logout-all")
+        } catch (e) {
+            setError(e)
+            setBusy(false)
+            return
+        }
+        navigate("/", { replace: true })
+        await logout()
+    }
+
+    return (
+        <section className={`${panel} mt-6`}>
+            <h2 className={panelTitle}>{t("security.title")}</h2>
+            <p className="mt-1 text-sm text-muted">{t("security.body")}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={changePassword} disabled={busy} className={btnSecondary}>
+                    {t("profile.changePassword")}
+                </button>
+                <button type="button" onClick={logoutAll} disabled={busy} className={btnSecondary}>
+                    {t("profile.logoutAll")}
+                </button>
+            </div>
+            {linkSent && (
+                <p role="status" className={`${alertNote} mt-3`}>{t("security.linkSent", { email: user.email })} {t("common.checkSpam")}</p>
+            )}
+            {error && <p role="alert" className={`${alertError} mt-3`}>{errorText(error)}</p>}
+        </section>
+    )
+}
 
 function DeactivateSection() {
     const { refreshUser } = useAuth()
@@ -206,6 +272,8 @@ function EditProfile() {
                         </button>
                     </div>
                 </form>
+
+                <SecuritySection />
 
                 {/* Admins can neither deactivate nor delete here, so the site always keeps an admin. */}
                 {user.role !== "admin" && (

@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { LogOut } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { apiGet, apiPost } from "../api";
+import { apiGet } from "../api";
 import { useAuth } from "../auth-context";
-import { useConfirm } from "../confirm-context";
 import { useLanguage } from "../i18n/language-context";
 import { alertError, alertNote, btnPrimary, btnSecondary, chip, pageTitle, panel, panelTitle } from "../ui";
 import Layout, { TierBadge } from "./Layout";
@@ -25,7 +23,6 @@ function UserProfile({ own = false }) {
     const params = useParams()
     const navigate = useNavigate()
     const { user, logout } = useAuth()
-    const confirm = useConfirm()
     const { t, label, formatDate, errorText } = useLanguage()
     const userId = own ? user?.id : params.id
 
@@ -33,11 +30,7 @@ function UserProfile({ own = false }) {
     const loading = String(result.id) !== String(userId)
     const { profile, error } = result
 
-    const [resetSent, setResetSent] = useState(false)
-    const [resetError, setResetError] = useState(null)
-    const [sendingReset, setSendingReset] = useState(false)
     const [activeTab, setActiveTab] = useState("problems")
-    const [logoutAllError, setLogoutAllError] = useState(null)
 
     useEffect(() => {
         if (!userId) return
@@ -50,44 +43,10 @@ function UserProfile({ own = false }) {
         return () => { cancelled = true }
     }, [userId])
 
-    // Reuses the forgot-password flow, so changing a password also ends every other session.
-    async function handleChangePassword() {
-        try {
-            setResetError(null)
-            setResetSent(false)
-            setSendingReset(true)
-            await apiPost("/forgot-password", { email: user.email })
-            setResetSent(true)
-        } catch (e) {
-            setResetError(e)
-        } finally {
-            setSendingReset(false)
-        }
-    }
-
     // Navigate first: /profile needs a signed-in user, so logging out here would bounce to /login.
     async function handleLogout() {
         navigate("/", { replace: true })
         await logout()
-    }
-
-    // The request comes first: if it fails, the user must stay here and see that other devices are still signed in.
-    async function handleLogoutAll() {
-        const ok = await confirm({
-            title: t("confirm.logoutAll.title"),
-            body: t("confirm.logoutAll.body"),
-            confirmLabel: t("confirm.logoutAll.button"),
-            Icon: LogOut,
-        })
-        if (!ok) return
-        try {
-            setLogoutAllError(null)
-            await apiPost("/logout-all")
-        } catch (e) {
-            setLogoutAllError(e)
-            return
-        }
-        await handleLogout()
     }
 
     if (loading) {
@@ -170,21 +129,10 @@ function UserProfile({ own = false }) {
 
                     <div className="mt-4 flex flex-wrap gap-2">
                         <Link to="/profile/edit" className={btnPrimary}>{t("profile.edit")}</Link>
-                        <button type="button" onClick={handleChangePassword} disabled={sendingReset} className={btnSecondary}>
-                            {sendingReset ? t("common.sending") : t("profile.changePassword")}
-                        </button>
                         <button type="button" onClick={handleLogout} className={btnSecondary}>
                             {t("nav.logout")}
                         </button>
-                        <button type="button" onClick={handleLogoutAll} className={btnSecondary}>
-                            {t("profile.logoutAll")}
-                        </button>
                     </div>
-                    {logoutAllError && <p role="alert" className={`${alertError} mt-3`}>{errorText(logoutAllError)}</p>}
-                    {resetSent && (
-                        <p role="status" className={`${alertNote} mt-3`}>{t("forgot.sent")} {t("common.checkSpam")}</p>
-                    )}
-                    {resetError && <p role="alert" className={`${alertError} mt-3`}>{errorText(resetError)}</p>}
 
                     <InstallSection />
                 </section>
