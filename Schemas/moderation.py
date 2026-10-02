@@ -82,4 +82,3 @@ class QueueItem(BaseModel):
     problem_id: Optional[int] = None
     problem_title: Optional[str] = None
     created_at: datetime
-

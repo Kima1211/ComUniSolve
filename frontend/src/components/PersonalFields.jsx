@@ -3,11 +3,21 @@ import { inputClass } from "../form";
 import { SUFFIXES } from "../validation";
 import FormField from "./FormField";
 
-const today = () => new Date().toISOString().slice(0, 10)
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 function PersonalFields({ person, setPerson, errors = {}, disabled }) {
     const { t } = useLanguage()
     const set = (field) => (e) => setPerson((p) => ({ ...p, [field]: e.target.value }))
+
+    // Phones never show a keyboard for type="date", so the birth date is three boxes kept in one
+    // "year-month-day" string. Typed parts stay as they are until the form checks them.
+    const [year = "", month = "", day = ""] = (person.birth_date || "").split("-")
+    const setBirth = (part) => (e) => {
+        const value = part === "month" ? e.target.value : e.target.value.replace(/\D/g, "").slice(0, part === "year" ? 4 : 2)
+        const parts = { year, month, day, [part]: value }
+        const joined = parts.year || parts.month || parts.day ? `${parts.year}-${parts.month}-${parts.day}` : ""
+        setPerson((p) => ({ ...p, birth_date: joined }))
+    }
 
     return (
         <div className="space-y-4">
@@ -40,10 +50,23 @@ function PersonalFields({ person, setPerson, errors = {}, disabled }) {
                 </FormField>
             </div>
 
-            <FormField id="birth_date" label={t("personal.birthDate")} error={errors.birth_date} errorParams={{ age: 13 }}>
-                <input id="birth_date" type="date" className={inputClass(errors.birth_date)} disabled={disabled}
-                       min="1900-01-01" max={today()} autoComplete="bday"
-                       value={person.birth_date} onChange={set("birth_date")} />
+            <FormField id="birth_month" label={t("personal.birthDate")} error={errors.birth_date} errorParams={{ age: 13 }}>
+                <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-2">
+                    <select id="birth_month" aria-label={t("personal.month")} className={inputClass(errors.birth_date)}
+                            disabled={disabled} autoComplete="bday-month"
+                            value={month ? String(Number(month)) : ""} onChange={setBirth("month")}>
+                        <option value="">{t("personal.month")}</option>
+                        {MONTHS.map((m) => <option key={m} value={String(m)}>{t(`month.${m}`)}</option>)}
+                    </select>
+                    <input id="birth_day" aria-label={t("personal.day")} placeholder={t("personal.day")}
+                           inputMode="numeric" autoComplete="bday-day" maxLength={2}
+                           className={inputClass(errors.birth_date)} disabled={disabled}
+                           value={day} onChange={setBirth("day")} />
+                    <input id="birth_year" aria-label={t("personal.year")} placeholder={t("personal.year")}
+                           inputMode="numeric" autoComplete="bday-year" maxLength={4}
+                           className={inputClass(errors.birth_date)} disabled={disabled}
+                           value={year} onChange={setBirth("year")} />
+                </div>
             </FormField>
 
             <p className="text-xs text-muted">{t("personal.privacy")}</p>

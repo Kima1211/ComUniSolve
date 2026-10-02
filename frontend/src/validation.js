@@ -42,10 +42,22 @@ function ageOn(birth, today) {
     return today.getFullYear() - birth.getFullYear() - (before ? 1 : 0)
 }
 
+// "2004-10-2" from the Month/Day/Year boxes -> "2004-10-02", or null if that day doesn't exist.
+// The round trip catches dates like February 30, which new Date() would quietly turn into March 2.
+export function normalizeBirthDate(value) {
+    const [y = "", m = "", d = ""] = (value || "").split("-")
+    if (!/^\d{4}$/.test(y) || !/^\d{1,2}$/.test(m) || !/^\d{1,2}$/.test(d)) return null
+    const date = new Date(Number(y), Number(m) - 1, Number(d))
+    if (date.getFullYear() !== Number(y) || date.getMonth() !== Number(m) - 1 || date.getDate() !== Number(d)) return null
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+}
+
 export function birthDateError(value) {
     if (!value) return "validation.required"
-    const birth = new Date(`${value}T00:00:00`)
-    if (Number.isNaN(birth.getTime()) || birth.getFullYear() < 1900) return "validation.date"
+    const iso = normalizeBirthDate(value)
+    if (!iso) return "validation.date"
+    const birth = new Date(`${iso}T00:00:00`)
+    if (birth.getFullYear() < 1900) return "validation.date"
     const today = new Date()
     if (birth > today) return "validation.futureDate"
     if (ageOn(birth, today) < MIN_AGE) return "validation.tooYoung"
@@ -103,7 +115,7 @@ export function personPayload(p) {
         middle_name: cleanText(p.middle_name) || null,
         last_name: cleanText(p.last_name),
         suffix: p.suffix || null,
-        birth_date: p.birth_date,
+        birth_date: normalizeBirthDate(p.birth_date),
         sex: p.sex || null,
     }
 }
