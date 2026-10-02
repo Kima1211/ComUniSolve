@@ -35,7 +35,6 @@ from Services.errors import api_error
 
 router = APIRouter()
 
-
 def check_password_strength(password: str) -> None:
     problems = password_problems(password)
     if problems:
@@ -45,12 +44,10 @@ def check_password_strength(password: str) -> None:
             {"missing": problems},
         )
 
-
 def check_address(body) -> None:
     if not locations.is_valid(body.region_code, body.province_code, body.city_code, body.barangay_code):
         raise api_error(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid_address",
                         "Please choose your region, province, city/municipality and barangay again.")
-
 
 def apply_personal_info(target, body) -> None:
     for field in ("first_name", "middle_name", "last_name", "suffix", "birth_date", "sex",
@@ -58,10 +55,8 @@ def apply_personal_info(target, body) -> None:
         setattr(target, field, getattr(body, field))
     target.name = build_display_name(body.first_name, body.last_name, body.suffix)
 
-
 def find_by_email(db: Session, email: str):
     return db.query(user.User).filter(func.lower(user.User.email) == email.strip().lower()).first()
-
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def reg_body(register: Register, request: Request, response: Response, db: Session = Depends(get_db)):
@@ -104,7 +99,6 @@ def reg_body(register: Register, request: Request, response: Response, db: Sessi
         }
     }
 
-# The same checks for signing in and for reactivating: rate limits, then email + password.
 def check_credentials(body: Login, request: Request, db: Session):
     enforce(LOGIN_PER_IP, client_ip(request),
             "Too many login attempts from your network. Please wait a few minutes.")
@@ -123,7 +117,6 @@ def check_credentials(body: Login, request: Request, db: Session):
 
     LOGIN_FAILURES_PER_EMAIL.reset(email_key)
     return val_user
-
 
 @router.post("/login")
 def login(login: Login, request: Request, response: Response,db: Session = Depends(get_db)):
@@ -147,7 +140,6 @@ def login(login: Login, request: Request, response: Response,db: Session = Depen
             "email": val_user.email
         }
     }
-
 
 # Everything the signed-in user may see about themselves (never sent to anyone else).
 def me_payload(u) -> dict:
@@ -174,11 +166,9 @@ def me_payload(u) -> dict:
         "address": locations.describe(u.region_code, u.province_code, u.city_code, u.barangay_code),
     }
 
-
 @router.get("/users/me")
 def get_profile(current_user: user.User = Depends(get_current_user)):
     return me_payload(current_user)
-
 
 @router.patch("/users/me")
 def update_profile(body: ProfileUpdate, request: Request, db: Session = Depends(get_db),
@@ -194,19 +184,14 @@ def update_profile(body: ProfileUpdate, request: Request, db: Session = Depends(
     db.refresh(current_user)
     return me_payload(current_user)
 
-
 PRIVATE_FIELDS = ("middle_name", "birth_date", "sex", "region_code", "province_code",
                   "city_code", "barangay_code", "street")
-
 
 def reactivate(target, db: Session, request: Request) -> None:
     target.is_active = True
     target.deactivated_at = None
     record(db, "account_reactivated", request, user=target)
 
-
-# Deactivate, not delete: the user's posts stay (others' solutions and ratings depend on them),
-# but the account can no longer sign in and every session ends now.
 @router.post("/users/me/deactivate")
 def deactivate_account(body: Deactivate, request: Request, response: Response, db: Session = Depends(get_db),
                        current_user: user.User = Depends(get_current_user)):
@@ -233,17 +218,12 @@ def deactivate_account(body: Deactivate, request: Request, response: Response, d
     clear_auth_cookies(response)
     return {"message": "Account deactivated"}
 
-
-# Permanent delete, Reddit-style: the account is anonymised, not removed. Problems, solutions and comments
-# stay (threads and accepted answers keep working) but show "Deleted user". Name, email, password and personal
-# details are wiped, so the person can't sign in again and their email is free for a brand-new account.
-# Points other users earned from these posts are untouched; this account's own points go to 0.
+# Reddit-style delete: the account is anonymised; its posts stay as "Deleted user".
 @router.post("/users/me/delete")
 def delete_account(body: Deactivate, request: Request, response: Response, db: Session = Depends(get_db),
                    current_user: user.User = Depends(get_current_user)):
     if current_user.role == "admin":
         raise api_error(status.HTTP_400_BAD_REQUEST, "admin_cannot_delete", "Admin accounts can't be deleted here")
-    # 400, not 401: a 401 would make the frontend try to refresh the session first.
     if not verify_password(body.password, current_user.password):
         raise api_error(status.HTTP_400_BAD_REQUEST, "wrong_password", "Password doesn't match")
 
@@ -252,7 +232,6 @@ def delete_account(body: Deactivate, request: Request, response: Response, db: S
         setattr(current_user, field, None)
     current_user.name = DELETED_NAME
     current_user.email = placeholder
-    # A random password nobody knows: the account can never be signed in to again.
     current_user.password = hash_password(secrets.token_urlsafe(32))
     current_user.verification_token_hash = None
     current_user.verification_token_expires_at = None
@@ -260,7 +239,7 @@ def delete_account(body: Deactivate, request: Request, response: Response, db: S
     current_user.password_reset_expires_at = None
     current_user.points = 0
     current_user.is_active = False
-    current_user.deactivated_at = None  # deleted, not deactivated: nothing to reactivate
+    current_user.deactivated_at = None
     current_user.session_version += 1
     revoke_all_refresh_tokens(current_user.id, db)
 
@@ -278,8 +257,6 @@ def delete_account(body: Deactivate, request: Request, response: Response, db: S
     clear_auth_cookies(response)
     return {"message": "Account deleted"}
 
-
-# Sign back in to a deactivated account. A suspension still applies afterwards (it's stored separately).
 @router.post("/reactivate")
 def reactivate_account(body: Login, request: Request, response: Response, db: Session = Depends(get_db)):
     val_user = check_credentials(body, request, db)
@@ -291,7 +268,6 @@ def reactivate_account(body: Login, request: Request, response: Response, db: Se
     issue_auth_cookie(response, val_user)
     issue_refresh_token(response, val_user, db)
     return {"user": {"id": val_user.id, "name": val_user.name, "email": val_user.email}}
-
 
 @router.get("/users/{user_id}/profile", response_model=UserProfile)
 def get_public_profile(user_id: int, db: Session = Depends(get_db)):
@@ -310,7 +286,6 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Skip solutions whose problem is gone, so the list never links to a missing page.
     solution_rows = (
         db.query(solution.Solution, problem.Problem.title)
         .join(problem.Problem, problem.Problem.id == solution.Solution.problem_id)

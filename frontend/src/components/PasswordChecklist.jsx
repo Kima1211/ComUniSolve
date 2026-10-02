@@ -2,8 +2,6 @@ import { Check, Circle } from "lucide-react";
 import { useLanguage } from "../i18n/language-context";
 import { passwordChecks } from "../validation";
 
-// Live list of the password rules: each one gets a check mark as soon as it's met.
-// Met rules turn Ink with a check (shape, not just colour, shows the change); unmet ones stay muted.
 function PasswordChecklist({ password }) {
     const { t } = useLanguage()
     const checks = passwordChecks(password)

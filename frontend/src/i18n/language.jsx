@@ -34,7 +34,6 @@ export function LanguageProvider({ children }) {
     }
   }, []);
 
-  // Screen readers and the browser's own translate prompt read this.
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
@@ -43,7 +42,6 @@ export function LanguageProvider({ children }) {
     const dict = DICTIONARIES[lang];
     const lookup = (key) => dict[key] ?? en[key];
 
-    // t("feed.title"), t("common.by", { name }), t("common.solutions", { count }) -> picks _one/_other.
     function t(key, params) {
       let k = key;
       if (params && typeof params.count === "number") {
@@ -59,7 +57,6 @@ export function LanguageProvider({ children }) {
       return fill(text, params);
     }
 
-    // For values stored in English (categories, tiers, report reasons): translate if we know it, else show as is.
     function label(prefix, value) {
       return lookup(`${prefix}.${value}`) ?? value;
     }
@@ -72,9 +69,6 @@ export function LanguageProvider({ children }) {
       return value ? new Date(value).toLocaleString(LOCALES[lang], { dateStyle: "medium", timeStyle: "short" }) : "";
     }
 
-    // Turns any error into text in the current language. Components keep the error object (not a string)
-    // in state, so switching language re-translates it. `{ key }` is for errors made in the frontend.
-    // API errors carry a code (Services/errors.py); anything we can't translate falls back to its English message.
     function errorText(e, fallbackKey = "common.somethingWrong") {
       if (!e) return t(fallbackKey);
       if (e.key) return t(e.key, e.params);

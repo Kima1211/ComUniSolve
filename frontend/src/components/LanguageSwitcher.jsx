@@ -5,8 +5,6 @@ const OPTIONS = [
     ["tl", "TL"],
 ]
 
-// Two small buttons instead of a dropdown, so it fits in the top bar on phones.
-// Active side uses primary-soft + primary text; inactive is a quiet ghost.
 function LanguageSwitcher() {
     const { lang, setLang, t } = useLanguage()
 

@@ -2,9 +2,6 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 
-// Floating-to-the-right context panels. Flat surface, 1px border, 12px rounded.
-// No shadows — the brief reserves those for menus and modals.
-// `wash` adds the faint grey-to-amber gradient; only the first (About) panel uses it.
 function Panel({ title, wash = false, children }) {
     return (
         <section className={`rounded-lg border border-border p-4 ${wash ? "card-wash" : "bg-surface"}`}>

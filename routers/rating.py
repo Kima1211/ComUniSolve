@@ -23,14 +23,12 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
     if fnd_problem.user_id != current_user.id:
         raise api_error(status.HTTP_403_FORBIDDEN, "rate_not_poster", "Only the problem poster can rate solutions")
 
-    # Stars are the poster's evidence that the chosen fix worked, so only the accepted one is rated.
     if fnd_solution.status != "accepted":
         raise api_error(status.HTTP_400_BAD_REQUEST, "rate_not_accepted", "You can only rate the accepted solution")
 
     if fnd_solution.user_id == current_user.id:
         raise api_error(status.HTTP_400_BAD_REQUEST, "rate_own", "You can't rate your own solution")
 
-    # Rating again changes the existing rating instead of adding a second one.
     fnd_rating = db.query(rating.Rating).filter(rating.Rating.user_id == current_user.id, rating.Rating.solution_id == solution_id).first()
     if fnd_rating:
         fnd_rating.score = rate.score

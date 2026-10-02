@@ -41,8 +41,7 @@ function DeactivateSection() {
             setError(null)
             setBusy(true)
             await apiPost("/users/me/deactivate", { password })
-            // Leave this signed-in-only page first; clearing the user while still here would make
-            // RequireAuth send them to the login page instead of home.
+            // Navigate before clearing the user, or RequireAuth would send them to /login.
             navigate("/", { replace: true })
             await refreshUser()
         } catch (e) {
@@ -75,7 +74,6 @@ function DeactivateSection() {
     )
 }
 
-// Permanent delete. Two deliberate steps (tick the box + password), then a last browser confirm.
 function DeleteSection() {
     const { refreshUser } = useAuth()
     const { t, errorText } = useLanguage()
@@ -107,7 +105,7 @@ function DeleteSection() {
             setError(null)
             setBusy(true)
             await apiPost("/users/me/delete", { password })
-            navigate("/", { replace: true }) // leave first, same reason as in DeactivateSection
+            navigate("/", { replace: true })
             await refreshUser()
         } catch (e) {
             setError(e)
@@ -201,7 +199,6 @@ function EditProfile() {
                         <p role="alert" className={alertError}>{errorText(error)}</p>
                     )}
 
-                    {/* Save at the bottom right (DESIGN.md), the one primary button on this page. */}
                     <div className="flex justify-end border-t border-border pt-4">
                         <button type="submit" disabled={saving} className={btnPrimary}>
                             {saving ? t("reset.saving") : t("common.saveChanges")}

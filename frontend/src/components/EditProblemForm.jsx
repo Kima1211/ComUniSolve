@@ -25,7 +25,6 @@ function EditProblemForm({ problem, onSaved, onCancel }) {
             const updated = await apiPatch(`/problems/${problem.id}`, { title, description, category, acknowledged })
             onSaved(updated)
         } catch (e) {
-            // Edits pass through the same moderation gate as new posts.
             if (e.status === 422 && e.detail?.verdict) {
                 setGate(e.detail)
                 return
@@ -83,7 +82,6 @@ function EditProblemForm({ problem, onSaved, onCancel }) {
 
             {saving && <AiCheckStatus message={t("aiCheck.edit")} />}
 
-            {/* Outlined Save: "Post solution" stays the one filled button on the problem page. */}
             <div className="flex justify-end gap-2">
                 <button type="button" onClick={onCancel} disabled={saving} className={btnGhost}>
                     {t("common.cancel")}

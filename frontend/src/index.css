@@ -1,42 +1,9 @@
 @import "tailwindcss";
 
-/*
- * ComUniSolve "Amber" theme (see /DESIGN.md).
- * Two colours: amber and charcoal. Bright amber for buttons, "Solved" and the gradients,
- * with dark text on it; a deeper amber for links and active tabs, because bright amber
- * text on white is too faint to read. Cool grey neutrals in light mode, and "Dark Knight"
- * (near-black charcoal) in dark mode. A muted red is used only for errors.
- *
- * How the two modes work:
- *   - Every colour is a CSS variable below (--canvas, --surface, --primary, ...).
- *   - Light values sit on :root. Dark values replace them under [data-theme="dark"]
- *     (the user picked Dark) and under prefers-color-scheme: dark (the user picked
- *     nothing and the phone is in dark mode). One block flips the whole site.
- *   - Tailwind classes (bg-canvas, text-ink, bg-primary...) point at these variables,
- *     so components never need `dark:` classes.
- *
- * Classes to use in components:
- *   bg-canvas      the page behind the feed and side columns (bg-page adds the soft wash)
- *   bg-surface     cards, top bar, inputs, panels (card-wash adds a faint gradient)
- *   bg-surface-2   hover rows, selected nav items
- *   border-border  1px dividers, input outlines, panel edges
- *   text-ink       main text        text-muted   timestamps, authors, counts
- *   bg-primary + text-on-primary    the one main button per screen (+ shine)
- *   text-link      links, active tab (deep amber in light mode, bright amber in dark mode)
- *   bg-primary-soft  Open chip, AI matching panel (with text-link)
- *   bg-gold + text-on-gold          Solved chip (+ shine). "gold" is the amber colour; the
- *                                   name stayed so the components did not need renaming.
- *   bg-gold-soft + text-on-gold-soft  "Accepted by the poster" banner (+ banner-fade)
- *   text-error / bg-error-soft      errors, blocked posts
- *
- * Every text/background pair, including both ends of each gradient, was checked:
- * lowest 4.8:1 in light mode and 6.4:1 in dark mode (WCAG AA needs 4.5:1).
- */
+/* Colours are CSS variables: light on :root, dark under [data-theme=dark] and the system dark setting. Tailwind classes point at them, so components need no dark: classes. "gold" is the amber colour. */
 
-/* `dark:` classes (if a component ever needs one) follow the toggle. */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
-/* LIGHT: cool off-white page, white cards, amber buttons with dark text, deep amber links. */
 :root {
   --canvas:        #F6F7F9;
   --surface:       #FFFFFF;
@@ -63,16 +30,13 @@
   --error-soft:    #F7EBEA;
   --on-error:      #FFFFFF;
 
-  /* The gentle gradients (cool grey into amber). */
   --page-wash:  linear-gradient(160deg, #EEF0F3 0%, #F6F7F9 45%, #FEF4E4 100%);
   --card-wash:  linear-gradient(135deg, #F1F2F4 0%, #FFFFFF 50%, #FEF3E2 100%);
   --brand-line: linear-gradient(90deg, #3A4250, #F59E0B);
 
-  /* One soft shadow, floating layers only (menus, drawer, modals). */
   --shadow-float: 0 4px 16px rgb(28 34 48 / 0.14);
 }
 
-/* DARK ("Dark Knight"): near-black charcoal; bright amber for buttons, links and active tabs. */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --canvas:        #0D0F13;
@@ -165,9 +129,7 @@
   --color-error-soft:    var(--error-soft);
   --color-on-error:      var(--on-error);
 
-  /* Older pages (admin, profile, post a problem...) still use Tailwind's slate-/brand-/emerald-
-     classes. They point at the same variables, so those pages follow the theme and the dark
-     mode too, without rewriting them. */
+  /* Older pages use Tailwind's slate/brand/emerald scales; they map to the theme too. */
   --color-slate-50:  var(--canvas);
   --color-slate-100: var(--surface-2);
   --color-slate-200: var(--border);
@@ -194,7 +156,6 @@
   --color-accent:        var(--primary);
   --color-accent-strong: var(--primary-hover);
 
-  /* emerald and amber were "success" and "notice" colours; they follow the gold banner. */
   --color-emerald-50:  var(--gold-soft);
   --color-emerald-100: var(--gold-soft);
   --color-emerald-200: var(--border-strong);
@@ -250,19 +211,10 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* "tnum" gives tabular numbers for votes, solution counts and timestamps so columns align. */
   font-feature-settings: "tnum";
 }
 
-/* Shape rules from DESIGN.md:
-   - 4px (rounded-sm):  status chips, category tags
-   - 8px (rounded-md):  buttons, inputs, search bar, feed-item hover area, images
-   - 12px (rounded-lg): panels, modals, the AI matching panel, auth panels
-   - full:              only the vote pill and avatars
-   Pill-shaped buttons are banned. */
-
 @layer base {
-  /* Visible keyboard focus everywhere: 2px deep amber outline (bright amber in dark mode), 2px offset. */
   :focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 2px;
@@ -282,18 +234,14 @@ body {
   }
 }
 
-/* Hide the scrollbar inside horizontal chip rows (categories, filters). */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
-/* Phones have a bottom nav; main content needs room so nothing hides behind it. */
 .pb-nav { padding-bottom: calc(4rem + env(safe-area-inset-bottom)); }
 @media (min-width: 1024px) { .pb-nav { padding-bottom: 0; } }
 
-/* Thread line to the left of indented solution replies. */
 .thread-line { border-left: 1px solid var(--border); padding-left: 24px; margin-left: 20px; }
 
-/* Respect reduced motion for the few short transitions the app uses. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -303,16 +251,14 @@ body {
   }
 }
 
-/* ---- The gentle gradients (grey/charcoal into amber only), DESIGN.md "Gradients" ---- */
+/* Gentle gradients (grey/charcoal into amber only) */
 
-/* 1. Page background: a very soft diagonal wash, fixed so long pages don't repeat it. */
 .bg-page {
   background-color: var(--canvas);
   background-image: var(--page-wash);
   background-attachment: fixed;
 }
 
-/* 2. A 2px charcoal-to-amber line along the bottom of the top bar. */
 .brand-line { position: relative; }
 .brand-line::after {
   content: "";
@@ -323,19 +269,12 @@ body {
   pointer-events: none;
 }
 
-/* 3. A slight shine on main buttons and the Solved chip: a white highlight fading out,
-      laid over whatever background colour the element has (so hover colours still work). */
 .shine { background-image: linear-gradient(180deg, rgb(255 255 255 / 0.15), rgb(255 255 255 / 0) 70%); }
 
-/* 4. The accepted-answer banner: amber tint fading into the card. */
 .banner-fade { background-image: linear-gradient(90deg, var(--gold-soft), var(--surface)); }
 
-/* 5. A faint grey-to-amber diagonal for the few "welcome" cards (About panel, landing hero).
-      Regular cards stay flat white so the feed doesn't get busy. */
 .card-wash { background-color: var(--surface); background-image: var(--card-wash); }
 
-/* The header logo comes in two colourings: charcoal + amber for light mode, light grey + amber
-   for dark mode (charcoal would vanish on the dark top bar). Only the right one is shown. */
 .logo-dark { display: none; }
 :root[data-theme="dark"] .logo-light { display: none; }
 :root[data-theme="dark"] .logo-dark { display: inline-block; }

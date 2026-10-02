@@ -11,7 +11,6 @@ import BackLink from "./BackLink";
 
 const PAGE_SIZE = 50
 
-// A plain number with its label. Counts that need the admin's attention turn the primary colour when above zero.
 function Stat({ label, value, highlight }) {
     const attention = highlight && value > 0
     return (
@@ -22,8 +21,6 @@ function Stat({ label, value, highlight }) {
     )
 }
 
-// neutral = plain info, attention = needs a look (primary colour), danger = removals and failures.
-// The old tone names still work so the lists below didn't need rewriting.
 const BADGE_TONES = {
     slate: "bg-surface-2 text-muted",
     purple: "bg-surface-2 text-ink",
@@ -37,7 +34,6 @@ function Badge({ children, tone = "slate" }) {
     return <span className={`${chip} ${BADGE_TONES[tone] || BADGE_TONES.slate}`}>{children}</span>
 }
 
-// error is an error object (translated on render), notice is ready-made text.
 function Message({ error, notice }) {
     const { errorText } = useLanguage()
     return (
@@ -187,7 +183,6 @@ function OverviewTab() {
         try {
             setBusy(true)
             setError(null)
-            // problem -> /admin/problems/..., solution -> /admin/solutions/..., comment -> /admin/comments/...
             const path = `/admin/${item.target_type}s/${item.id}/moderate`
             const result = await apiPatch(path, { action, reason: reason || null })
 
@@ -317,7 +312,6 @@ function UsersTab() {
             confirmLabel: suspend ? t("admin.suspend") : t("admin.unsuspend"),
             tone: suspend ? "danger" : "primary",
             Icon: suspend ? Ban : UserCheck,
-            // A suspension needs a reason (the dialog won't close without one); lifting it doesn't.
             reason: { label: t("confirm.reasonLabel"), required: suspend },
         })
         if (!ok) return
@@ -401,8 +395,6 @@ function UsersTab() {
 
             <Message error={error} notice={notice} />
 
-            {/* The table keeps a minimum width and scrolls sideways inside its box on phones and tablets,
-                instead of squeezing seven columns until names, emails and badges break mid-word. */}
             <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface">
                 <table className="w-full min-w-[860px] text-left text-sm">
                     <thead className="whitespace-nowrap border-b border-border bg-surface-2 text-xs text-muted">
@@ -674,7 +666,6 @@ const AUDIT_TONES = {
     profile_updated: "sky",
 }
 
-// Account activity (sign-ups, logins, failed logins, profile changes) - separate from moderation.
 function AccountsTab() {
     const { t, formatDateTime } = useLanguage()
     const [action, setAction] = useState("")

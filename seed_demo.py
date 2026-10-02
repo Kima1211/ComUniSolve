@@ -8,7 +8,6 @@ from datetime import date
 from Security.utils import hash_password
 from Services import locations
 
-# Demo users live in San Jorge, Samar.
 _CITY = next(code for code, c in locations.CITIES.items() if c["name"] == "San Jorge")
 DEMO_ADDRESS = {
     "region_code": locations.CITIES[_CITY]["region"],
@@ -150,7 +149,6 @@ PROBLEMS = [
     ),
 ]
 
-
 def main():
     # Neon is for real users only (decided 2026-10-01); seed a local database instead.
     if "neon.tech" in os.getenv("DATABASE_URL", ""):
@@ -224,7 +222,6 @@ def main():
         sys.exit(1)
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     main()

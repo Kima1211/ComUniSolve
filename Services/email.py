@@ -19,7 +19,6 @@ if not FRONTEND_URL:
 
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
-# The backend doesn't know which language the user picked, so the email has both.
 def send_verification_code(to_email: str, to_name: str, code: str) -> bool:
     safe_name = html.escape(to_name)
 
@@ -37,7 +36,6 @@ def send_verification_code(to_email: str, to_name: str, code: str) -> bool:
         ),
     )
 
-
 def send_password_reset_email(to_email: str, to_name: str, token: str) -> bool:
     reset_link = f"{FRONTEND_URL}/reset-password/{token}"
     safe_name = html.escape(to_name)
@@ -54,7 +52,6 @@ def send_password_reset_email(to_email: str, to_name: str, token: str) -> bool:
             f"<p>If you didn't ask for this, ignore this email.</p>"
         ),
     )
-
 
 def _send_email(to_email: str, to_name: str, subject: str, html_content: str) -> bool:
     payload = {

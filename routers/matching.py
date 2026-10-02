@@ -20,7 +20,6 @@ _RELEVANCE_ORDER = {"high": 3, "medium": 2, "low": 1, "none": 0}
 
 AUTO_AI_ON_DETAIL = os.getenv("GEMINI_AUTO_ON_DETAIL", "false").lower() in {"1", "true", "yes"}
 
-
 def _fetch_candidates(db: Session, exclude_id: Optional[int]):
     # Only problems users can open; removed or deleted posts must never be suggested.
     query = db.query(problem.Problem).filter(
@@ -36,7 +35,6 @@ def _fetch_candidates(db: Session, exclude_id: Optional[int]):
     ]
     return rows, candidates
 
-
 def _accepted_solutions(db: Session, problem_ids):
     if not problem_ids:
         return {}
@@ -51,7 +49,6 @@ def _accepted_solutions(db: Session, problem_ids):
         .all()
     )
     return {s.problem_id: s for s in rows}
-
 
 def _build_matches(
     query_title: str,
@@ -76,7 +73,6 @@ def _build_matches(
 
     ai_ranked = None
     if use_ai and gemini.is_enabled():
-        # Up to SEND_ALL_UP_TO problems this is all of them; above that, a keyword shortlist.
         pool = [c for c in candidates if c["id"] in tfidf_scores]
         ai_ranked = gemini.rerank(query_title, query_description, pool)
 
@@ -128,18 +124,15 @@ def _build_matches(
     ai_used = ai_ranked is not None
     return results, ai_used, use_ai and not ai_used
 
-
 @router.post("/problems/match", response_model=MatchResponse)
 def match_before_posting(body: MatchRequest, db: Session = Depends(get_db)):
     matches, ai_used, backup = _build_matches(body.title, body.description, db, use_ai=False)
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
-
 @router.post("/problems/match/ai", response_model=MatchResponse)
 def match_with_ai(body: MatchRequest, db: Session = Depends(get_db)):
     matches, ai_used, backup = _build_matches(body.title, body.description, db, use_ai=True)
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
-
 
 @router.get("/problems/{problem_id}/similar", response_model=MatchResponse)
 def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
@@ -152,7 +145,6 @@ def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
     )
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
-
 @router.get("/problems/{problem_id}/similar/ai", response_model=MatchResponse)
 def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
     fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
@@ -163,8 +155,6 @@ def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
         fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True
     )
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
-
-
 
 @router.get("/problems/{problem_id}/ai-suggestion", response_model=AiSuggestionResponse)
 def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
@@ -180,8 +170,7 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
     if not fnd:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
-    # A real answer always replaces the AI one. The stored suggestion is kept,
-    # so it comes back if every community solution is later removed.
+    # A real answer replaces the AI one; the stored suggestion returns if every real solution is removed.
     has_solution = (
         db.query(solution.Solution.id)
         .filter(
@@ -198,8 +187,6 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
     if fnd.ai_suggestion:
         return AiSuggestionResponse(status="shown", suggestion=fnd.ai_suggestion)
 
-    # "A similar problem already has an answer" is the AI's judgment (only clearly or closely related
-    # ones count, not 'low'). When the AI is unavailable, the strict keyword backup decides instead.
     matches, ai_used, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True)
     if any(m.accepted_solution and (not ai_used or m.relevance in ("high", "medium")) for m in matches):
         return AiSuggestionResponse(status="similar_solution_exists")

@@ -1,9 +1,6 @@
 import { Star } from "lucide-react";
 import { useLanguage } from "../i18n/language-context";
 
-// The poster's 1-5 rating of an accepted solution. Gold, because it belongs to the "solved" moment
-// (DESIGN.md reserves gold for that). The dark On Gold outline keeps the shape readable on white,
-// and filled vs. outline tells the stars apart without relying on colour.
 function Stars({ value, size = 16 }) {
     const { t } = useLanguage()
     const text = t("common.stars", { count: value })

@@ -1,8 +1,6 @@
 import { createContext, useContext } from "react";
 
-// confirm(options) opens the confirmation dialog and resolves to null (cancelled)
-// or { reason } (confirmed; reason is "" when the dialog has no reason box).
-// See components/ConfirmDialog.jsx for the options.
+// confirm(options) resolves to null (cancelled) or { reason }. Options: see ConfirmDialog.jsx.
 export const ConfirmContext = createContext(null);
 
 export function useConfirm() {

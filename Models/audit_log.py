@@ -4,12 +4,10 @@ from typing import Optional
 from datetime import datetime
 from Models.database import Base
 
-# Account activity (logins, sign-ups, profile changes). Moderation actions live in moderation_logs.
 AUDIT_ACTIONS = [
     "login_success", "login_failed", "register", "email_verified",
     "password_reset", "profile_updated", "account_deactivated", "account_reactivated", "account_deleted",
 ]
-
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

@@ -27,8 +27,8 @@ class Problem(Base):
     ai_suggestion_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     edited_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     author = relationship("User", lazy="joined")
 

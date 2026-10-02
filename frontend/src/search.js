@@ -2,12 +2,8 @@ import en from "./i18n/en"
 import tl from "./i18n/tl"
 import { SECTORS } from "./categories"
 
-// Keyword search over the problems the feed already loaded (GET /problems returns all of them).
-// Rules: every word must appear somewhere, any order; capitals, accents and ñ don't matter;
-// small typos are forgiven ("gcsh" finds "gcash"). If nothing has every word, the closest
-// posts (most words found) are offered instead.
+// Every word must appear (any order); case and accents are ignored and small typos forgiven.
 
-// "Parañaque" -> "paranaque", "NIÑO" -> "nino": split accented letters, drop the accent marks.
 export function normalize(text) {
     return (text || "")
         .normalize("NFD")
@@ -15,13 +11,11 @@ export function normalize(text) {
         .toLowerCase()
 }
 
-// The words of a query, normalized. "  GCash   OTP " -> ["gcash", "otp"]. Empty -> [].
 export function queryWords(q) {
     return normalize(q).split(/\s+/).filter(Boolean)
 }
 
-// Edit distance: how many single-letter changes (add, remove, replace, or swap two neighbours)
-// turn `a` into `b`. "gcsh"->"gcash" = 1, "gcahs"->"gcash" = 1. Stops early once it's over `max`.
+// Edit distance, counting a swap of two neighbouring letters as one change.
 export function editDistance(a, b, max) {
     if (Math.abs(a.length - b.length) > max) return max + 1
     let beforePrev = null
@@ -39,7 +33,7 @@ export function editDistance(a, b, max) {
             cur[j] = d
             if (d < rowMin) rowMin = d
         }
-        if (rowMin > max) return max + 1 // every path is already too far
+        if (rowMin > max) return max + 1
         beforePrev = prev
         prev = cur
     }
@@ -53,8 +47,7 @@ function allowedTypos(word) {
     return 2
 }
 
-// Text and word list for a problem: title, description, and its category and sector names in
-// BOTH languages, so "edukasyon" and "education" find the same posts. Cached per problem object.
+// Category and sector names in both languages, so "edukasyon" finds "education".
 const cache = new WeakMap()
 function indexOf(problem) {
     let entry = cache.get(problem)
@@ -70,13 +63,12 @@ function indexOf(problem) {
 }
 
 function wordFound(word, { text, tokens }) {
-    if (text.includes(word)) return true // exact piece of text: the old rule still works
+    if (text.includes(word)) return true
     const max = allowedTypos(word)
     if (max === 0) return false
     return tokens.some((token) => {
         if (editDistance(word, token, max) <= max) return true
-        // A misspelled START of a longer word: "scholr" finds "scholarship". Only for 5+ letters,
-        // because short word starts are too easy to hit by accident.
+        // A misspelled start of a longer word ("scholr" -> "scholarship"), 5+ letters only.
         if (word.length >= 5 && token.length > word.length) {
             for (const len of [word.length - 1, word.length, word.length + 1]) {
                 if (editDistance(word, token.slice(0, len), max) <= max) return true
@@ -86,8 +78,6 @@ function wordFound(word, { text, tokens }) {
     })
 }
 
-// Returns { results, closest }. `results` have every word. `closest` is only filled when
-// `results` is empty: posts with at least half of the meaningful (3+ letter) words, best first.
 export function searchProblems(problems, q) {
     const words = queryWords(q)
     if (words.length === 0) return { results: problems, closest: [] }

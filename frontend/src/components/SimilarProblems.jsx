@@ -2,19 +2,13 @@ import { Link } from "react-router-dom";
 import { useLanguage } from "../i18n/language-context";
 import Stars from "./Stars";
 
-// TF-IDF scores at or above this read as a strong match when the AI didn't judge relevance.
-// (Matching itself starts at 0.10, see SIMILARITY_THRESHOLD in Services/matching.py.)
 const STRONG_SCORE = 0.35
 
-// DESIGN.md: match strength is written as text ("Strong match" / "Possible match"), never a percentage.
-// The exact word-overlap number is kept in the tooltip for anyone who wants it.
 function strengthOf(m) {
     if (m.relevance) return m.relevance === "high" ? "strong" : "possible"
     return m.score >= STRONG_SCORE ? "strong" : "possible"
 }
 
-// The AI matching panel: Ember Soft background, 12px rounding (DESIGN.md "ai-match-panel").
-// backup: the AI couldn't answer, so these are keyword matches only (the panel says so).
 function SimilarProblems({ matches, title, hint, aiUsed = false, backup = false }) {
     const { t, label } = useLanguage()
     if (!matches || matches.length === 0) return null
@@ -54,7 +48,6 @@ function SimilarProblems({ matches, title, hint, aiUsed = false, backup = false 
 
                             {m.reason && <p className="mt-1.5 text-sm text-muted">{m.reason}</p>}
 
-                            {/* The accepted solution's first lines: the reusable answer, marked in gold. */}
                             {m.accepted_solution && (
                                 <div className="mt-2 border-l-[3px] border-gold pl-3">
                                     {m.accepted_solution_rating && <Stars value={m.accepted_solution_rating} size={13} />}

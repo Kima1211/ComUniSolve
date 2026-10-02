@@ -11,7 +11,6 @@ from Services.errors import api_error
 
 router = APIRouter()
 
-
 def _check_comment(text: str):
     gate = run_pre_post_gate(None, text, kind="comment")
     if gate.blocked:
@@ -29,8 +28,6 @@ def _check_comment(text: str):
         )
     return gate
 
-
-# Hidden from everyone: removed by an admin, or deleted by the author.
 def _live_comments(query):
     return query.filter(comment.Comment.moderation_status != "removed", comment.Comment.deleted_at.is_(None))
 
@@ -86,7 +83,6 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
     
     return new_comment
 
-
 def _own_comment(comment_id: int, db: Session, current_user):
     fnd_comment = _live_comments(db.query(comment.Comment)).filter(comment.Comment.id == comment_id).first()
     if not fnd_comment:
@@ -94,7 +90,6 @@ def _own_comment(comment_id: int, db: Session, current_user):
     if fnd_comment.user_id != current_user.id:
         raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only change your own comment")
     return fnd_comment
-
 
 @router.patch("/comments/{comment_id}", response_model=CommentResponse)
 def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
@@ -114,7 +109,6 @@ def edit_comment(comment_id: int, body: CommentEdit, db: Session = Depends(get_d
         raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update comment")
 
     return fnd_comment
-
 
 @router.delete("/comments/{comment_id}")
 def delete_comment(comment_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):

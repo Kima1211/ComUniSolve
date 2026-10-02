@@ -14,8 +14,7 @@ import CategoryOptions from "./CategoryOptions";
 import BackLink from "./BackLink";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
-// The AI check runs once the title has 2+ words and 12+ characters and typing has paused this long
-// (protects the free Gemini quota: about 1-3 calls while someone writes a title).
+// Waits for a pause in typing, to protect the free Gemini quota.
 const MATCH_DELAY_MS = 1200
 const NO_MATCH = { query: "", matches: [], aiUsed: false, backup: false }
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -25,8 +24,6 @@ function PostProblem() {
     const { t, errorText } = useLanguage()
     const [params] = useSearchParams()
 
-    // Coming from a search with no results (/postproblem?title=...): start with those words.
-    // Read once at mount; after that the box is the user's to edit.
     const [title, setTitle] = useState(() => (params.get("title") || "").slice(0, 255))
     const [description, setDescription] = useState("")
     const [category, setCategory] = useState("")
@@ -34,7 +31,6 @@ function PostProblem() {
     const [gate, setGate] = useState(null)
     const [submitting, setSubmitting] = useState(false)
     const [step, setStep] = useState("")
-    // The last answer, remembered with the title it was for, so a changed title shows "looking..."
     const [match, setMatch] = useState(NO_MATCH)
     const [image, setImage] = useState(null)
 
@@ -58,9 +54,7 @@ function PostProblem() {
         setImage(file)
     }
 
-    // Similar problems, judged by the AI (the keyword backup steps in if the AI is unavailable).
-    // Only title changes start a check; the description is sent along but typing it doesn't
-    // trigger new calls, so the ref holds its latest value.
+    // Only title changes start a check; the description is read from a ref.
     const query = title.trim()
     const readyToMatch = query.split(/\s+/).length >= 2 && query.length >= 12
     const descriptionRef = useRef(description)
@@ -81,7 +75,6 @@ function PostProblem() {
         return () => { cancelled = true; clearTimeout(timer) }
     }, [query, readyToMatch])
 
-    // While a new check is pending, the previous results stay visible under a "looking..." line.
     const current = readyToMatch ? match : NO_MATCH
     const matching = readyToMatch && match.query !== query
 
@@ -93,7 +86,6 @@ function PostProblem() {
             setStep("checking")
             const data = await apiPost("/problems", { title, description, category, acknowledged })
 
-            // Passed to the problem page as text, so it's translated here, in the language in use right now.
             let imageError = ""
             if (image) {
                 setStep("uploading")
@@ -129,8 +121,6 @@ function PostProblem() {
         setGate(null)
     }
 
-    // The AI matching panel (the core feature). Desktop: in the right rail from the start.
-    // Smaller screens: right under the title, once the title is long enough to match on.
     const matchPanel = (
         <div className="space-y-2">
             {current.matches.length > 0 ? (
@@ -237,7 +227,6 @@ function PostProblem() {
                     onPostAnyway={() => submitProblem(true)}
                 />
 
-                {/* Actions at the bottom right (DESIGN.md); the one primary button on this page. */}
                 <div className="flex flex-col-reverse items-stretch gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-end">
                     {step === "checking" && <AiCheckStatus />}
                     {step === "uploading" && <AiCheckStatus message={t("post.uploading")} />}

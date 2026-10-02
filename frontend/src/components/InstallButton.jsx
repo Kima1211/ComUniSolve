@@ -3,7 +3,6 @@ import { useInstall } from "../install";
 import { useLanguage } from "../i18n/language-context";
 import { btnSecondary } from "../ui";
 
-// Quiet by design: only shows when the browser says the site can be installed, never pops up by itself.
 export function HeaderInstallButton() {
     const { canInstall, installed, install } = useInstall()
     const { t } = useLanguage()

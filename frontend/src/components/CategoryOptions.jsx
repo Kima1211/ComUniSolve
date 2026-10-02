@@ -1,7 +1,6 @@
 import { SECTORS, OTHER } from "../categories";
 import { useLanguage } from "../i18n/language-context";
 
-// The <option>s for a category <select>, grouped under their sector.
 // The value sent to the API stays English; only the visible text is translated.
 function CategoryOptions() {
     const { t, label } = useLanguage()

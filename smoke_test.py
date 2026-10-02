@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 import routers.user as user_router
 import routers.auth as auth_router
 
-# Capture the emailed codes instead of sending them, so the OTP flow can be tested.
 SENT_CODES = {}
 def _fake_send_code(email, name, code):
     SENT_CODES[email] = code
@@ -74,7 +73,6 @@ def verified_client(name, email):
     db.close()
     c.post("/login", json={"email": email, "password": PASSWORD})
     return c, uid
-
 
 print("=" * 70)
 print("COMUNISOLVE SMOKE TEST")
@@ -163,7 +161,6 @@ check("Helper earned reputation points for the accepted solution",
 r = asker.get(f"/solutions/problem/{pid}")
 check("Empty-but-valid problems still return a list, not 404",
       asker.get("/solutions/problem/999999").status_code == 404 and r.status_code == 200)
-
 
 unverified = TestClient(app)
 r = unverified.post("/register", json=reg("Nena", "Lim", "nena@example.com", middle_name="Ma. Clara", suffix="Jr.", sex="female"))
@@ -305,7 +302,6 @@ check("Account activity is logged (sign-ups, logins, failed logins, verification
 r = asker.post("/resend-verification")
 check("An already-verified account cannot resend", r.status_code == 400, f"status={r.status_code}")
 
-
 asker.post("/problems", json={
     "title": "Barangay streetlight not working near the basketball court",
     "description": "Another dark corner at night. Who do we report a broken street light to?",
@@ -342,12 +338,10 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from Models.refresh_token import RefreshToken
 
-
 def replay_refresh(token):
     c = TestClient(app)
     c.cookies.set("refresh_token", token)
     return c.post("/refresh")
-
 
 rico, rico_id = verified_client("Rico Dela Paz", "rico@example.com")
 old_refresh = rico.cookies.get("refresh_token")
@@ -383,7 +377,6 @@ check("Raising session_version ends existing access tokens at once",
 r = ana.post("/refresh")
 check("...while a session that is still valid recovers through /refresh",
       r.status_code == 200 and ana.get("/users/me").status_code == 200)
-
 
 from Services import gemini as _gemini
 

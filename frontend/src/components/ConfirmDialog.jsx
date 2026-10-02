@@ -5,29 +5,12 @@ import { ConfirmContext } from "../confirm-context";
 import { inputClass } from "../form";
 import { btnDangerSolid, btnPrimary, btnSecondary } from "../ui";
 
-// One "Are you sure?" dialog for the whole app, replacing the browser's plain confirm()/prompt().
-//
-// const confirm = useConfirm()
-// const ok = await confirm({
-//     title: "Delete this problem?",        // the question
-//     body: "People who answered ...",      // what will happen
-//     preview: problem.title,               // optional: the exact thing affected, so nobody deletes the wrong one
-//     confirmLabel: "Delete problem",       // the action button
-//     tone: "danger" | "primary",           // red button for removing/ending things (default "danger")
-//     Icon: Trash2,                         // optional, defaults to a warning sign
-//     reason: { label, required },          // optional: a reason box (admin actions)
-// })
-// if (!ok) return          // cancelled
-// ok.reason                // the typed reason, trimmed ("" if none)
-//
-// Built on the browser's <dialog>: Esc closes it, focus stays inside, and the page behind is dimmed.
 // Focus starts on Cancel (or the reason box), so Enter can't delete something by accident.
 export function ConfirmProvider({ children }) {
     const { t } = useLanguage()
     const dialogRef = useRef(null)
-    const [request, setRequest] = useState(null) // { options }
-    // The waiting promise's resolve. A new request first cancels any older one still open,
-    // so no caller is ever left waiting forever.
+    const [request, setRequest] = useState(null)
+    // A new request cancels any older one still open, so no caller waits forever.
     const pendingRef = useRef(null)
     const [reason, setReason] = useState("")
     const [missingReason, setMissingReason] = useState(false)
@@ -75,7 +58,6 @@ export function ConfirmProvider({ children }) {
                 role={danger ? "alertdialog" : "dialog"}
                 aria-labelledby="confirm-title"
                 aria-describedby="confirm-body"
-                // Esc: treat as Cancel. Clicking the dimmed area outside the panel: also Cancel.
                 onCancel={(e) => { e.preventDefault(); finish(null) }}
                 onClick={(e) => { if (e.target === dialogRef.current) finish(null) }}
                 className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-border bg-surface p-0 text-ink
@@ -97,7 +79,6 @@ export function ConfirmProvider({ children }) {
                             </div>
                         </div>
 
-                        {/* Exactly what will be affected. */}
                         {o.preview && (
                             <blockquote className="mt-4 line-clamp-3 whitespace-pre-wrap break-words rounded-md border-l-[3px]
                                                    border-border-strong bg-surface-2 px-3 py-2 text-sm text-ink">
@@ -124,7 +105,6 @@ export function ConfirmProvider({ children }) {
                             </div>
                         )}
 
-                        {/* Phones: stacked, action on top. Wider: Cancel then action, bottom right (DESIGN.md). */}
                         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                             <button type="button" onClick={() => finish(null)} className={btnSecondary} {...(o.reason ? {} : { "data-autofocus": true })}>
                                 {t("common.cancel")}

@@ -13,7 +13,6 @@ from Services.errors import api_error
 
 router = APIRouter()
 
-
 def _problem_context(fnd_problem) -> str:
     if fnd_problem is None:
         return ""
@@ -145,7 +144,6 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
         if new_author:
             award_points(new_author, 10)
     
-    # Start fresh, so a rating given before this acceptance doesn't carry over.
     clear_ratings(db, fnd_solution.id)
     fnd_solution.status = "accepted"
     fnd_problem.status = "resolved"
@@ -213,7 +211,6 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
     if not fnd_solution: 
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
     
-    # Clicking again takes the upvote back (like Reddit), including the author's point.
     existing_upvote = db.query(solution.Upvote).filter(solution.Upvote.user_id == current_user.id, solution.Upvote.solution_id == solution_id).first()
     point = 0 if fnd_solution.user_id == current_user.id else 1
 
@@ -240,7 +237,6 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
         "upvote_count": fnd_solution.upvote_count
     }
 
-
 def _own_solution(solution_id: int, db: Session, current_user):
     fnd_solution = (
         db.query(solution.Solution)
@@ -256,7 +252,6 @@ def _own_solution(solution_id: int, db: Session, current_user):
     if fnd_solution.user_id != current_user.id:
         raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only change your own solution")
     return fnd_solution
-
 
 @router.patch("/solutions/{solution_id}", response_model=SolutionResponse)
 def edit_solution(
@@ -299,7 +294,6 @@ def edit_solution(
         raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update solution")
 
     return fnd_solution
-
 
 @router.delete("/solutions/{solution_id}")
 def delete_solution(

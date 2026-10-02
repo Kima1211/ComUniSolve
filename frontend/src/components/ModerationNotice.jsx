@@ -1,7 +1,5 @@
 import { useLanguage } from "../i18n/language-context";
 
-// The pre-post moderation result. Blocked posts use Error Soft (DESIGN.md: "rejected posts and
-// moderation warnings"). "May be unclear" is a neutral note, not red: the user can still post it.
 function ModerationNotice({ gate, onUseSuggestion, onPostAnyway, busy }) {
     const { t } = useLanguage()
     if (!gate) return null

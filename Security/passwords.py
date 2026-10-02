@@ -14,10 +14,8 @@ COMMON_PASSWORDS = {
     "comunisolve", "comunisolve1", "comunisolve123",
 }
 
-# "Password2024!" is still "password" with a number added.
 COMMON_WORDS = {"password", "passw0rd", "p@ssw0rd", "qwerty", "iloveyou", "welcome", "admin",
                 "letmein", "abc", "abcd", "mahalkita", "comunisolve"}
-
 
 def is_predictable(password: str) -> bool:
     lower = password.lower()
@@ -29,8 +27,6 @@ def is_predictable(password: str) -> bool:
         return True
     return lower in "abcdefghijklmnopqrstuvwxyz" or lower in "01234567890" or lower in "09876543210"
 
-
-# Returns which rules fail: "length", "lower", "upper", "number", "common". Empty list = strong enough.
 def password_problems(password: str) -> list[str]:
     problems = []
     if len(password) < MIN_LENGTH:

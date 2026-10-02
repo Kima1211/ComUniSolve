@@ -19,7 +19,6 @@ function addressText(u) {
     return [u.street, a.barangay, a.city, a.province, a.region].filter(Boolean).join(", ")
 }
 
-// Used for both /users/:id (public) and /profile (own, shows email + change password).
 function UserProfile({ own = false }) {
     const params = useParams()
     const navigate = useNavigate()
@@ -27,7 +26,6 @@ function UserProfile({ own = false }) {
     const { t, label, formatDate, errorText } = useLanguage()
     const userId = own ? user?.id : params.id
 
-    // Remembers which id the result is for, so switching profiles shows loading instead of the old one.
     const [result, setResult] = useState({ id: null, profile: null, error: null })
     const loading = String(result.id) !== String(userId)
     const { profile, error } = result
@@ -63,8 +61,7 @@ function UserProfile({ own = false }) {
         }
     }
 
-    // Phones and tablets have no Log out in the top bar (no room), so it lives here too.
-    // Leave the page first: /profile needs a signed-in user, and would bounce to /login otherwise.
+    // Navigate first: /profile needs a signed-in user, so logging out here would bounce to /login.
     async function handleLogout() {
         navigate("/", { replace: true })
         await logout()
@@ -98,7 +95,6 @@ function UserProfile({ own = false }) {
         <Layout>
             <BackLink />
 
-            {/* Compact header: avatar, name, title, points and join date. No banner image. */}
             <section className={`${panel} mt-3`}>
                 <div className="flex items-center gap-4">
                     <Avatar name={profile.name} size="lg" />
@@ -113,7 +109,6 @@ function UserProfile({ own = false }) {
                     </div>
                 </div>
 
-                {/* Real counts, shown as plain numbers rather than decorative stat cards. */}
                 <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-border pt-4">
                     {[
                         [t("profile.statProblems"), profile.problem_count],
@@ -168,7 +163,6 @@ function UserProfile({ own = false }) {
                 </section>
             )}
 
-            {/* Problems / Solutions as tabs, same underline style as the feed's sort tabs. */}
             <div role="tablist" aria-label={profile.name} className="mt-6 flex gap-6 border-b border-border">
                 {tabs.map((tab) => {
                     const active = tab.key === activeTab

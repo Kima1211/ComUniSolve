@@ -3,25 +3,18 @@ from typing import List, Tuple
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Keyword similarity (TF-IDF + cosine similarity). Since 2026-10-02 it no longer decides what users
-# see while the AI is available: it builds the list of problems the AI reads, and it is the backup
-# when the AI is down. Then it only shows matches at or above BACKUP_THRESHOLD.
-# Tuned on test_matching.py (2026-10-02): with filler words removed, the worst unrelated pair scored
-# 0.046 and good matches 0.11-0.61. 0.20 keeps a safe margin (about 4x the worst bad score).
+# TF-IDF builds the list of problems the AI reads, and is the backup when the AI is down.
+# 0.20: the worst unrelated pair scored 0.046, good matches 0.11-0.61 (test_matching.py).
 BACKUP_THRESHOLD = 0.20
 
 MAX_MATCHES = 5
 
-# Up to this many problems, the AI reads all of them (so an English post can still find its Tagalog
-# twin, which word matching can't). Above it, the AI gets a shortlist: the best keyword matches plus
-# the newest few posts.
+# Up to this many problems the AI reads them all; above it, a keyword shortlist plus the newest posts.
 SEND_ALL_UP_TO = 50
 SHORTLIST_SIZE = 20
 NEWEST_EXTRA = 5
 
-# Filler words appear in almost every post, so they say nothing about WHAT the problem is.
-# English ones were always ignored; without the Filipino ones, two unrelated posts looked similar
-# just because both said "daw ako" or "walang". Word list to be checked by native speakers.
+# Filler words say nothing about what the problem is. The Filipino list needs a native-speaker check.
 TAGALOG_FILLER = {
     "ang", "ng", "nang", "sa", "si", "ni", "kay", "mga", "na", "at", "o", "ay", "ako", "ko", "akin", "akong",
     "kong", "ikaw", "ka", "mo", "iyo", "siya", "sya", "niya", "nya", "kami", "tayo", "kayo", "sila", "nila",
@@ -44,11 +37,9 @@ BISAYA_FILLER = {
 }
 FILLER_WORDS = sorted(set(ENGLISH_STOP_WORDS) | TAGALOG_FILLER | WARAY_FILLER | BISAYA_FILLER)
 
-
 def _problem_text(title: str, description: str | None, category: str | None = None) -> str:
     parts = [title or "", title or "", description or "", category or ""]
     return " ".join(parts).strip()
-
 
 def find_similar(
     query_title: str,
@@ -76,7 +67,6 @@ def find_similar(
     try:
         matrix = vectorizer.fit_transform(corpus)
     except ValueError:
-        # Every word was a filler word (e.g. "paano ba ito"): nothing to compare.
         return []
 
     scores = cosine_similarity(matrix[0:1], matrix[1:]).flatten()
@@ -88,7 +78,6 @@ def find_similar(
     ]
     ranked.sort(key=lambda pair: pair[1], reverse=True)
     return ranked[:limit]
-
 
 def build_candidate_pool(
     query_title: str,

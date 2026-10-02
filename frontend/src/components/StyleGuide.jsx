@@ -3,8 +3,7 @@ import Layout from "./Layout";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
 
-// A one-stop preview of the new Instagram-like style (Phase 1). Not linked from the app;
-// open /_styles directly to review colours, typography and components.
+// Not linked from the app: open /_styles to preview colours and components.
 function Swatch({ className, label, hex }) {
     return (
         <div className="min-w-24 text-center">

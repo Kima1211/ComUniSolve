@@ -5,8 +5,6 @@ import { nextTheme, savedTheme, setTheme } from "../theme";
 
 const ICONS = { system: Monitor, light: Sun, dark: Moon }
 
-// One button that cycles System -> Light -> Dark. The icon shows the current CHOICE:
-// a monitor means "following the phone". The label says what it is now and what a tap does.
 function ThemeToggle() {
     const { t } = useLanguage()
     const [choice, setChoice] = useState(savedTheme)

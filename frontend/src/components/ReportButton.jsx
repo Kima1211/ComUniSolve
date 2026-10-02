@@ -12,7 +12,6 @@ const REASONS = [
     { value: "other" },
 ]
 
-// A quiet "Report" ghost button that opens an inline form (Layer 3 of moderation: community reporting).
 function ReportButton({ problemId, solutionId, commentId }) {
     const { t, errorText } = useLanguage()
     const [open, setOpen] = useState(false)

@@ -39,14 +39,12 @@ function Register() {
         return problems
     }
 
-    // After the first try, errors follow the fields live, so a fixed field stops being red right away.
     const fieldErrors = attempted ? findProblems() : {}
     const showError = error && !(error.key === "validation.fixErrors" && Object.keys(fieldErrors).length === 0)
 
     async function handleSubmit(e) {
         e.preventDefault()
 
-        // Check everything first, so the user sees every problem at once and nothing invalid is sent.
         const problems = findProblems()
         setAttempted(true)
         if (Object.keys(problems).length > 0) {

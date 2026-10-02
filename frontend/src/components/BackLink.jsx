@@ -2,8 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useLanguage } from "../i18n/language-context";
 
-// The installed app has no browser back button, so pages offer their own.
-// location.key is "default" when the app was opened on this page (nothing to go back to): then it goes to the feed.
+// The installed app has no back button; with no history (location.key "default") go to the feed.
 function BackLink() {
     const navigate = useNavigate()
     const location = useLocation()

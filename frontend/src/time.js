@@ -1,4 +1,3 @@
-// "5m ago", "3h ago", "2d ago"; older than a week shows the date. Shared by the feed and the problem page.
 export function timeAgo(iso, t) {
     if (!iso) return ""
     const seconds = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))

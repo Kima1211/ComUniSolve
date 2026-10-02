@@ -25,7 +25,6 @@ function Login() {
         navigate(goingTo, { replace: true })
     }
 
-    // Same email and password, sent to /reactivate: the account comes back with its posts and points.
     async function handleReactivate() {
         try {
             setSubmitting(true)

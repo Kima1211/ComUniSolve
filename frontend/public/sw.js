@@ -1,11 +1,8 @@
-// Bump the version whenever this file's caching logic changes; old caches are deleted on activate.
-// v6: theme-init.js (saved Light/Dark choice) is part of the app shell. Like the icons, it keeps the
-// same name across deploys and is served cache-first, so bump this whenever it or an icon changes.
+// Bump CACHE when sw.js, an icon or theme-init.js changes: they keep their names and are served cache-first.
 const CACHE = "comunisolve-v6"
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/favicon-48.png", "/icons/logo-128.png", "/icons/logo-dark-128.png", "/icons/icon-192.png", "/icons/icon-512.png", "/theme-init.js"]
 
 self.addEventListener("install", (event) => {
-    // One file failing must not stop the new version from installing.
     event.waitUntil(
         caches.open(CACHE).then((cache) => Promise.all(APP_SHELL.map((url) => cache.add(url).catch(() => {}))))
     )
@@ -23,12 +20,11 @@ self.addEventListener("fetch", (event) => {
     const request = event.request
     const url = new URL(request.url)
 
-    // Only same-origin GETs. API data is never cached, so users always see live problems and solutions.
+    // API data is never cached.
     if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) {
         return
     }
 
-    // Pages: try the network first so a new deploy shows immediately; fall back to the cached app when offline.
     if (request.mode === "navigate") {
         event.respondWith(
             fetch(request)
@@ -42,13 +38,11 @@ self.addEventListener("fetch", (event) => {
         return
     }
 
-    // Built files have a content hash in their name, so a cached copy is always the right one.
     event.respondWith(
         caches.match(request).then((cached) => {
             if (cached) return cached
             return fetch(request).then((response) => {
-                // Vercel answers a missing file with index.html (status 200). Caching that under a .js name
-                // would serve HTML as JavaScript on every later visit: a blank page.
+                // Vercel answers a missing file with index.html; caching that as .js would blank the page.
                 const isHtml = (response.headers.get("content-type") || "").includes("text/html")
                 if (response.ok && !isHtml && (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/"))) {
                     const copy = response.clone()

@@ -15,7 +15,6 @@ from Services.rating import poster_ratings
 
 router = APIRouter()
 
-
 def _gate_to_response(result) -> dict:
     return ContentCheckResponse(
         verdict=result.verdict,
@@ -27,7 +26,6 @@ def _gate_to_response(result) -> dict:
         suggestion=result.suggestion,
     ).model_dump()
 
-
 # Admin removal and author deletion are both soft deletes: every public query must go through this filter.
 def _visible(query):
     return query.filter(
@@ -35,7 +33,6 @@ def _visible(query):
         problem.Problem.deleted_at.is_(None),
     )
 
-# Adds what the feed shows beside each problem: how many solutions it has, and the accepted solution's rating.
 def _attach_summary(problems, db):
     if not problems:
         return problems
@@ -54,7 +51,6 @@ def _attach_summary(problems, db):
     for p in problems:
         p.solution_count = counts.get(p.id, 0)
 
-    # The poster's star rating of each accepted solution, so the feed can show it next to "Solved".
     accepted = dict(
         db.query(solution.Solution.id, solution.Solution.problem_id)
         .filter(
@@ -70,7 +66,6 @@ def _attach_summary(problems, db):
     for p in problems:
         p.accepted_rating = by_problem.get(p.id)
     return problems
-
 
 @router.get("/problems", response_model=list[ProblemResponse])
 def get_problems(
@@ -90,7 +85,6 @@ def get_problems(
 
     return _attach_summary(query.all(), db)
 
-
 @router.get("/problems/{problem_id}", response_model=ProblemResponse)
 def get_problem(problem_id: int, db: Session = Depends(get_db)):
     fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
@@ -106,7 +100,6 @@ def check_problem_text(
     current_user: user.User = Depends(get_active_poster),
 ):
     return _gate_to_response(run_pre_post_gate(body.title, body.text))
-
 
 @router.post("/problems", status_code=status.HTTP_201_CREATED)
 def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
@@ -143,7 +136,6 @@ def create_problem(prob: ProblemCreate, db: Session = Depends(get_db), current_u
     "posted_by": current_user.name,
     "created_at": new_problem.created_at
 }
-
 
 @router.post("/problems/{problem_id}/image")
 def upload_problem_image(
@@ -185,7 +177,6 @@ def upload_problem_image(
 
     return {"image_url": url}
 
-
 def _own_problem(problem_id: int, db: Session, current_user):
     fnd_prob = _visible(db.query(problem.Problem)).filter(problem.Problem.id == problem_id).first()
     if not fnd_prob:
@@ -193,7 +184,6 @@ def _own_problem(problem_id: int, db: Session, current_user):
     if fnd_prob.user_id != current_user.id:
         raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only change your own problem")
     return fnd_prob
-
 
 @router.patch("/problems/{problem_id}", response_model=ProblemResponse)
 def edit_problem(
@@ -204,7 +194,6 @@ def edit_problem(
 ):
     fnd_prob = _own_problem(problem_id, db, current_user)
 
-    # Edits go through the same gate as new posts, so a clean post can't be edited into a bad one.
     gate = run_pre_post_gate(body.title, body.description or "", acknowledged=body.acknowledged)
     if gate.blocked:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=_gate_to_response(gate))
@@ -234,7 +223,6 @@ def edit_problem(
 
     _attach_summary([fnd_prob], db)
     return fnd_prob
-
 
 # Owners may delete anytime; helpers keep the points they earned on it.
 @router.delete("/problems/{problem_id}")

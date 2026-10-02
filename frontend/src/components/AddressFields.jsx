@@ -5,8 +5,6 @@ import { inputClass } from "../form";
 import { NO_PROVINCE } from "../validation";
 import FormField from "./FormField";
 
-// Loads one dropdown's options whenever the choice above it changes.
-// The result remembers which choice it was loaded for, so stale options are never shown.
 function useOptions(path, key) {
     const [result, setResult] = useState({ key: null, data: null, failed: false })
 
@@ -22,8 +20,6 @@ function useOptions(path, key) {
     return result.key === key ? result : { data: null, failed: false }
 }
 
-// Philippine address in the official PSGC order: Region > Province > City/Municipality > Barangay > Street.
-// address/setAddress come from the parent's useState.
 function AddressFields({ address, setAddress, errors = {}, disabled }) {
     const { t } = useLanguage()
     const { region_code: region, province_code: province, city_code: city } = address
@@ -40,7 +36,6 @@ function AddressFields({ address, setAddress, errors = {}, disabled }) {
     const noProvinces = provinces.data && provinceList.length === 0
     const failed = regions.failed || provinces.failed || cities.failed || barangays.failed
 
-    // Changing a level clears everything below it.
     function chooseRegion(e) {
         setAddress((a) => ({ ...a, region_code: e.target.value, province_code: "", city_code: "", barangay_code: "" }))
     }
@@ -61,8 +56,7 @@ function AddressFields({ address, setAddress, errors = {}, disabled }) {
     const placeholder = (loading) => <option value="" disabled>{loading ? t("common.loading") : t("address.choose")}</option>
 
     return (
-        // Two columns only when the form itself is wide enough (Edit profile), one column in the
-        // 400px sign-up panel: a container query looks at this box, not the screen.
+        // Container query: two columns only when this box is wide (Edit profile), one in the sign-up panel.
         <div className="@container">
         <div className="grid gap-4 @md:grid-cols-2">
             <FormField id="region" label={t("address.region")} error={errors.region_code}>

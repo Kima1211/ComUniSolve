@@ -34,7 +34,6 @@ RESEND_COOLDOWN = timedelta(seconds=60)
 
 ROTATION_GRACE = timedelta(seconds=30)
 
-
 @router.post("/resend-verification")
 def resend_verification(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.is_verified:
@@ -49,7 +48,6 @@ def resend_verification(current_user: User = Depends(get_current_user), db: Sess
         raise api_error(status.HTTP_502_BAD_GATEWAY, "email_send_failed", "We couldn't send the email right now. Please try again in a minute.")
 
     return {"message": f"Verification code sent to {current_user.email}"}
-
 
 # 5 wrong tries per code, and a new code at most once a minute: guessing 1 in a million is hopeless.
 @router.post("/verify-code")
@@ -154,7 +152,6 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 # Same answer for every email, so nobody can check which emails have accounts.
 FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, we sent a link to reset the password."
 
-
 @router.post("/forgot-password")
 def forgot_password(body: ForgotPassword, request: Request, db: Session = Depends(get_db)):
     enforce(FORGOT_PASSWORD_PER_IP, client_ip(request),
@@ -176,7 +173,6 @@ def forgot_password(body: ForgotPassword, request: Request, db: Session = Depend
 
     return {"message": FORGOT_PASSWORD_MESSAGE}
 
-
 @router.post("/reset-password")
 def reset_password(body: ResetPassword, request: Request, response: Response, db: Session = Depends(get_db)):
     hashed_token = hashlib.sha256(body.token.encode('utf-8')).hexdigest()
@@ -193,7 +189,6 @@ def reset_password(body: ResetPassword, request: Request, response: Response, db
     check_password_strength(body.new_password)
     db_user.password = hash_password(body.new_password)
 
-    # Single-use: unlike verification, a reset link must stop working once used.
     db_user.password_reset_token_hash = None
     db_user.password_reset_expires_at = None
 

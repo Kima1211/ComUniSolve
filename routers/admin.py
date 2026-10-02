@@ -28,7 +28,6 @@ from Services.errors import api_error
 
 router = APIRouter()
 
-
 def _count_per_user(db: Session, column, user_ids: list[int], *filters) -> dict[int, int]:
     if not user_ids:
         return {}
@@ -39,7 +38,6 @@ def _count_per_user(db: Session, column, user_ids: list[int], *filters) -> dict[
         .all()
     )
     return dict(rows)
-
 
 @router.get("/admin/users", response_model=AdminUserList)
 def list_users(
@@ -104,7 +102,6 @@ def list_users(
         for u in rows
     ])
 
-
 @router.get("/admin/overview", response_model=ProblemOverview)
 def get_problem_overview(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_admin)):
     total_users = db.query(user.User).count()
@@ -125,7 +122,6 @@ def get_problem_overview(db: Session = Depends(get_db), current_user: user.User 
         "flagged_content": flagged_content,
     }
 
-
 def _pending_reports(db: Session) -> dict[str, dict[int, list[Report]]]:
     grouped: dict[str, dict[int, list[Report]]] = {"problem": {}, "solution": {}, "comment": {}}
     for r in db.query(Report).filter(Report.status == "pending").order_by(Report.created_at).all():
@@ -136,7 +132,6 @@ def _pending_reports(db: Session) -> dict[str, dict[int, list[Report]]]:
         else:
             grouped["comment"].setdefault(r.comment_id, []).append(r)
     return grouped
-
 
 @router.get("/admin/queue", response_model=list[QueueItem])
 def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_admin)):
@@ -153,7 +148,6 @@ def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User 
         for kind, model in models.items()
     }
 
-    # Which problem each post belongs to, so the admin can judge it in context.
     solution_problem = {s.id: s.problem_id for s in targets["solution"]}
     comment_solution = {c.id: c.solution_id for c in targets["comment"]}
     if comment_solution:
@@ -198,7 +192,6 @@ def get_moderation_queue(db: Session = Depends(get_db), current_user: user.User 
     items.sort(key=lambda i: (i.report_count, i.created_at), reverse=True)
     return items
 
-
 def _load_target(db: Session, target_type: str, target_id: int):
     models = {"problem": problem.Problem, "solution": solution.Solution, "comment": comment.Comment}
     model = models[target_type]
@@ -212,14 +205,12 @@ def _load_target(db: Session, target_type: str, target_id: int):
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Author not found")
     return target, author
 
-
 def _close_reports(db: Session, target_type: str, target_id: int, new_status: str) -> int:
     column = {"problem": Report.problem_id, "solution": Report.solution_id, "comment": Report.comment_id}[target_type]
     reports = db.query(Report).filter(column == target_id, Report.status == "pending").all()
     for r in reports:
         r.status = new_status
     return len(reports)
-
 
 def _moderate(db: Session, admin, target_type: str, target_id: int, body: ModerationActionIn):
     target, author = _load_target(db, target_type, target_id)
@@ -256,7 +247,6 @@ def _moderate(db: Session, admin, target_type: str, target_id: int, body: Modera
 
     return outcome
 
-
 @router.patch("/admin/problems/{problem_id}/moderate")
 def moderate_problem(
     problem_id: int,
@@ -265,7 +255,6 @@ def moderate_problem(
     current_user: user.User = Depends(get_current_admin),
 ):
     return _moderate(db, current_user, "problem", problem_id, body)
-
 
 @router.patch("/admin/solutions/{solution_id}/moderate")
 def moderate_solution(
@@ -276,7 +265,6 @@ def moderate_solution(
 ):
     return _moderate(db, current_user, "solution", solution_id, body)
 
-
 @router.patch("/admin/comments/{comment_id}/moderate")
 def moderate_comment(
     comment_id: int,
@@ -285,7 +273,6 @@ def moderate_comment(
     current_user: user.User = Depends(get_current_admin),
 ):
     return _moderate(db, current_user, "comment", comment_id, body)
-
 
 @router.patch("/admin/users/{user_id}/suspension")
 def set_user_suspension(
@@ -304,8 +291,7 @@ def set_user_suspension(
     if target.role == "admin":
         raise api_error(status.HTTP_400_BAD_REQUEST, "suspend_admin", "Admins cannot be suspended")
 
-    # Each suspension moves the user one step up the ladder (1, 3, 7 days,
-    # then permanent), so suspending someone twice by accident must not count.
+    # Each suspension moves one step up the ladder (1, 3, 7 days, permanent), so never count one twice.
     currently_suspended = is_currently_suspended(target)
     if body.suspend and currently_suspended:
         raise api_error(status.HTTP_400_BAD_REQUEST, "already_suspended", "This user is already suspended")
@@ -332,7 +318,6 @@ def set_user_suspension(
         "reason": target.suspension_reason,
     }
 
-
 @router.get("/admin/logs", response_model=list[ModerationLogResponse])
 def get_moderation_logs(
     limit: int = Query(100, ge=1, le=500),
@@ -348,8 +333,6 @@ def get_moderation_logs(
         query = query.filter(ModerationLog.action == action)
     logs = query.order_by(ModerationLog.created_at.desc()).limit(limit).all()
 
-    # Names instead of bare ids, and each post's CURRENT status, so the page
-    # only offers "Restore" for content that is still removed.
     people = {l.admin_id for l in logs} | {l.target_user_id for l in logs}
     people.discard(None)
     names = dict(db.query(user.User.id, user.User.name).filter(user.User.id.in_(people)).all()) if people else {}
@@ -384,9 +367,6 @@ def get_moderation_logs(
         for l in logs
     ]
 
-
-
-# Account activity: sign-ups, logins (including failed ones), verification, password resets, profile changes.
 @router.get("/admin/audit", response_model=list[AuditLogResponse])
 def get_audit_logs(
     limit: int = Query(200, ge=1, le=500),
@@ -405,7 +385,6 @@ def get_audit_logs(
         AuditLogResponse.model_validate(l).model_copy(update={"user_name": names.get(l.user_id)})
         for l in logs
     ]
-
 
 @router.patch("/admin/users/{user_id}/reactivate")
 def admin_reactivate_user(

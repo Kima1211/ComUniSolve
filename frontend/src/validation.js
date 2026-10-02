@@ -1,11 +1,9 @@
-// Form rules, checked before anything is sent. They return translation keys, not text.
 // Keep in sync with Schemas/user.py (names, birth date) and Security/passwords.py (passwords).
 
 export const SUFFIXES = ["Jr.", "Sr.", "II", "III", "IV", "V"]
 export const MIN_AGE = 13
 export const NO_PROVINCE = "none"
 
-// Letters (including ñ and accents), with spaces, periods, hyphens or apostrophes between parts: "Ma. Clara", "Dela Cruz".
 const NAME = /^\p{L}+(?:[ .'-]+\p{L}+)*\.?$/u
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -62,7 +60,6 @@ function isPredictable(password) {
     return "abcdefghijklmnopqrstuvwxyz".includes(lower) || "01234567890".includes(lower) || "09876543210".includes(lower)
 }
 
-// One entry per rule, in the order the checklist shows them.
 export function passwordChecks(password) {
     return {
         length: password.length >= 8,
@@ -80,7 +77,6 @@ export function passwordOk(password) {
 export const EMPTY_PERSON = { first_name: "", middle_name: "", last_name: "", suffix: "", birth_date: "", sex: "" }
 export const EMPTY_ADDRESS = { region_code: "", province_code: "", city_code: "", barangay_code: "", street: "" }
 
-// Returns { field: translationKey } for every field with a problem; empty object = all good.
 export function personErrors(p) {
     const errors = {
         first_name: nameError(p.first_name, true),
@@ -122,7 +118,6 @@ export function addressPayload(a) {
     }
 }
 
-// From /users/me back into form state (for Edit profile).
 export function personFromUser(u) {
     return {
         first_name: u.first_name || "", middle_name: u.middle_name || "", last_name: u.last_name || "",

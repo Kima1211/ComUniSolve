@@ -1,7 +1,3 @@
-// Pick a stable colour for a user from their name, so the same person always has the same avatar.
-// Charcoal, slate and deep amber-brown tones to match the "Amber" theme.
-// Bright amber is left out (it is the button and "Solved" colour). Each tone is dark enough
-// for white initials (WCAG AA, 4.5:1 or more: lowest is 7.1:1).
 const TONES = {
     charcoal: "bg-[#374151]",
     slate:    "bg-[#4B5563]",
@@ -22,7 +18,6 @@ export function colorFor(name) {
     return PALETTE[hash(name || "?") % PALETTE.length]
 }
 
-// "Juana Ma. Clara Dela Cruz" -> "JC". One word -> "J".
 export function initialsFor(name) {
     const parts = (name || "?").trim().split(/\s+/).filter(Boolean)
     if (parts.length === 0) return "?"

@@ -1,10 +1,6 @@
-// Light / dark mode. Three choices: "system" (follow the phone), "light", "dark".
-// "system" means no data-theme on <html>, so the prefers-color-scheme rule in index.css decides.
-// Light and dark set data-theme, which wins over the phone's setting.
-// The saved choice is applied before the first paint by public/theme-init.js (no flash).
+// "system" = no data-theme on <html>, so prefers-color-scheme decides. theme-init.js applies the saved choice before paint.
 const KEY = "comunisolve-theme"
 
-// Browser bar colour per mode: the top bar's Surface colour, so the bar and the page join up.
 const BAR = { light: "#FFFFFF", dark: "#15181E" }
 
 export function savedTheme() {
@@ -18,7 +14,6 @@ export function savedTheme() {
 }
 
 function updateBarColour(choice) {
-    // index.html has two theme-color tags, one per OS mode. A forced choice overrides both.
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
         const mode = choice === "system" ? meta.dataset.mode : choice
         meta.setAttribute("content", BAR[mode])
@@ -37,7 +32,6 @@ export function setTheme(choice) {
     updateBarColour(choice)
 }
 
-// The toggle button cycles System -> Light -> Dark -> System.
 export function nextTheme(choice) {
     if (choice === "system") return "light"
     if (choice === "light") return "dark"

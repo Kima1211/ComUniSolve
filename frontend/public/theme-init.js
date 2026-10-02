@@ -1,6 +1,4 @@
-// Apply the saved Light/Dark choice before the page is drawn, so dark mode never flashes white.
-// It is a separate file, not inline in index.html, because the site's Content-Security-Policy
-// (vercel.json, script-src 'self') blocks inline scripts. main.jsx loads too late for this.
+// A file, not an inline script: the CSP in vercel.json (script-src 'self') blocks inline scripts.
 (function () {
   try {
     var choice = localStorage.getItem("comunisolve-theme");

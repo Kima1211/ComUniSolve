@@ -19,7 +19,6 @@ from Services.reputation import (
     next_suspension_days,
 )
 
-
 @dataclass
 class GateResult:
     blocked: bool = False
@@ -31,8 +30,6 @@ class GateResult:
     suggestion: Optional[str] = None
     matched_terms: list[str] = field(default_factory=list)
 
-
-# context is only shown to the AI (e.g. the problem a solution answers); keywords check title and text only.
 def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = False,
                       kind: str = "problem", context: Optional[str] = None) -> GateResult:
     keywords = check_text(title or "", text)
@@ -51,7 +48,6 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
             matched_terms=keywords.blocked,
         )
 
-    # Comments are short discussion, so they only get the keyword filter, not the AI clarity check.
     if kind == "comment":
         return GateResult(
             blocked=False,
@@ -106,10 +102,7 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
         matched_terms=keywords.flagged,
     )
 
-
-# A restore undoes the admin's mistake, so only posts that are STILL removed count toward suspension.
-# Counted per post, so a post removed, restored and removed again counts once.
-# Only the post's latest removal decides: if it was last removed without penalty, it doesn't count.
+# Only posts still removed count toward suspension (once per post, not if last removed without penalty).
 def active_removal_counts(db: Session, user_ids) -> dict[int, int]:
     user_ids = list(user_ids)
     if not user_ids:
@@ -144,7 +137,6 @@ def active_removal_counts(db: Session, user_ids) -> dict[int, int]:
             counts[user_id] = counts.get(user_id, 0) + 1
     return counts
 
-
 def _latest_removal(db: Session, target, target_type: str) -> Optional[str]:
     column = {"problem": ModerationLog.problem_id, "solution": ModerationLog.solution_id,
               "comment": ModerationLog.comment_id}[target_type]
@@ -156,14 +148,12 @@ def _latest_removal(db: Session, target, target_type: str) -> Optional[str]:
     )
     return entry[0] if entry else None
 
-
 def _count_actions(db: Session, user_id: int, action: str) -> int:
     return (
         db.query(ModerationLog)
         .filter(ModerationLog.target_user_id == user_id, ModerationLog.action == action)
         .count()
     )
-
 
 def _log(db: Session, admin_id: Optional[int], action: str, target_type: str,
          target_user_id: Optional[int], reason: Optional[str] = None,
@@ -183,7 +173,6 @@ def _log(db: Session, admin_id: Optional[int], action: str, target_type: str,
     db.add(entry)
     return entry
 
-
 def suspend_user(db: Session, admin_id: Optional[int], target_user,
                  reason: Optional[str] = None) -> Optional[int]:
     prior = _count_actions(db, target_user.id, "suspended")
@@ -200,7 +189,6 @@ def suspend_user(db: Session, admin_id: Optional[int], target_user,
          reason=reason or (f"{days} day suspension" if days else "permanent suspension"))
     return days
 
-
 def unsuspend_user(db: Session, admin_id: Optional[int], target_user,
                    reason: Optional[str] = None) -> None:
     target_user.is_suspended = False
@@ -208,10 +196,8 @@ def unsuspend_user(db: Session, admin_id: Optional[int], target_user,
     target_user.suspension_reason = None
     _log(db, admin_id, "unsuspended", "user", target_user.id, reason=reason)
 
-
 def _penalty(target_type: str) -> int:
     return COMMENT_REMOVAL_PENALTY_POINTS if target_type == "comment" else REMOVAL_PENALTY_POINTS
-
 
 def _target_ids(target, target_type: str) -> dict:
     return {
@@ -219,7 +205,6 @@ def _target_ids(target, target_type: str) -> dict:
         "solution_id": target.id if target_type == "solution" else None,
         "comment_id": target.id if target_type == "comment" else None,
     }
-
 
 def remove_content(db: Session, admin_id: Optional[int], target, target_type: str,
                    author, reason: Optional[str] = None, penalize: bool = True) -> dict:
@@ -233,8 +218,6 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
     _log(db, admin_id, "removed" if penalize else "removed_no_penalty", target_type, author.id,
          reason=reason, snapshot=snapshot, **_target_ids(target, target_type))
 
-    # For posts that should go but aren't misconduct (e.g. off-topic):
-    # no penalty and no step toward suspension.
     if not penalize:
         db.flush()
         return {
@@ -264,7 +247,6 @@ def remove_content(db: Session, admin_id: Optional[int], target, target_type: st
         "suspended": newly_suspended,
         "suspended_days": suspended_days,
     }
-
 
 def restore_content(db: Session, admin_id: Optional[int], target, target_type: str,
                     author, reason: Optional[str] = None) -> None:

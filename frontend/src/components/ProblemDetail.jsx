@@ -44,9 +44,7 @@ function ProblemDetail() {
     const [submitting, setSubmitting] = useState(false)
     const [submitError, setSubmitError] = useState(null)
     const [solutionGate, setSolutionGate] = useState(null)
-    // Related problems, judged by the AI (keyword backup if the AI is unavailable). The result
-    // remembers which problem and which attempt it belongs to, so opening another problem shows
-    // "checking..." instead of the old list, without resetting state inside the effect.
+    // Keyed by problem and attempt, so opening another problem shows "checking..." instead of the old list.
     const [related, setRelated] = useState({ id: null, attempt: 0, matches: [], aiUsed: false, backup: false })
     const [attempt, setAttempt] = useState(0)
 
@@ -178,7 +176,6 @@ function ProblemDetail() {
     }
 
     const isOwner = user && user.id === problem.user_id
-    // The accepted solution is always pinned first; the rest keep the order the server sent.
     const ordered = [...solutions].sort((a, b) => (b.status === "accepted") - (a.status === "accepted"))
     // With no answer yet, similar solved problems ARE the best answer, so they come first.
     const relatedFirst = solutions.length === 0
@@ -220,7 +217,6 @@ function ProblemDetail() {
                 </p>
             )}
 
-            {/* The problem: one Surface panel (12px), title in headline-md, body in body-lg. */}
             <article className="mt-3 rounded-lg border border-border bg-surface p-4 sm:p-6">
                 {editing ? (
                     <EditProblemForm problem={problem} onSaved={handleSaved} onCancel={() => setEditing(false)} />
@@ -292,7 +288,6 @@ function ProblemDetail() {
 
             {relatedFirst && <div className="mt-4">{relatedBlock}</div>}
 
-            {/* DESIGN.md: "Write a solution" sits under the problem, above the list. */}
             <section className="mt-4 rounded-lg border border-border bg-surface p-4">
                 <h2 className="text-base font-semibold text-ink">{t("detail.writeSolution")}</h2>
 
@@ -333,7 +328,6 @@ function ProblemDetail() {
                         )}
                         <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
                             {submitting && <AiCheckStatus message={t("aiCheck.solution")} />}
-                            {/* The one primary button on this page. */}
                             <button
                                 type="submit"
                                 disabled={submitting || !text.trim()}
@@ -353,7 +347,6 @@ function ProblemDetail() {
                 <div className="mt-3 space-y-3">
                     {suggestionPending && <AiCheckStatus message={t("detail.suggestionPending")} />}
 
-                    {/* AI Suggestion: only when nobody has answered. Labelled plainly, no sparkles, no points. */}
                     {showSuggestion && (
                         <div className="rounded-lg border border-border bg-surface p-4">
                             <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -371,7 +364,6 @@ function ProblemDetail() {
                         <p className="py-4 text-sm text-muted">{t("detail.noSolutions")}</p>
                     )}
 
-                    {/* One flat list, divided by 1px borders; no card per solution. */}
                     {ordered.length > 0 && (
                         <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                             {ordered.map((s) => (

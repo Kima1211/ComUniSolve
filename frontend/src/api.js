@@ -40,7 +40,6 @@ export function getErrorMessage(data, status) {
   return `Request failed (${status}). Please try again.`;
 }
 
-// `code` and `params` come from the backend (Services/errors.py) so the UI can show the error in its language.
 export class ApiError extends Error {
   constructor(message, status, detail = null) {
     super(message);
@@ -67,9 +66,7 @@ async function send(path, options) {
   });
 }
 
-// The free backend sleeps when idle and takes up to a minute to wake. While it wakes, requests fail
-// with a network error or a 502/503/504 from the proxy. Waiting and trying again fixes that.
-// Only GET (reading) is retried: repeating a POST could post the same problem twice.
+// Retry GETs only, while the free backend wakes up: repeating a POST could post twice.
 const WAKE_DELAYS_MS = [2000, 4000, 8000, 15000, 20000];
 
 function isWaking(response) {

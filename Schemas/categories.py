@@ -1,6 +1,5 @@
 from typing import Literal
 
-# Two sectors (Education, Technology) plus a shared "Other".
 # Keep in sync with frontend/src/categories.js.
 Category = Literal[
     "Enrollment & Requirements",

@@ -13,8 +13,6 @@ import ModerationNotice from "./ModerationNotice";
 import Stars from "./Stars";
 import AiCheckStatus from "./AiCheckStatus";
 
-// Shared button looks (DESIGN.md): ghost = text only, secondary = border + amber text.
-// 40px tall on phones (44px touch-target rule, close enough with the gap), 32px from sm up.
 const ghostBase = "inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-[13px] font-medium disabled:opacity-40 sm:h-8"
 const ghost = `${ghostBase} text-muted hover:bg-surface-2 hover:text-ink`
 const danger = `${ghostBase} text-error hover:bg-error-soft`
@@ -108,7 +106,6 @@ function CommentItem({ comment, currentUser, onChanged }) {
     )
 }
 
-// The star picker the poster sees after accepting. Hovering previews the score; clicking saves it.
 function RatePicker({ current, busy, onPick, onLater }) {
     const { t } = useLanguage()
     const [hover, setHover] = useState(0)
@@ -160,7 +157,6 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
     const isProblemOwner = currentUser && currentUser.id === problem.user_id
     const isAuthor = currentUser && currentUser.id === solution.user_id
     const signedIn = Boolean(currentUser)
-    // Only the poster rates, only the accepted solution, and never their own.
     const canRate = isProblemOwner && isAccepted && !isAuthor
     const confirm = useConfirm()
 
@@ -186,7 +182,6 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
             setEditing(false)
             onChanged()
         } catch (e) {
-            // Edits pass through the same moderation gate as new posts.
             if (e.status === 422 && e.detail?.verdict) {
                 setEditGate(e.detail)
                 return
@@ -249,8 +244,6 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
     const authorName = authorLabel(solution.author, t)
 
     return (
-        // The accepted solution gets the one memorable treatment in the app: 3px Araw Gold left border
-        // and a Gold Soft banner. Every other solution is plain Surface.
         <article className={`bg-surface ${isAccepted ? "border-l-[3px] border-gold" : ""}`}>
             {isAccepted && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-gold-soft px-4 py-2 text-[13px] font-medium text-on-gold-soft banner-fade">
@@ -281,7 +274,6 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     {isAuthor && !editing && (
                         <span className="ml-auto flex gap-1">
                             <button type="button" onClick={() => setEditing(true)} className={ghost}>{t("common.edit")}</button>
-                            {/* Accepted solutions can't be deleted, only edited. */}
                             {!isAccepted && (
                                 <button type="button" onClick={deleteSolution} disabled={busy} className={danger}>
                                     {t("common.delete")}
@@ -323,7 +315,6 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                 )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {/* Vote pill: full rounding, turns Primary Soft with a filled amber arrow once you've upvoted. */}
                     <button
                         type="button"
                         disabled={!signedIn || busy}
@@ -356,7 +347,6 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                                 onClick={() =>
                                     run(async () => {
                                         await apiPatch(`/solutions/${solution.id}/accept`)
-                                        // Nudge, not force: ask for stars right away, but rating stays optional.
                                         if (!isAuthor) setRatingOpen(true)
                                     })
                                 }
@@ -405,7 +395,6 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     <p className="mt-3 rounded-md bg-error-soft px-3 py-2 text-sm text-error">{errorText(error)}</p>
                 )}
 
-                {/* Comments: indented 24px with a 1px Border thread line on the left (DESIGN.md). */}
                 {comments !== null && (
                     <div className="thread-line mt-3">
                         {comments.length === 0 && <p className="py-2 text-sm text-muted">{t("solution.noComments")}</p>}

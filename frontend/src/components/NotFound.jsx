@@ -3,7 +3,6 @@ import { useLanguage } from "../i18n/language-context";
 import { btnPrimary, panel } from "../ui";
 import Layout from "./Layout";
 
-// Any unknown address lands here instead of a blank page: one sentence and one way out (DESIGN.md empty states).
 function NotFound() {
     const { t } = useLanguage()
     return (

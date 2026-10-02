@@ -15,8 +15,6 @@ function sectorFor(category) {
     return "Other"
 }
 
-// Chip rendering: Open uses primary-soft + primary text, Solved uses the reserved gold,
-// Under review uses the neutral surface-muted chip. Rounded-sm (4px) per DESIGN.md chip spec.
 export function StatusChip({ status, t }) {
     if (status === "resolved") {
         return <span className="rounded-sm bg-gold px-1.5 py-0.5 text-[12px] font-medium text-on-gold shine">{t("status.solved")}</span>
@@ -27,8 +25,6 @@ export function StatusChip({ status, t }) {
     return <span className="rounded-sm bg-primary-soft px-1.5 py-0.5 text-[12px] font-medium text-link">{t("status.open")}</span>
 }
 
-// A single forum-style problem row. No shadow, no card border; divided from the next
-// row by the parent's `divide-y`. On hover the row rounds to 8px and gains a canvas tint.
 export function ProblemCard({ problem }) {
     const { t, label } = useLanguage()
     const authorName = authorLabel(problem.author, t)
@@ -36,7 +32,6 @@ export function ProblemCard({ problem }) {
 
     return (
         <article className="group block transition-colors hover:bg-surface-2 hover:rounded-md -mx-2 px-2 py-4">
-            {/* Row 1: metadata. 20px avatar + category/sector + author + relative time. 8px spacing, no dots. */}
             <div className="flex items-center gap-2 text-[13px]">
                 <Avatar name={authorName} size="xs" />
                 <span className="font-medium text-ink truncate max-w-[180px]">{categoryLabel}</span>
@@ -46,7 +41,6 @@ export function ProblemCard({ problem }) {
                 <span className="text-muted whitespace-nowrap">{timeAgo(problem.created_at, t)}</span>
             </div>
 
-            {/* Row 2: title (17px/600) with status chip inline. */}
             <Link to={`/problems/${problem.id}`} className="mt-1.5 block">
                 <h3 className="text-[17px] font-semibold leading-tight text-ink group-hover:underline-offset-2">
                     {problem.title}
@@ -67,7 +61,6 @@ export function ProblemCard({ problem }) {
                 </h3>
             </Link>
 
-            {/* Row 3: preview text (3 line clamp) OR one 16:9 image at 8px rounded. */}
             {problem.image_url ? (
                 <Link to={`/problems/${problem.id}`} className="mt-3 block">
                     <img
@@ -85,8 +78,6 @@ export function ProblemCard({ problem }) {
                 )
             )}
 
-            {/* Row 4: action row. Just the solutions link — ComUniSolve has no problem upvotes
-                or share endpoint, so the Reddit-style vote pill and Share button were removed. */}
             <div className="mt-3">
                 <Link
                     to={`/problems/${problem.id}`}
@@ -115,8 +106,6 @@ function Skeleton() {
     )
 }
 
-// Sort tabs sit at the top of the feed column, flush with the 1px list divider below.
-// "Newest" default, "Needs help" filters open+flagged, "Solved" filters resolved. Client-side.
 function SortTabs({ value, onChange, t }) {
     const items = [
         { key: "newest", label: t("sort.newest") },
@@ -165,7 +154,6 @@ function ProblemFeed() {
         return () => { cancelled = true }
     }, [])
 
-    // Sort tab and sector first, then the search inside what's left: all three apply together.
     const { results: shown, closest } = useMemo(() => {
         let xs = problems
         if (sort === "solved") xs = xs.filter((p) => p.status === "resolved")
@@ -188,7 +176,6 @@ function ProblemFeed() {
 
     return (
         <section>
-            {/* Phones: the search box is the first row of the feed (the top bar has no room for it). */}
             <SearchBox className="mb-3 md:hidden" />
 
             <SortTabs value={sort} onChange={setSort} t={t} />
@@ -221,7 +208,6 @@ function ProblemFeed() {
                 </div>
             )}
 
-            {/* Nothing has every word, but some posts come close: show those before offering to post. */}
             {!loading && !error && q && shown.length === 0 && closest.length > 0 && (
                 <>
                     <p className="pt-4 pb-1 text-sm text-muted">{t("search.noExact", { q })}</p>
@@ -233,7 +219,6 @@ function ProblemFeed() {
                 </>
             )}
 
-            {/* Nothing matched: offer to post it, which runs the AI matching check one more time. */}
             {!loading && !error && q && shown.length === 0 && (
                 <div className={`text-center ${closest.length > 0 ? "border-t border-border py-8" : "py-16"}`}>
                     <p className="text-sm text-muted">

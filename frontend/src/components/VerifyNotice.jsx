@@ -9,7 +9,6 @@ import AuthLayout from "./AuthLayout";
 
 const RESEND_SECONDS = 60
 
-// Email OTP: the user types the 6-digit code from the email (5 tries per code, 10 minutes).
 function VerifyNotice() {
     const { user, loading, refreshUser, logout } = useAuth()
     const { t, errorText } = useLanguage()
@@ -77,7 +76,6 @@ function VerifyNotice() {
     }
 
     return (
-        // Same top bar and 400px panel as Login and Register (DESIGN.md "Login and register").
         <AuthLayout title={t("notice.title")}>
             <div className="flex items-start gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-link">

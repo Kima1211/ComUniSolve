@@ -6,10 +6,6 @@ import { useLanguage } from "../i18n/language-context";
 import ProblemFeed, { ProblemCard } from "./ProblemFeed";
 import Avatar from "./Avatar";
 
-// What a logged-out visitor sees inside the main feed column: a left-aligned headline
-// with one sentence of explanation, a live example of a solved problem on the right,
-// then the public feed below. No marketing grid, no feature cards — per DESIGN.md.
-
 function useFirstSolved() {
     const [state, setState] = useState({ loaded: false, solved: null })
     useEffect(() => {
@@ -25,11 +21,9 @@ function useFirstSolved() {
     return state
 }
 
-// Shown when the platform has no solved problems yet, labelled as an example.
 function ExampleCard() {
     const { t } = useLanguage()
-    // Lazy state initializer runs ONCE at mount — a sanctioned way to make `Date.now()`
-    // call without tripping the "impure call during render" rule useMemo doesn't satisfy.
+    // Lazy initializer, so Date.now() runs once instead of during every render.
     const [createdAt] = useState(() => new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())
     const example = {
         id: 0,
@@ -46,7 +40,6 @@ function ExampleCard() {
             <p className="mb-2 text-xs font-medium text-muted">{t("landing.exampleLabel")}</p>
             <div className="rounded-lg border border-border bg-surface p-2 pointer-events-none select-none" aria-hidden="true">
                 <ProblemCard problem={example} />
-                {/* The accepted-solution banner shown inline, so the gold moment is on-screen. */}
                 <div className="mt-2 overflow-hidden rounded-md border-l-[3px] border-gold">
                     <div className="flex items-center gap-2 bg-gold-soft px-3 py-1.5 text-[13px] font-medium text-on-gold-soft banner-fade">
                         <Check size={14} strokeWidth={2.25} />
@@ -114,7 +107,6 @@ function Landing() {
     const [params] = useSearchParams()
     const searching = Boolean((params.get("q") || "").trim())
 
-    // While a search is active the visitor is looking for something: results first, no hero.
     if (searching) return <ProblemFeed />
 
     return (

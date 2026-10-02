@@ -6,8 +6,6 @@ import { SECTORS } from "../categories";
 
 const SECTOR_ICONS = { Education: GraduationCap, Technology: Laptop }
 
-// Sticky left column. Primary pages up top; sectors with their categories grouped below.
-// Active item uses surface-muted bg + primary text, per DESIGN.md sidebar-item-active.
 function Item({ to, label, Icon, active }) {
     const base = "flex h-10 items-center gap-3 rounded-md px-3 text-sm"
     const state = active

@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-// Chrome/Edge/Android fire "beforeinstallprompt" when the site can be installed.
-// We keep the event so our own button can open the install dialog later, instead of the browser's popup.
+// Keep beforeinstallprompt so our own button can open the install dialog later.
 let deferredPrompt = null;
 const listeners = new Set();
 

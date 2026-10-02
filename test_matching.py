@@ -43,8 +43,6 @@ CASES = [
      ["makarawat akon pin"], ["Tutdu-e daw ako if-else"]),
 ]
 
-# The problem page: an existing post (title AND description) is the query, so filler words like
-# "daw", "ako", "sa", "ang" are everywhere. This is where unrelated suggestions showed up.
 # (existing problem, should find, must NOT find)
 PAGE_CASES = [
     ("GCash raffle", [], ["Tutdu-e daw ako if-else", "Form 137", "Walang signal sa bahay", "bond paper"]),
@@ -56,7 +54,6 @@ PAGE_CASES = [
 
 PASSED = FAILED = SKIPPED = 0
 
-
 def check(label, ok, detail=""):
     global PASSED, FAILED
     if ok:
@@ -66,12 +63,9 @@ def check(label, ok, detail=""):
         FAILED += 1
         print(f"  FAIL  {label}  {detail}")
 
-
 def run(title, db, description=None, exclude_id=None):
-    # Works with the old (results, ai_used) and the new (results, ai_used, backup) return value.
     out = matching_router._build_matches(title, description, db, exclude_id=exclude_id, use_ai=True)
     return out[0], out[1]
-
 
 def main_test():
     global SKIPPED
@@ -125,7 +119,6 @@ def main_test():
 
     print(f"\n{PASSED} passed, {FAILED} failed, {SKIPPED} skipped")
     return FAILED == 0
-
 
 if __name__ == "__main__":
     sys.exit(0 if main_test() else 1)

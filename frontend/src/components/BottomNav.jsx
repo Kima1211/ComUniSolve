@@ -3,9 +3,6 @@ import { Home, CheckCircle2, PlusCircle, User, LogIn, ShieldCheck } from "lucide
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 
-// Phone-only tab bar. 5 slots: Home, Solved, Post (centre), one role tab, Profile.
-// "Communities" and "Notifications" from DESIGN.md map to Solved/Admin here, because
-// ComUniSolve has one community and no notifications feature yet.
 function Tab({ to, label, Icon, active, emphasis = false }) {
     if (emphasis) {
         return (

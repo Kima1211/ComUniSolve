@@ -17,7 +17,6 @@ from Models.user import User
 from Services.reputation import is_currently_suspended
 from Services.errors import api_error
 
-
 load_dotenv()
 
 # Never change the pepper on a live site: every stored password was hashed with it.
@@ -39,7 +38,6 @@ VERIFICATION_CODE_MINUTES = 10
 VERIFICATION_MAX_ATTEMPTS = 5
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
 
 def hash_password(password: str) -> str:
     peppered = password + PEPPER
@@ -118,8 +116,7 @@ def clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(key="access_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
     response.delete_cookie(key="refresh_token", httponly=True, samesite="lax", secure=COOKIE_SECURE)
 
-# Keyed with SECRET_KEY: a 6-digit code has only a million possibilities, so a plain hash
-# could be reversed by trying them all if the database leaked.
+# HMAC with SECRET_KEY: a plain hash of a 6-digit code is easy to brute-force if the database leaks.
 def hash_verification_code(user_id: int, code: str) -> str:
     return hmac.new(SECRET_KEY.encode(), f"{user_id}:{code}".encode(), hashlib.sha256).hexdigest()
 
@@ -158,7 +155,6 @@ def decode_token(token: str) -> tuple[str, Optional[int]]:
         raise JWTError("Token has no 'sub' claim")
     return email, payload.get("ver")
 
-
 def get_current_user(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("access_token")
 
@@ -184,8 +180,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         raise api_error(status.HTTP_403_FORBIDDEN, "account_inactive", "Account is inactive")
     return user
 
-
-# For public pages that show a little more to signed-in users (e.g. which solutions they upvoted).
 def get_optional_user(request: Request, db: Session = Depends(get_db)):
     try:
         return get_current_user(request, db)
@@ -201,7 +195,6 @@ def get_verified_user(current_user: db_models.User = Depends(get_current_user)):
     if not current_user.is_verified:
         raise api_error(status.HTTP_403_FORBIDDEN, "verify_first", "Please verify your email before posting")
     return current_user
-
 
 def get_active_poster(current_user: db_models.User = Depends(get_verified_user)):
     if is_currently_suspended(current_user):

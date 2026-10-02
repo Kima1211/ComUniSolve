@@ -5,8 +5,7 @@ import { useLanguage } from "../i18n/language-context";
 
 const DELAY_MS = 250
 
-// One search input, used in the desktop top bar and in the phone feed row.
-// The query lives in the URL (?q=...), so it survives a refresh and both boxes stay in sync.
+// The query lives in the URL (?q=), so it survives a refresh and both boxes stay in sync.
 function SearchBox({ className = "" }) {
     const { t } = useLanguage()
     const [params] = useSearchParams()
@@ -16,7 +15,6 @@ function SearchBox({ className = "" }) {
     const [text, setText] = useState(urlQuery)
     const timer = useRef(null)
 
-    // The URL changed from outside (the chip's ✕, Back button, the other box): show it here too.
     const [lastUrlQuery, setLastUrlQuery] = useState(urlQuery)
     if (urlQuery !== lastUrlQuery) {
         setLastUrlQuery(urlQuery)
@@ -25,8 +23,7 @@ function SearchBox({ className = "" }) {
 
     useEffect(() => () => clearTimeout(timer.current), [])
 
-    // Put the query in the URL. On the feed, replace the entry so Back doesn't step through
-    // every letter. On any other page, go to the feed with the query.
+    // On the feed, replace the history entry so Back doesn't step through every letter.
     function apply(value) {
         const next = new URLSearchParams(pathname === "/" ? params : undefined)
         if (value.trim()) next.set("q", value.trim())
@@ -39,7 +36,6 @@ function SearchBox({ className = "" }) {
         const value = e.target.value
         setText(value)
         clearTimeout(timer.current)
-        // Typing on another page waits for Enter, so we don't jump away mid-word.
         if (pathname === "/") timer.current = setTimeout(() => apply(value), DELAY_MS)
     }
 

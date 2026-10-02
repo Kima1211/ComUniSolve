@@ -5,8 +5,6 @@ import FormField from "./FormField";
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-// Atomized personal information, shared by Register and Edit profile.
-// person/setPerson come from the parent's useState, so the parent can validate and submit them.
 function PersonalFields({ person, setPerson, errors = {}, disabled }) {
     const { t } = useLanguage()
     const set = (field) => (e) => setPerson((p) => ({ ...p, [field]: e.target.value }))

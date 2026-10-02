@@ -11,8 +11,6 @@ import RightRail from "./RightRail";
 import Avatar from "./Avatar";
 import SearchBox from "./SearchBox";
 
-// Shows the user's reputation title next to their name: grey for newcomers, a soft amber chip
-// for the middle tiers, and a solid amber chip (with shine) for Community Expert.
 function TierBadge({ tier }) {
     const { label } = useLanguage()
     const colours = {
@@ -29,16 +27,10 @@ function TierBadge({ tier }) {
 }
 
 const navLink = "text-sm font-medium text-muted hover:text-ink"
-// No display class here on purpose: each use adds `hidden sm:inline-flex` (or similar).
-// A built-in `inline-flex` would override `hidden`, and the buttons would show on phones.
+// No display class here: it would override `hidden` and show the buttons on phones.
 const primaryButton = "items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 h-10 text-sm font-semibold text-on-primary hover:bg-primary-hover shine"
 const secondaryButton = "items-center justify-center whitespace-nowrap rounded-md border border-border bg-surface px-4 h-10 text-sm font-semibold text-link hover:bg-surface-2"
 
-// The forum-style shell: 56px top bar, three columns on desktop, bottom nav on phones.
-// `fullWidth` lets the composer and detail pages use the whole feed column with no rail.
-// `rail` replaces the default right column (About / Rules / How it works), e.g. Post a problem shows
-// its similar-problems panel there. `wide` drops the right column and lets the page use the rest of
-// the width (the admin dashboard's tables need it).
 function Layout({ children, hideRails = false, rail = null, wide = false }) {
     const { user, loading, logout } = useAuth()
     const { t } = useLanguage()
@@ -51,16 +43,13 @@ function Layout({ children, hideRails = false, rail = null, wide = false }) {
 
     return (
         <div className="min-h-screen bg-page pb-nav">
-            {/* Top bar: 56px tall, 1px bottom border, no shadow. */}
             <header className="brand-line sticky top-0 z-20 h-14 border-b border-border bg-surface">
                 <div className="mx-auto flex h-full max-w-[1324px] items-center gap-4 px-4">
-                    {/* On phones only the logo shows, so the link needs its own name for screen readers. */}
                     <Link to="/" aria-label="ComUniSolve" className="flex items-center gap-2 shrink-0">
                         <Logo size={28} />
                         <span className="text-lg font-semibold text-ink hidden sm:inline">ComUniSolve</span>
                     </Link>
 
-                    {/* Desktop and tablet: search in the centre, max 560px. Phones get it as the first feed row. */}
                     <SearchBox className="hidden flex-1 max-w-[560px] md:block" />
 
                     <div className="ml-auto flex items-center gap-2">
@@ -103,7 +92,6 @@ function Layout({ children, hideRails = false, rail = null, wide = false }) {
                 </div>
             </header>
 
-            {/* Three columns. Left nav + feed + right rail. All columns scroll together on short pages. */}
             <div className={`mx-auto grid max-w-[1324px] grid-cols-1 gap-6 px-4 py-6 ${
                 wide
                     ? "lg:grid-cols-[240px_minmax(0,1fr)]"

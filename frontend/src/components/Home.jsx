@@ -3,7 +3,6 @@ import ProblemFeed from './ProblemFeed'
 import Layout from './Layout'
 import Landing from './Landing'
 
-// Same URL for everyone: guests get the landing page (which ends with the feed), members get the feed.
 function Home() {
     const { user, loading } = useAuth()
 

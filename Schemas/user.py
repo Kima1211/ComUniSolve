@@ -7,11 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 from Models.user import SUFFIXES
 
 # Keep in sync with frontend/src/validation.js.
-# Letters (including ñ and accents), with spaces, periods, hyphens or apostrophes between parts: "Ma. Clara", "Dela Cruz".
 NAME_PATTERN = re.compile(r"[^\W\d_]+(?:[ .'\-]+[^\W\d_]+)*\.?")
 MIN_AGE = 13
 OLDEST_BIRTH_YEAR = 1900
-
 
 def _clean_name(value: Optional[str], required: bool) -> Optional[str]:
     value = " ".join((value or "").split())
@@ -23,12 +21,9 @@ def _clean_name(value: Optional[str], required: bool) -> Optional[str]:
         raise ValueError("Use letters only (spaces, periods, hyphens and apostrophes are allowed)")
     return value
 
-
 def age_on(birth: date, today: date) -> int:
     return today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
 
-
-# Personal information and address, shared by registration and profile editing.
 class PersonalInfo(BaseModel):
     first_name: str = Field(..., max_length=100)
     middle_name: Optional[str] = Field(None, max_length=100)
@@ -74,7 +69,6 @@ class PersonalInfo(BaseModel):
             raise ValueError(f"You must be at least {MIN_AGE} years old")
         return v
 
-
 class Register(PersonalInfo):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
@@ -84,14 +78,11 @@ class Register(PersonalInfo):
     def lowercase_email(cls, v: str):
         return v.strip().lower()
 
-
 class ProfileUpdate(PersonalInfo):
     pass
 
-
 class VerifyCode(BaseModel):
     code: str = Field(..., pattern=r"^\d{6}$")
-
 
 class Deactivate(BaseModel):
     password: str = Field(..., min_length=1, max_length=128)

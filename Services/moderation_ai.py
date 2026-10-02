@@ -16,8 +16,6 @@ _SCHEMA = {
     "required": ["verdict", "reason"],
 }
 
-
-# Problems ask for help and solutions give it, so "clear" means something different for each.
 _KIND_RULES = {
     "problem": {
         "what": "a PROBLEM: someone asking the community for help",
@@ -35,7 +33,6 @@ _KIND_RULES = {
                    "inappropriate, do not keep the insult: write a respectful, helpful answer to the same problem instead",
     },
 }
-
 
 def _build_prompt(title: Optional[str], text: str, kind: str = "problem", context: Optional[str] = None) -> str:
     rules = _KIND_RULES[kind]
@@ -91,7 +88,6 @@ def _build_prompt(title: Optional[str], text: str, kind: str = "problem", contex
         f"Body: {text}\n"
         "--- POST ENDS ---"
     )
-
 
 def check_content(title: Optional[str], text: str, kind: str = "problem",
                   context: Optional[str] = None) -> Optional[dict]:
