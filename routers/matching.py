@@ -8,7 +8,7 @@ from typing import Optional
 from Models.database import get_db
 from Models import problem, solution
 from Schemas.matching import AiSuggestionResponse, MatchRequest, MatchResponse, MatchedProblem
-from Services.matching import find_similar, build_candidate_pool, SIMILARITY_THRESHOLD, MAX_MATCHES
+from Services.matching import build_candidate_pool, BACKUP_THRESHOLD, MAX_MATCHES
 from Services import gemini
 from Services.ai_suggestion import generate_suggestion
 from Services.rating import poster_ratings
@@ -60,9 +60,15 @@ def _build_matches(
     exclude_id: Optional[int] = None,
     use_ai: bool = False,
 ):
+    """Returns (matches, ai_used, backup).
+
+    use_ai=True: the AI decides what is similar. If it can't answer (down, quota, timeout), the
+    keyword backup is used instead and backup=True, so the page can say the AI check was unavailable.
+    use_ai=False: keyword similarity only (strict cut-off).
+    """
     rows, candidates = _fetch_candidates(db, exclude_id)
     if not candidates:
-        return [], False
+        return [], False, False
 
     by_id = {p.id: p for p in rows}
 
@@ -70,6 +76,7 @@ def _build_matches(
 
     ai_ranked = None
     if use_ai and gemini.is_enabled():
+        # Up to SEND_ALL_UP_TO problems this is all of them; above that, a keyword shortlist.
         pool = [c for c in candidates if c["id"] in tfidf_scores]
         ai_ranked = gemini.rerank(query_title, query_description, pool)
 
@@ -95,7 +102,7 @@ def _build_matches(
         chosen = [
             (pid, score, None)
             for pid, score in sorted(tfidf_scores.items(), key=lambda kv: kv[1], reverse=True)
-            if score >= SIMILARITY_THRESHOLD
+            if score >= BACKUP_THRESHOLD
         ][:MAX_MATCHES]
         accepted = _accepted_solutions(db, [pid for pid, _, _ in chosen])
         stars = poster_ratings(db, [s.id for s in accepted.values()])
@@ -118,19 +125,20 @@ def _build_matches(
                 reason=info["reason"] if info else None,
             )
         )
-    return results, ai_ranked is not None
+    ai_used = ai_ranked is not None
+    return results, ai_used, use_ai and not ai_used
 
 
 @router.post("/problems/match", response_model=MatchResponse)
 def match_before_posting(body: MatchRequest, db: Session = Depends(get_db)):
-    matches, ai_used = _build_matches(body.title, body.description, db, use_ai=False)
-    return MatchResponse(matches=matches, ai_used=ai_used)
+    matches, ai_used, backup = _build_matches(body.title, body.description, db, use_ai=False)
+    return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 
 @router.post("/problems/match/ai", response_model=MatchResponse)
 def match_with_ai(body: MatchRequest, db: Session = Depends(get_db)):
-    matches, ai_used = _build_matches(body.title, body.description, db, use_ai=True)
-    return MatchResponse(matches=matches, ai_used=ai_used)
+    matches, ai_used, backup = _build_matches(body.title, body.description, db, use_ai=True)
+    return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 
 @router.get("/problems/{problem_id}/similar", response_model=MatchResponse)
@@ -139,10 +147,10 @@ def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
     if not fnd:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
-    matches, ai_used = _build_matches(
+    matches, ai_used, backup = _build_matches(
         fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=AUTO_AI_ON_DETAIL
     )
-    return MatchResponse(matches=matches, ai_used=ai_used)
+    return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 
 @router.get("/problems/{problem_id}/similar/ai", response_model=MatchResponse)
@@ -151,10 +159,10 @@ def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
     if not fnd:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
-    matches, ai_used = _build_matches(
+    matches, ai_used, backup = _build_matches(
         fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True
     )
-    return MatchResponse(matches=matches, ai_used=ai_used)
+    return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 
 
@@ -190,8 +198,10 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
     if fnd.ai_suggestion:
         return AiSuggestionResponse(status="shown", suggestion=fnd.ai_suggestion)
 
-    matches, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=False)
-    if any(m.accepted_solution for m in matches):
+    # "A similar problem already has an answer" is the AI's judgment (only clearly or closely related
+    # ones count, not 'low'). When the AI is unavailable, the strict keyword backup decides instead.
+    matches, ai_used, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True)
+    if any(m.accepted_solution and (not ai_used or m.relevance in ("high", "medium")) for m in matches):
         return AiSuggestionResponse(status="similar_solution_exists")
 
     text = generate_suggestion(fnd.title, fnd.description, fnd.category)

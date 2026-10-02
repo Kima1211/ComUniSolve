@@ -24,6 +24,8 @@ class MatchedProblem(BaseModel):
 class MatchResponse(BaseModel):
     matches: List[MatchedProblem] = []
     ai_used: bool = False
+    # True when the AI was asked but couldn't answer, so these are keyword-backup matches.
+    backup: bool = False
 
 
 class AiSuggestionResponse(BaseModel):

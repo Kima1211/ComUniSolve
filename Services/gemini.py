@@ -33,7 +33,8 @@ TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT", "25"))
 
 DEADLINE_SECONDS = int(os.getenv("AI_DEADLINE", "45"))
 
-MAX_CANDIDATES = 20
+# Matches SEND_ALL_UP_TO in Services/matching.py: up to 50 problems the AI reads every one.
+MAX_CANDIDATES = 50
 
 RETRYABLE_STATUSES = {500, 502, 503, 504}
 RATE_LIMITED_STATUS = 429
