@@ -4,7 +4,7 @@ import { AuthContext } from "./auth-context";
 
 async function fetchMe() {
   try {
-    return await api("/users/me", { method: "GET", retryOn401: false });
+    return await api("/users/me", { method: "GET" });
   } catch {
     return null;
   }
