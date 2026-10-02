@@ -2,34 +2,39 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api";
 import { useLanguage } from "../i18n/language-context";
+import { inputClass } from "../form";
+import { useConfirm } from "../confirm-context";
+import { Ban, EyeOff, RotateCcw, UserCheck } from "lucide-react";
+import { alertError, alertNote, btnDanger, btnGhost, btnSecondary, btnSmall, chip, pageSub, pageTitle } from "../ui";
 import Layout, { TierBadge } from "./Layout";
 import BackLink from "./BackLink";
 
 const PAGE_SIZE = 50
 
-function StatCard({ label, value, highlight }) {
+// A plain number with its label. Counts that need the admin's attention turn the primary colour when above zero.
+function Stat({ label, value, highlight }) {
+    const attention = highlight && value > 0
     return (
-        <div className={`rounded-xl border bg-white p-6 ${highlight && value > 0 ? "border-amber-300" : "border-slate-200"}`}>
-            <p className="text-sm font-medium text-slate-500">{label}</p>
-            <p className={`mt-2 text-3xl font-bold tracking-tight ${highlight && value > 0 ? "text-amber-700" : "text-slate-900"}`}>
-                {value}
-            </p>
+        <div>
+            <dt className="text-xs text-muted">{label}</dt>
+            <dd className={`text-[22px] font-semibold tabular-nums ${attention ? "text-link" : "text-ink"}`}>{value}</dd>
         </div>
     )
 }
 
+// neutral = plain info, attention = needs a look (primary colour), danger = removals and failures.
+// The old tone names still work so the lists below didn't need rewriting.
+const BADGE_TONES = {
+    slate: "bg-surface-2 text-muted",
+    purple: "bg-surface-2 text-ink",
+    green: "bg-surface-2 text-ink",
+    sky: "bg-primary-soft text-link",
+    amber: "bg-primary-soft text-link",
+    red: "bg-error-soft text-error",
+}
+
 function Badge({ children, tone = "slate" }) {
-    const tones = {
-        slate: "bg-slate-100 text-slate-700",
-        amber: "bg-amber-100 text-amber-800",
-        red: "bg-red-100 text-red-800",
-        purple: "bg-purple-100 text-purple-800",
-        green: "bg-emerald-100 text-emerald-800",
-        sky: "bg-sky-100 text-sky-800",
-    }
-    return (
-        <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>
-    )
+    return <span className={`${chip} ${BADGE_TONES[tone] || BADGE_TONES.slate}`}>{children}</span>
 }
 
 // error is an error object (translated on render), notice is ready-made text.
@@ -38,10 +43,10 @@ function Message({ error, notice }) {
     return (
         <>
             {error && (
-                <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorText(error)}</p>
+                <p role="alert" className={`${alertError} mt-4`}>{errorText(error)}</p>
             )}
             {notice && (
-                <p className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">{notice}</p>
+                <p role="status" className={`${alertNote} mt-4`}>{notice}</p>
             )}
         </>
     )
@@ -49,11 +54,25 @@ function Message({ error, notice }) {
 
 function QueueRow({ item, onAction, busy }) {
     const { t, label } = useLanguage()
+    const confirm = useConfirm()
+
+    async function askAndAct(action) {
+        const noPenalty = action === "removed_no_penalty"
+        const ok = await confirm({
+            title: noPenalty ? t("confirm.removeNoPenalty.title") : t("confirm.remove.title"),
+            body: noPenalty ? t("confirm.removeNoPenalty.body") : t("confirm.remove.body"),
+            preview: item.title || item.excerpt,
+            confirmLabel: noPenalty ? t("admin.removeNoPenalty") : t("admin.remove"),
+            Icon: EyeOff,
+            reason: { label: t("confirm.reasonLabel") },
+        })
+        if (ok) onAction(item, action, ok.reason)
+    }
     const reported = item.report_count > 0
     const reasons = item.report_reasons.map((r) => label("report.reason", r)).join(", ")
 
     return (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="p-4">
             <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="slate">{label("admin.type", item.target_type)}</Badge>
                 {reported && (
@@ -67,28 +86,28 @@ function QueueRow({ item, onAction, busy }) {
             </div>
 
             {item.problem_title && (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-muted">
                     {item.target_type === "comment" ? t("admin.commentUnder") : t("admin.answerTo")}{" "}
                     <a href={`/problems/${item.problem_id}`} target="_blank" rel="noreferrer"
-                       className="font-medium text-brand-700 hover:underline">
+                       className="font-medium text-link hover:underline">
                         {item.problem_title}
                     </a>
                 </p>
             )}
-            {item.title && <p className="mt-2 font-semibold text-slate-900">{item.title}</p>}
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{item.excerpt}</p>
+            {item.title && <p className="mt-2 text-[17px] font-semibold leading-snug text-ink">{item.title}</p>}
+            <p className="mt-1 whitespace-pre-wrap text-sm text-ink">{item.excerpt}</p>
 
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-muted">
                 {t("admin.byAuthor", { name: item.author_name, id: item.author_id })}
                 {reported && <> · {t("admin.reportedFor", { reasons })}</>}
                 {item.problem_id && (
                     <> · <a href={`/problems/${item.problem_id}`} target="_blank" rel="noreferrer"
-                            className="font-medium text-brand-700 hover:underline">{t("admin.viewOnSite")}</a></>
+                            className="font-medium text-link hover:underline">{t("admin.viewOnSite")}</a></>
                 )}
             </p>
 
             {item.reports.some((r) => r.details) && (
-                <ul className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
+                <ul className="mt-2 space-y-1 rounded-md bg-surface-2 p-2 text-xs text-ink">
                     {item.reports.filter((r) => r.details).map((r, i) => (
                         <li key={i}>
                             <span className="font-medium">{label("report.reason", r.reason)}:</span> {r.details}
@@ -101,32 +120,21 @@ function QueueRow({ item, onAction, busy }) {
                 <button
                     type="button" disabled={busy}
                     onClick={() => onAction(item, "approved")}
-                    className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs
-                               font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                    className={`${btnSecondary} ${btnSmall}`}
                 >
                     {t("admin.approve")}
                 </button>
                 <button
                     type="button" disabled={busy}
-                    onClick={() => {
-                        const reason = window.prompt(t("admin.promptRemove"))
-                        if (reason === null) return
-                        onAction(item, "removed", reason)
-                    }}
-                    className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs
-                               font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
+                    onClick={() => askAndAct("removed")}
+                    className={`${btnDanger} ${btnSmall}`}
                 >
                     {t("admin.remove")}
                 </button>
                 <button
                     type="button" disabled={busy}
-                    onClick={() => {
-                        const reason = window.prompt(t("admin.promptRemoveNoPenalty"))
-                        if (reason === null) return
-                        onAction(item, "removed_no_penalty", reason)
-                    }}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs
-                               font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    onClick={() => askAndAct("removed_no_penalty")}
+                    className={`${btnGhost} ${btnSmall}`}
                     title={t("admin.removeNoPenaltyTitle")}
                 >
                     {t("admin.removeNoPenalty")}
@@ -210,33 +218,32 @@ function OverviewTab() {
     return (
         <>
             {loading && (
-                <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                    {[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-xl bg-white" />)}
-                </div>
+                <div className="mt-6 h-16 animate-pulse rounded-lg border border-border bg-surface" />
             )}
 
             <Message error={error} notice={notice} />
 
             {total && (
-                <div className="mt-6 grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                    <StatCard label={t("admin.stat.users")} value={total.total_users} />
-                    <StatCard label={t("admin.stat.problems")} value={total.total_problems} />
-                    <StatCard label={t("admin.stat.solutions")} value={total.total_solutions} />
-                    <StatCard label={t("admin.stat.pending")} value={total.pending_reports ?? 0} highlight />
-                    <StatCard label={t("admin.stat.flagged")} value={total.flagged_content ?? 0} highlight />
-                </div>
+                <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-border bg-surface p-4 sm:grid-cols-3 lg:grid-cols-5">
+                    <Stat label={t("admin.stat.users")} value={total.total_users} />
+                    <Stat label={t("admin.stat.problems")} value={total.total_problems} />
+                    <Stat label={t("admin.stat.solutions")} value={total.total_solutions} />
+                    <Stat label={t("admin.stat.pending")} value={total.pending_reports ?? 0} highlight />
+                    <Stat label={t("admin.stat.flagged")} value={total.flagged_content ?? 0} highlight />
+                </dl>
             )}
 
-            <h2 className="mt-10 text-lg font-bold text-slate-900">{t("admin.queue")}</h2>
-            <p className="mt-1 text-sm text-slate-500">{t("admin.queueHint")}</p>
+            <h2 className="mt-8 text-base font-semibold text-ink">{t("admin.queue")}</h2>
+            <p className="mt-1 text-sm text-muted">{t("admin.queueHint")}</p>
 
             {!loading && queue.length === 0 && (
-                <p className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+                <p className="mt-4 rounded-lg border border-border bg-surface p-6 text-sm text-muted">
                     {t("admin.queueEmpty")}
                 </p>
             )}
 
-            <div className="mt-4 space-y-3">
+            {queue.length > 0 && (
+            <div className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
                 {queue.map((item) => (
                     <QueueRow
                         key={`${item.target_type}-${item.id}`}
@@ -246,6 +253,7 @@ function OverviewTab() {
                     />
                 ))}
             </div>
+            )}
         </>
     )
 }
@@ -257,7 +265,9 @@ function UserStatus({ u }) {
     return (
         <div className="flex flex-wrap gap-1">
             {u.role === "admin" && <Badge tone="purple">{t("admin.badge.admin")}</Badge>}
-            {!u.is_active && <Badge tone="slate">{t("admin.badge.deactivated")}</Badge>}
+            {u.is_deleted
+                ? <Badge tone="red">{t("admin.badge.deleted")}</Badge>
+                : !u.is_active && <Badge tone="slate">{t("admin.badge.deactivated")}</Badge>}
             {u.is_verified
                 ? <Badge tone="green">{t("admin.badge.verified")}</Badge>
                 : <Badge tone="amber">{t("admin.badge.unverified")}</Badge>}
@@ -274,6 +284,7 @@ function UserStatus({ u }) {
 
 function UsersTab() {
     const { t, formatDate } = useLanguage()
+    const confirm = useConfirm()
     const [search, setSearch] = useState("")
     const [show, setShow] = useState("all")
     const [page, setPage] = useState(0)
@@ -300,14 +311,17 @@ function UsersTab() {
     }, [search, show, page, reloadKey])
 
     async function changeSuspension(u, suspend) {
-        const reason = window.prompt(
-            suspend ? t("admin.promptSuspend", { name: u.name }) : t("admin.promptUnsuspend", { name: u.name })
-        )
-        if (reason === null) return
-        if (suspend && !reason.trim()) {
-            setError({ key: "admin.reasonRequired" })
-            return
-        }
+        const ok = await confirm({
+            title: suspend ? t("confirm.suspend.title", { name: u.name }) : t("confirm.unsuspend.title", { name: u.name }),
+            body: suspend ? t("confirm.suspend.body") : t("confirm.unsuspend.body"),
+            confirmLabel: suspend ? t("admin.suspend") : t("admin.unsuspend"),
+            tone: suspend ? "danger" : "primary",
+            Icon: suspend ? Ban : UserCheck,
+            // A suspension needs a reason (the dialog won't close without one); lifting it doesn't.
+            reason: { label: t("confirm.reasonLabel"), required: suspend },
+        })
+        if (!ok) return
+        const reason = ok.reason
 
         try {
             setBusyId(u.id)
@@ -331,7 +345,14 @@ function UsersTab() {
     }
 
     async function reactivate(u) {
-        if (!window.confirm(t("admin.confirmReactivate", { name: u.name }))) return
+        const ok = await confirm({
+            title: t("confirm.reactivate.title", { name: u.name }),
+            body: t("confirm.reactivate.body"),
+            confirmLabel: t("admin.reactivate"),
+            tone: "primary",
+            Icon: UserCheck,
+        })
+        if (!ok) return
         try {
             setBusyId(u.id)
             setError(null)
@@ -357,8 +378,7 @@ function UsersTab() {
                     placeholder={t("admin.search")}
                     value={search}
                     onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none
-                               focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 sm:max-w-xs"
+                    className={`${inputClass()} sm:max-w-xs`}
                 />
                 <div className="flex flex-wrap gap-2">
                     {USER_FILTERS.map((value) => (
@@ -366,10 +386,11 @@ function UsersTab() {
                             key={value}
                             type="button"
                             onClick={() => { setShow(value); setPage(0) }}
-                            className={`rounded-full px-3 py-1 text-sm font-medium ${
+                            aria-pressed={show === value}
+                            className={`h-8 rounded-md border px-3 text-sm font-medium ${
                                 show === value
-                                    ? "bg-brand-600 text-white"
-                                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                                    ? "border-transparent bg-primary-soft text-link"
+                                    : "border-border bg-surface text-muted hover:bg-surface-2 hover:text-ink"
                             }`}
                         >
                             {t(`admin.filter.${value}`)}
@@ -380,9 +401,9 @@ function UsersTab() {
 
             <Message error={error} notice={notice} />
 
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface">
                 <table className="min-w-full text-left text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                    <thead className="border-b border-border bg-surface-2 text-xs text-muted">
                         <tr>
                             <th className="px-4 py-3 font-medium">{t("admin.col.user")}</th>
                             <th className="px-4 py-3 font-medium">{t("admin.col.reputation")}</th>
@@ -393,42 +414,41 @@ function UsersTab() {
                             <th className="px-4 py-3 font-medium"></th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-border">
                         {data?.users.map((u) => (
                             <tr key={u.id} className={loading ? "opacity-50" : ""}>
                                 <td className="px-4 py-3">
-                                    <p className="font-medium text-slate-900">{u.name}</p>
-                                    <p className="text-xs text-slate-500">{u.email}</p>
+                                    <p className="font-medium text-ink">{u.name}</p>
+                                    <p className="break-all text-xs text-muted">{u.email}</p>
                                 </td>
                                 <td className="px-4 py-3">
                                     <TierBadge tier={u.tier} />
-                                    <p className="mt-1 text-xs text-slate-500">{t("admin.pts", { points: u.points })}</p>
+                                    <p className="mt-1 text-xs tabular-nums text-muted">{t("admin.pts", { points: u.points })}</p>
                                 </td>
-                                <td className="px-4 py-3 text-slate-700">
+                                <td className="px-4 py-3 text-ink">
                                     {t("admin.problemCount", { count: u.problem_count })}
                                     <br />
                                     {t("common.solutions", { count: u.solution_count })}
                                 </td>
-                                <td className={`px-4 py-3 ${u.removal_count > 0 ? "font-semibold text-red-700" : "text-slate-500"}`}>
+                                <td className={`px-4 py-3 tabular-nums ${u.removal_count > 0 ? "font-semibold text-error" : "text-muted"}`}>
                                     {u.removal_count}
                                 </td>
                                 <td className="px-4 py-3">
                                     <UserStatus u={u} />
                                     {u.is_suspended && u.suspension_reason && (
-                                        <p className="mt-1 text-xs text-slate-500">{u.suspension_reason}</p>
+                                        <p className="mt-1 text-xs text-muted">{u.suspension_reason}</p>
                                     )}
                                 </td>
-                                <td className="px-4 py-3 text-xs text-slate-500">
+                                <td className="whitespace-nowrap px-4 py-3 text-xs text-muted">
                                     {formatDate(u.created_at)}
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                    {!u.is_active ? (
+                                    {u.is_deleted ? null : !u.is_active ? (
                                         <button
                                             type="button"
                                             disabled={busyId === u.id}
                                             onClick={() => reactivate(u)}
-                                            className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs
-                                                       font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+                                            className={`${btnSecondary} ${btnSmall}`}
                                         >
                                             {t("admin.reactivate")}
                                         </button>
@@ -438,8 +458,7 @@ function UsersTab() {
                                                 type="button"
                                                 disabled={busyId === u.id}
                                                 onClick={() => changeSuspension(u, false)}
-                                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs
-                                                           font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                                                className={`${btnSecondary} ${btnSmall}`}
                                             >
                                                 {t("admin.unsuspend")}
                                             </button>
@@ -448,8 +467,7 @@ function UsersTab() {
                                                 type="button"
                                                 disabled={busyId === u.id}
                                                 onClick={() => changeSuspension(u, true)}
-                                                className="rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs
-                                                           font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
+                                                className={`${btnDanger} ${btnSmall}`}
                                             >
                                                 {t("admin.suspend")}
                                             </button>
@@ -462,21 +480,21 @@ function UsersTab() {
                 </table>
 
                 {!loading && data && data.users.length === 0 && (
-                    <p className="p-6 text-center text-sm text-slate-500">{t("admin.noUsers")}</p>
+                    <p className="p-6 text-center text-sm text-muted">{t("admin.noUsers")}</p>
                 )}
                 {loading && !data && (
-                    <p className="p-6 text-center text-sm text-slate-500">{t("admin.loadingUsers")}</p>
+                    <p className="p-6 text-center text-sm text-muted">{t("admin.loadingUsers")}</p>
                 )}
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+            <div className="mt-3 flex items-center justify-between text-sm text-muted">
                 <span>{total > 0 ? t("admin.showing", { from, to, total }) : ""}</span>
                 <div className="flex gap-2">
                     <button
                         type="button"
                         disabled={page === 0 || loading}
                         onClick={() => setPage((p) => p - 1)}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50 disabled:opacity-40"
+                        className={`${btnSecondary} ${btnSmall}`}
                     >
                         {t("admin.previous")}
                     </button>
@@ -484,7 +502,7 @@ function UsersTab() {
                         type="button"
                         disabled={to >= total || loading}
                         onClick={() => setPage((p) => p + 1)}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 hover:bg-slate-50 disabled:opacity-40"
+                        className={`${btnSecondary} ${btnSmall}`}
                     >
                         {t("admin.next")}
                     </button>
@@ -506,6 +524,7 @@ const ACTION_TONES = {
 
 function ActivityTab() {
     const { t, label, formatDateTime } = useLanguage()
+    const confirm = useConfirm()
     const [action, setAction] = useState("")
     const [logs, setLogs] = useState([])
     const [loading, setLoading] = useState(true)
@@ -540,8 +559,17 @@ function ActivityTab() {
     }
 
     async function restore(log) {
-        const reason = window.prompt(t("admin.promptRestore"))
-        if (reason === null) return
+        const ok = await confirm({
+            title: t("confirm.restore.title"),
+            body: t("confirm.restore.body"),
+            preview: log.content_snapshot,
+            confirmLabel: t("admin.restore"),
+            tone: "primary",
+            Icon: RotateCcw,
+            reason: { label: t("confirm.reasonLabel") },
+        })
+        if (!ok) return
+        const reason = ok.reason
 
         const path = log.problem_id
             ? `/admin/problems/${log.problem_id}/moderate`
@@ -569,8 +597,7 @@ function ActivityTab() {
                 <select
                     value={action}
                     onChange={(e) => setAction(e.target.value)}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none
-                               focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                    className={`${inputClass()} w-auto`}
                 >
                     {LOG_FILTERS.map((value) => (
                         <option key={value} value={value}>{t(`admin.action.${value || "all"}`)}</option>
@@ -581,32 +608,32 @@ function ActivityTab() {
             <Message error={error} notice={notice} />
 
             {!loading && logs.length === 0 && (
-                <p className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+                <p className="mt-4 rounded-lg border border-border bg-surface p-6 text-sm text-muted">
                     {t("admin.noActivity")}
                 </p>
             )}
 
-            <div className={`mt-4 space-y-3 ${loading ? "opacity-50" : ""}`}>
+            <div className={`mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface ${loading ? "opacity-50" : ""} ${logs.length === 0 ? "hidden" : ""}`}>
                 {logs.map((log) => (
-                    <div key={log.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div key={log.id} className="p-4">
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge tone={ACTION_TONES[log.action] || "slate"}>{label("admin.action", log.action)}</Badge>
-                            <span className="text-sm text-slate-900">{describe(log)}</span>
-                            <span className="ml-auto text-xs text-slate-500">{formatDateTime(log.created_at)}</span>
+                            <span className="text-sm text-ink">{describe(log)}</span>
+                            <span className="ml-auto text-xs text-muted">{formatDateTime(log.created_at)}</span>
                         </div>
 
                         {log.reason && (
-                            <p className="mt-2 text-sm text-slate-600">
-                                <span className="font-medium text-slate-700">{t("admin.reason")}</span> {log.reason}
+                            <p className="mt-2 text-sm text-muted">
+                                <span className="font-medium text-ink">{t("admin.reason")}</span> {log.reason}
                             </p>
                         )}
 
                         {log.content_snapshot && (
                             <details className="mt-2 text-sm">
-                                <summary className="cursor-pointer text-slate-500 hover:text-slate-800">
+                                <summary className="cursor-pointer text-muted hover:text-ink">
                                     {t("admin.showContent")}
                                 </summary>
-                                <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-slate-700">
+                                <p className="mt-2 whitespace-pre-wrap rounded-md bg-surface-2 p-3 text-ink">
                                     {log.content_snapshot}
                                 </p>
                             </details>
@@ -617,8 +644,7 @@ function ActivityTab() {
                                 type="button"
                                 disabled={busyId === log.id}
                                 onClick={() => restore(log)}
-                                className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs
-                                           font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                                className={`${btnSecondary} ${btnSmall} mt-3`}
                             >
                                 {t("admin.restore")}
                             </button>
@@ -632,13 +658,14 @@ function ActivityTab() {
 
 const AUDIT_ACTIONS = [
     "login_success", "login_failed", "register", "email_verified",
-    "password_reset", "profile_updated", "account_deactivated", "account_reactivated",
+    "password_reset", "profile_updated", "account_deactivated", "account_reactivated", "account_deleted",
 ]
 
 const AUDIT_TONES = {
     login_failed: "red",
     account_deactivated: "amber",
     account_reactivated: "green",
+    account_deleted: "red",
     register: "green",
     email_verified: "green",
     password_reset: "sky",
@@ -673,8 +700,7 @@ function AccountsTab() {
                 <select
                     value={action}
                     onChange={(e) => setAction(e.target.value)}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none
-                               focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                    className={`${inputClass()} w-auto`}
                 >
                     <option value="">{t("admin.audit.all")}</option>
                     {AUDIT_ACTIONS.map((value) => <option key={value} value={value}>{t(`admin.audit.${value}`)}</option>)}
@@ -684,18 +710,18 @@ function AccountsTab() {
             <Message error={error} />
 
             {!loading && logs.length === 0 && (
-                <p className="mt-4 rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+                <p className="mt-4 rounded-lg border border-border bg-surface p-6 text-sm text-muted">
                     {t("admin.audit.empty")}
                 </p>
             )}
 
-            <div className={`mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white ${loading ? "opacity-50" : ""}`}>
+            <div className={`mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface ${loading ? "opacity-50" : ""} ${logs.length === 0 ? "hidden" : ""}`}>
                 {logs.map((log) => (
                     <div key={log.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
                         <Badge tone={AUDIT_TONES[log.action] || "slate"}>{t(`admin.audit.${log.action}`)}</Badge>
-                        <span className="text-slate-900">{log.user_name || log.email || t("admin.audit.unknown")}</span>
-                        {log.user_name && log.email && <span className="text-xs text-slate-500">{log.email}</span>}
-                        <span className="ml-auto flex gap-3 text-xs text-slate-500">
+                        <span className="text-ink">{log.user_name || log.email || t("admin.audit.unknown")}</span>
+                        {log.user_name && log.email && <span className="break-all text-xs text-muted">{log.email}</span>}
+                        <span className="ml-auto flex gap-3 text-xs text-muted">
                             {log.ip && <span>{t("admin.audit.ip", { ip: log.ip })}</span>}
                             <span>{formatDateTime(log.created_at)}</span>
                         </span>
@@ -714,21 +740,23 @@ function AdminDashboard() {
     const tab = TABS.includes(params.get("tab")) ? params.get("tab") : "overview"
 
     return (
-        <Layout>
+        <Layout wide>
             <BackLink />
-            <h1 className="mt-4 text-xl font-bold text-slate-900">{t("admin.title")}</h1>
-            <p className="mt-1 text-sm text-slate-500">{t("admin.subtitle")}</p>
+            <h1 className={`${pageTitle} mt-2`}>{t("admin.title")}</h1>
+            <p className={pageSub}>{t("admin.subtitle")}</p>
 
-            <div className="mt-6 flex gap-1 overflow-x-auto border-b border-slate-200">
+            <div role="tablist" className="no-scrollbar mt-6 flex gap-6 overflow-x-auto border-b border-border">
                 {TABS.map((value) => (
                     <button
                         key={value}
                         type="button"
+                        role="tab"
+                        aria-selected={tab === value}
                         onClick={() => setParams(value === "overview" ? {} : { tab: value })}
-                        className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${
+                        className={`relative h-11 whitespace-nowrap text-sm font-medium ${
                             tab === value
-                                ? "border-brand-600 text-brand-700"
-                                : "border-transparent text-slate-500 hover:text-slate-800"
+                                ? "text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
+                                : "text-muted hover:text-ink"
                         }`}
                     >
                         {t(`admin.tab.${value}`)}

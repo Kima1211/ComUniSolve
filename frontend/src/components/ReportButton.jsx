@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Flag } from "lucide-react";
 import { apiPost } from "../api";
 import { useLanguage } from "../i18n/language-context";
 
@@ -11,6 +12,7 @@ const REASONS = [
     { value: "other" },
 ]
 
+// A quiet "Report" ghost button that opens an inline form (Layer 3 of moderation: community reporting).
 function ReportButton({ problemId, solutionId, commentId }) {
     const { t, errorText } = useLanguage()
     const [open, setOpen] = useState(false)
@@ -46,7 +48,7 @@ function ReportButton({ problemId, solutionId, commentId }) {
     }
 
     if (statusKey) {
-        return <p className="text-xs text-slate-500">{t(statusKey)}</p>
+        return <p className="text-xs text-muted">{t(statusKey)}</p>
     }
 
     if (!open) {
@@ -54,26 +56,28 @@ function ReportButton({ problemId, solutionId, commentId }) {
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="text-xs font-medium text-slate-400 hover:text-slate-700"
+                className="inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-[13px] font-medium text-muted hover:bg-surface-2 hover:text-ink sm:h-8"
             >
+                <Flag size={14} strokeWidth={1.75} aria-hidden="true" />
                 {t("report.button")}
             </button>
         )
     }
 
     return (
-        <div className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-semibold text-slate-700">{t("report.why")}</p>
+        <div className="mt-2 w-full rounded-md border border-border bg-surface-2 p-3">
+            <p className="text-sm font-semibold text-ink">{t("report.why")}</p>
 
             <div className="mt-2 space-y-1">
                 {REASONS.filter((r) => problemId || !r.problemOnly).map((r) => (
-                    <label key={r.value} className="flex items-center gap-2 text-xs text-slate-700">
+                    <label key={r.value} className="flex min-h-8 items-center gap-2 text-sm text-ink">
                         <input
                             type="radio"
-                            name={`reason-${problemId ?? "s"}-${solutionId ?? "p"}`}
+                            name={`reason-${problemId ?? "s"}-${solutionId ?? "p"}-${commentId ?? "c"}`}
                             value={r.value}
                             checked={reason === r.value}
                             onChange={() => setReason(r.value)}
+                            className="accent-link"
                         />
                         {t(`report.reason.${r.value}`)}
                     </label>
@@ -85,26 +89,25 @@ function ReportButton({ problemId, solutionId, commentId }) {
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
                 placeholder={reason === "other" ? t("report.detailsRequired") : t("report.detailsOptional")}
-                className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs
-                           outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                className="mt-2 w-full rounded-md border border-border px-3 py-2 text-sm"
             />
 
-            {error && <p className="mt-2 text-xs text-red-600">{errorText(error, "report.couldNot")}</p>}
+            {error && <p className="mt-2 text-sm text-error">{errorText(error, "report.couldNot")}</p>}
 
             <div className="mt-2 flex gap-2">
                 <button
                     type="button"
                     onClick={submit}
                     disabled={sending || (reason === "other" && !details.trim())}
-                    className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white
-                               hover:bg-slate-900 disabled:bg-slate-300"
+                    className="inline-flex h-10 items-center rounded-md border border-border bg-surface px-4 text-sm font-semibold text-link
+                               hover:bg-surface-2 disabled:opacity-50"
                 >
                     {sending ? t("common.sending") : t("report.send")}
                 </button>
                 <button
                     type="button"
                     onClick={() => { setOpen(false); setError(null) }}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
+                    className="inline-flex h-10 items-center rounded-md px-3 text-sm font-medium text-muted hover:text-ink"
                 >
                     {t("common.cancel")}
                 </button>

@@ -8,11 +8,12 @@ function RequireAuth({ children, adminOnly = false }) {
     const location = useLocation();
 
     if (loading) {
-        return <p className="p-8 text-sm text-slate-500">{t("common.loading")}</p>;
+        return <p className="p-8 text-sm text-muted">{t("common.loading")}</p>;
     }
 
     if (!user) {
-        return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+        // Keep the query too (e.g. /postproblem?title=...), so it survives the login step.
+        return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
     }
 
     if (!user.is_verified) {

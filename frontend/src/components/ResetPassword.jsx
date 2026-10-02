@@ -4,14 +4,10 @@ import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import { passwordOk } from "../validation";
+import { inputClass } from "../form";
+import { alertError, btnPrimary, link } from "../ui";
 import AuthLayout from "./AuthLayout";
 import PasswordChecklist from "./PasswordChecklist";
-
-const inputClass =
-    "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
-    "placeholder-slate-400 outline-none transition " +
-    "focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 " +
-    "disabled:bg-slate-50 disabled:text-slate-400"
 
 function ResetPassword() {
     const { token } = useParams()
@@ -56,7 +52,7 @@ function ResetPassword() {
             <AuthLayout title={t("reset.doneTitle")} subtitle={t("reset.doneSubtitle")}>
                 <Link
                     to="/login"
-                    className="block w-full rounded-lg bg-brand-600 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-brand-700"
+                    className={`${btnPrimary} w-full`}
                 >
                     {t("reset.signInNew")}
                 </Link>
@@ -71,7 +67,7 @@ function ResetPassword() {
             footer={
                 <>
                     {t("reset.notWorking")}{" "}
-                    <Link to="/forgot-password" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
+                    <Link to="/forgot-password" className={link}>
                         {t("reset.requestNew")}
                     </Link>
                 </>
@@ -79,7 +75,7 @@ function ResetPassword() {
         >
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
+                    <label htmlFor="password" className="mb-1 block text-sm font-medium text-ink">
                         {t("reset.newPassword")}
                     </label>
                     <input
@@ -87,7 +83,7 @@ function ResetPassword() {
                         type="password"
                         autoComplete="new-password"
                         placeholder={t("auth.newPasswordPlaceholder")}
-                        className={inputClass}
+                        className={inputClass()}
                         disabled={submitting}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -96,7 +92,7 @@ function ResetPassword() {
                 </div>
 
                 <div>
-                    <label htmlFor="confirm" className="block text-sm font-medium text-slate-700 mb-1">
+                    <label htmlFor="confirm" className="mb-1 block text-sm font-medium text-ink">
                         {t("reset.confirm")}
                     </label>
                     <input
@@ -104,7 +100,7 @@ function ResetPassword() {
                         type="password"
                         autoComplete="new-password"
                         placeholder={t("reset.confirmPlaceholder")}
-                        className={inputClass}
+                        className={inputClass()}
                         disabled={submitting}
                         value={confirm}
                         onChange={(e) => setConfirm(e.target.value)}
@@ -112,7 +108,7 @@ function ResetPassword() {
                 </div>
 
                 {error && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <div role="alert" className={alertError}>
                         {errorText(error)}
                     </div>
                 )}
@@ -120,9 +116,7 @@ function ResetPassword() {
                 <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition
-                               hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
-                               disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className={`${btnPrimary} w-full`}
                 >
                     {submitting ? t("reset.saving") : t("reset.submit")}
                 </button>

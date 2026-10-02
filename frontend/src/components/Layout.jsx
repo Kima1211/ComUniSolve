@@ -3,26 +3,43 @@ import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import { HeaderInstallButton } from "./InstallButton";
 import LanguageSwitcher from "./LanguageSwitcher";
+import ThemeToggle from "./ThemeToggle";
+import BottomNav from "./BottomNav";
+import Logo from "./Logo";
+import LeftNav from "./LeftNav";
+import RightRail from "./RightRail";
+import Avatar from "./Avatar";
+import SearchBox from "./SearchBox";
 
+// Shows the user's reputation title next to their name: grey for newcomers, a soft amber chip
+// for the middle tiers, and a solid amber chip (with shine) for Community Expert.
 function TierBadge({ tier }) {
     const { label } = useLanguage()
     const colours = {
-        "Newcomer": "bg-slate-100 text-slate-600",
-        "Contributor": "bg-sky-100 text-sky-700",
-        "Trusted Helper": "bg-emerald-100 text-emerald-700",
-        "Community Expert": "bg-purple-100 text-purple-700",
+        "Newcomer": "bg-surface-2 text-muted",
+        "Contributor": "bg-primary-soft text-link",
+        "Trusted Helper": "bg-primary-soft text-link",
+        "Community Expert": "bg-primary text-on-primary shine",
     }
     return (
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colours[tier] || colours.Newcomer}`}>
+        <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${colours[tier] || colours.Newcomer}`}>
             {label("tier", tier)}
         </span>
     )
 }
 
-const navLink = "text-sm font-medium text-slate-600 hover:text-slate-900"
-const primaryButton = "rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
+const navLink = "text-sm font-medium text-muted hover:text-ink"
+// No display class here on purpose: each use adds `hidden sm:inline-flex` (or similar).
+// A built-in `inline-flex` would override `hidden`, and the buttons would show on phones.
+const primaryButton = "items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 h-10 text-sm font-semibold text-on-primary hover:bg-primary-hover shine"
+const secondaryButton = "items-center justify-center whitespace-nowrap rounded-md border border-border bg-surface px-4 h-10 text-sm font-semibold text-link hover:bg-surface-2"
 
-function Layout({ children }) {
+// The forum-style shell: 56px top bar, three columns on desktop, bottom nav on phones.
+// `fullWidth` lets the composer and detail pages use the whole feed column with no rail.
+// `rail` replaces the default right column (About / Rules / How it works), e.g. Post a problem shows
+// its similar-problems panel there. `wide` drops the right column and lets the page use the rest of
+// the width (the admin dashboard's tables need it).
+function Layout({ children, hideRails = false, rail = null, wide = false }) {
     const { user, loading, logout } = useAuth()
     const { t } = useLanguage()
     const navigate = useNavigate()
@@ -32,80 +49,82 @@ function Layout({ children }) {
         navigate("/")
     }
 
-    const logoutButton = (
-        <button type="button" onClick={handleLogout} className="text-sm font-medium text-slate-500 hover:text-slate-900">
-            {t("nav.logout")}
-        </button>
-    )
-
     return (
-        <div className="min-h-screen bg-slate-50">
-            <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
-                <div className="mx-auto max-w-5xl px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                        <Link to="/" className="flex items-center gap-2">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-                                C
-                            </span>
-                            <span className="text-lg font-bold tracking-tight text-slate-900">ComUniSolve</span>
-                        </Link>
+        <div className="min-h-screen bg-page pb-nav">
+            {/* Top bar: 56px tall, 1px bottom border, no shadow. */}
+            <header className="brand-line sticky top-0 z-20 h-14 border-b border-border bg-surface">
+                <div className="mx-auto flex h-full max-w-[1324px] items-center gap-4 px-4">
+                    {/* On phones only the logo shows, so the link needs its own name for screen readers. */}
+                    <Link to="/" aria-label="ComUniSolve" className="flex items-center gap-2 shrink-0">
+                        <Logo size={28} />
+                        <span className="text-lg font-semibold text-ink hidden sm:inline">ComUniSolve</span>
+                    </Link>
 
-                        <div className="flex items-center gap-2 lg:gap-3">
-                            <LanguageSwitcher />
-                            <HeaderInstallButton />
+                    {/* Desktop and tablet: search in the centre, max 560px. Phones get it as the first feed row. */}
+                    <SearchBox className="hidden flex-1 max-w-[560px] md:block" />
 
-                            {/* Wide screens: everything on one row. */}
-                            {!loading && (
-                                <div className="hidden items-center gap-3 lg:flex">
-                                    {user ? (
-                                        <>
-                                            <Link to="/postproblem" className={primaryButton}>{t("nav.postProblem")}</Link>
-                                            {user.role === "admin" && (
-                                                <Link to="/admin/overview" className={navLink}>{t("nav.admin")}</Link>
-                                            )}
-                                            <Link to="/profile" title={t("nav.myProfile")} className="flex items-center gap-2 hover:opacity-80">
-                                                <span className="text-sm font-medium text-slate-700">{user.name}</span>
-                                                <TierBadge tier={user.tier} />
-                                            </Link>
-                                            {logoutButton}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Link to="/login" className={navLink}>{t("nav.login")}</Link>
-                                            <Link to="/register" className={primaryButton}>{t("nav.register")}</Link>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                    <div className="ml-auto flex items-center gap-2">
+                        {!loading && user && (
+                            <Link to="/postproblem" className={`${primaryButton} hidden md:inline-flex`}>
+                                {t("nav.postProblem")}
+                            </Link>
+                        )}
+                        <ThemeToggle />
+                        <LanguageSwitcher />
+                        <HeaderInstallButton />
+                        {!loading && user ? (
+                            <>
+                                <Link
+                                    to="/profile"
+                                    title={t("nav.myProfile")}
+                                    className="hidden h-10 items-center gap-2 rounded-md pl-1 pr-2 hover:bg-surface-2 md:inline-flex"
+                                >
+                                    <Avatar name={user.name} size="sm" />
+                                    <span className="text-sm font-medium text-ink hidden lg:inline">{user.name}</span>
+                                </Link>
+                                <button
+                                    type="button"
+                                    onClick={handleLogout}
+                                    className={`${navLink} hidden lg:inline`}
+                                >
+                                    {t("nav.logout")}
+                                </button>
+                                {user.role === "admin" && (
+                                    <Link to="/admin/overview" className={`${navLink} hidden lg:inline`}>{t("nav.admin")}</Link>
+                                )}
+                            </>
+                        ) : !loading && (
+                            <>
+                                <Link to="/login" className={`${secondaryButton} hidden sm:inline-flex`}>{t("nav.login")}</Link>
+                                <Link to="/register" className={`${primaryButton} hidden sm:inline-flex`}>{t("nav.register")}</Link>
+                            </>
+                        )}
                     </div>
-
-                    {/* Phones and tablets: actions get their own second row instead of wrapping unevenly. */}
-                    {!loading && (
-                        <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 lg:hidden ${user ? "justify-between" : "justify-end"}`}>
-                            {user ? (
-                                <>
-                                    <Link to="/postproblem" className={primaryButton}>{t("nav.postProblem")}</Link>
-                                    <div className="flex items-center gap-3">
-                                        {user.role === "admin" && (
-                                            <Link to="/admin/overview" className={navLink}>{t("nav.admin")}</Link>
-                                        )}
-                                        <Link to="/profile" className={navLink}>{t("nav.myProfile")}</Link>
-                                        {logoutButton}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <Link to="/login" className={navLink}>{t("nav.login")}</Link>
-                                    <Link to="/register" className={primaryButton}>{t("nav.register")}</Link>
-                                </>
-                            )}
-                        </div>
-                    )}
                 </div>
             </header>
 
-            <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+            {/* Three columns. Left nav + feed + right rail. All columns scroll together on short pages. */}
+            <div className={`mx-auto grid max-w-[1324px] grid-cols-1 gap-6 px-4 py-6 ${
+                wide
+                    ? "lg:grid-cols-[240px_minmax(0,1fr)]"
+                    : "lg:grid-cols-[240px_minmax(0,720px)] xl:grid-cols-[240px_minmax(0,720px)_316px]"
+            }`}>
+                <aside className="hidden lg:block">
+                    <div className="sticky top-20">
+                        <LeftNav />
+                    </div>
+                </aside>
+
+                <main className="min-w-0">{children}</main>
+
+                {!hideRails && !wide && (
+                    <aside className="hidden xl:block">
+                        {rail || <RightRail />}
+                    </aside>
+                )}
+            </div>
+
+            <BottomNav />
         </div>
     )
 }

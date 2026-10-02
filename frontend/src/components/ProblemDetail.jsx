@@ -3,7 +3,13 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost, imageUrl } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
+import { timeAgo } from "../time";
+import { useConfirm } from "../confirm-context";
+import { Trash2 } from "lucide-react";
+import { authorLabel, hasProfile } from "../author";
 import Layout, { TierBadge } from "./Layout";
+import Avatar from "./Avatar";
+import { StatusChip } from "./ProblemFeed";
 import SolutionCard from "./SolutionCard";
 import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
@@ -12,12 +18,18 @@ import EditProblemForm from "./EditProblemForm";
 import AiCheckStatus from "./AiCheckStatus";
 import BackLink from "./BackLink";
 
+const ghostBase = "inline-flex h-10 items-center rounded-md px-2 text-[13px] font-medium disabled:opacity-50 sm:h-8"
+const ghost = `${ghostBase} text-muted hover:bg-surface-2 hover:text-ink`
+const danger = `${ghostBase} text-error hover:bg-error-soft`
+const ghostLink = `${ghostBase} text-link hover:bg-surface-2`
+
 function ProblemDetail() {
     const { id } = useParams()
     const { user } = useAuth()
     const { t, label, errorText } = useLanguage()
     const imageError = useLocation().state?.imageError
     const navigate = useNavigate()
+    const confirm = useConfirm()
 
     const [problem, setProblem] = useState(null)
     const [solutions, setSolutions] = useState([])
@@ -32,50 +44,30 @@ function ProblemDetail() {
     const [submitting, setSubmitting] = useState(false)
     const [submitError, setSubmitError] = useState(null)
     const [solutionGate, setSolutionGate] = useState(null)
-    const [matches, setMatches] = useState([])
-    const [matchesAiUsed, setMatchesAiUsed] = useState(false)
-    const [checkingAi, setCheckingAi] = useState(false)
-    const [aiFailed, setAiFailed] = useState(false)
-
-    const aiAskedFor = useRef(null)
+    // Related problems, judged by the AI (keyword backup if the AI is unavailable). The result
+    // remembers which problem and which attempt it belongs to, so opening another problem shows
+    // "checking..." instead of the old list, without resetting state inside the effect.
+    const [related, setRelated] = useState({ id: null, attempt: 0, matches: [], aiUsed: false, backup: false })
+    const [attempt, setAttempt] = useState(0)
 
     const [aiSuggestion, setAiSuggestion] = useState(null)
     const suggestionAskedFor = useRef(null)
 
-    const askAI = useCallback(async () => {
-        try {
-            setAiFailed(false)
-            setCheckingAi(true)
-            const data = await apiGet(`/problems/${id}/similar/ai`)
-            setMatches(data.matches || [])
-            setMatchesAiUsed(Boolean(data.ai_used))
-            if (!data.ai_used) setAiFailed(true)
-        } catch {
-            setAiFailed(true)
-        } finally {
-            setCheckingAi(false)
-        }
-    }, [id])
-
     useEffect(() => {
         let cancelled = false
-        setMatches([])
-        setMatchesAiUsed(false)
-        setAiFailed(false)
-
-        apiGet(`/problems/${id}/similar`)
+        apiGet(`/problems/${id}/similar/ai`)
             .then((data) => {
-                if (cancelled) return
-                setMatches(data.matches || [])
-                setMatchesAiUsed(Boolean(data.ai_used))
-                if (data.ai_used) return
-                if (aiAskedFor.current === id) return
-                aiAskedFor.current = id
-                return askAI()
+                if (!cancelled) {
+                    setRelated({ id, attempt, matches: data.matches || [], aiUsed: Boolean(data.ai_used), backup: Boolean(data.backup) })
+                }
             })
-            .catch(() => { if (!cancelled) setMatches([]) })
+            .catch(() => {
+                if (!cancelled) setRelated({ id, attempt, matches: [], aiUsed: false, backup: true })
+            })
         return () => { cancelled = true }
-    }, [id, askAI])
+    }, [id, attempt])
+
+    const checkingRelated = related.id !== id || related.attempt !== attempt
 
     const fetchAll = useCallback(
         () => Promise.all([apiGet(`/problems/${id}`), apiGet(`/solutions/problem/${id}`)]),
@@ -140,7 +132,14 @@ function ProblemDetail() {
     }
 
     async function handleDelete() {
-        if (!window.confirm(t("detail.confirmDelete"))) return
+        const ok = await confirm({
+            title: t("confirm.deleteProblem.title"),
+            body: t("confirm.deleteProblem.body"),
+            preview: problem.title,
+            confirmLabel: t("confirm.deleteProblem.button"),
+            Icon: Trash2,
+        })
+        if (!ok) return
         try {
             setOwnerError(null)
             setDeleting(true)
@@ -158,102 +157,100 @@ function ProblemDetail() {
     }
 
     if (loading) {
-        return <Layout><div className="h-40 animate-pulse rounded-xl bg-white" /></Layout>
+        return (
+            <Layout>
+                <div className="h-48 animate-pulse rounded-lg border border-border bg-surface" />
+            </Layout>
+        )
     }
 
     if (error || !problem) {
         return (
             <Layout>
-                <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <p className="rounded-md bg-error-soft px-3 py-3 text-sm text-error">
                     {error ? errorText(error, "detail.couldNotLoad") : t("detail.notFound")}
                 </p>
-                <Link to="/" className="mt-4 inline-block text-sm font-medium text-brand-700 hover:underline">
+                <Link to="/" className="mt-4 inline-block text-sm font-medium text-link hover:underline">
                     {t("common.backToFeed")}
                 </Link>
             </Layout>
         )
     }
 
+    const isOwner = user && user.id === problem.user_id
+    // The accepted solution is always pinned first; the rest keep the order the server sent.
+    const ordered = [...solutions].sort((a, b) => (b.status === "accepted") - (a.status === "accepted"))
+    // With no answer yet, similar solved problems ARE the best answer, so they come first.
+    const relatedFirst = solutions.length === 0
+
+    const relatedBlock = checkingRelated ? (
+        <AiCheckStatus message={t("detail.checkingSimilar")} />
+    ) : (
+        <div className="space-y-2">
+            <SimilarProblems
+                matches={related.matches}
+                aiUsed={related.aiUsed}
+                backup={related.backup}
+                title={t("detail.related")}
+                hint={related.aiUsed ? t("detail.relatedHintAi") : null}
+            />
+            {related.aiUsed && related.matches.length === 0 && (
+                <p className="text-sm text-muted">{t("detail.aiNone")}</p>
+            )}
+            {related.backup && (
+                <p className="flex flex-wrap items-center gap-2 text-sm text-muted">
+                    {related.matches.length === 0 && t("similar.backupNote")}
+                    <button type="button" onClick={() => setAttempt((n) => n + 1)} className={ghostLink}>
+                        {t("detail.tryAgain")}
+                    </button>
+                </p>
+            )}
+        </div>
+    )
+
+    const authorName = authorLabel(problem.author, t)
+
     return (
         <Layout>
             <BackLink />
 
             {imageError && (
-                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <p className="mt-3 rounded-md bg-error-soft px-3 py-2 text-sm text-error">
                     {t("detail.imageNotAdded", { error: imageError })}
-                </div>
+                </p>
             )}
 
-            <article className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
+            {/* The problem: one Surface panel (12px), title in headline-md, body in body-lg. */}
+            <article className="mt-3 rounded-lg border border-border bg-surface p-4 sm:p-6">
                 {editing ? (
                     <EditProblemForm problem={problem} onSaved={handleSaved} onCancel={() => setEditing(false)} />
                 ) : (
-                <>
-                <div className="flex items-start justify-between gap-3">
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">{problem.title}</h1>
-                    <span
-                        className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            problem.status === "resolved"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-amber-100 text-amber-700"
-                        }`}
-                    >
-                        {problem.status === "resolved" ? t("common.resolved") : t("common.open")}
-                    </span>
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                        {label("category", problem.category)}
-                    </span>
-                    {problem.author && (
-                        <>
-                            <span>
+                    <>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+                            <Avatar name={authorName} size="xs" />
+                            <span className="font-medium text-ink">{label("category", problem.category)}</span>
+                            <span className="text-muted">
                                 {t("detail.postedBy")}{" "}
-                                <Link to={`/users/${problem.author.id}`} className="font-medium text-slate-700 hover:underline">
-                                    {problem.author.name}
-                                </Link>
+                                {hasProfile(problem.author) ? (
+                                    <Link to={`/users/${problem.author.id}`} className="hover:text-ink hover:underline">{authorName}</Link>
+                                ) : authorName}
                             </span>
-                            <TierBadge tier={problem.author.tier} />
-                        </>
-                    )}
-                    {problem.edited_at && <span className="text-xs text-slate-400">{t("common.edited")}</span>}
-                    {user && user.id !== problem.user_id && (
-                        <div className="ml-auto">
-                            <ReportButton problemId={problem.id} />
+                            {hasProfile(problem.author) && <TierBadge tier={problem.author.tier} />}
+                            <span className="text-muted">{timeAgo(problem.created_at, t)}</span>
+                            {problem.edited_at && <span className="text-muted">{t("common.edited")}</span>}
                         </div>
-                    )}
-                    {user && user.id === problem.user_id && (
-                        <div className="ml-auto flex gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setEditing(true)}
-                                className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                                {t("common.edit")}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleDelete}
-                                disabled={deleting}
-                                className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-                            >
-                                {deleting ? t("common.deleting") : t("common.delete")}
-                            </button>
-                        </div>
-                    )}
-                </div>
 
-                {ownerError && (
-                    <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {errorText(ownerError, "detail.couldNotDelete")}
-                    </p>
-                )}
+                        <h1 className="mt-2 text-[22px] font-semibold leading-[1.3] text-ink">
+                            {problem.title}
+                            <span className="ml-2 align-middle"><StatusChip status={problem.status} t={t} /></span>
+                        </h1>
 
-                {problem.description && (
-                    <p className="mt-4 whitespace-pre-wrap text-slate-700">{problem.description}</p>
-                )}
-                </>
+                        {problem.description && (
+                            <p className="mt-3 max-w-[75ch] whitespace-pre-wrap text-base leading-[1.6] text-ink">
+                                {problem.description}
+                            </p>
+                        )}
+                    </>
                 )}
 
                 {problem.image_url && (
@@ -261,108 +258,53 @@ function ProblemDetail() {
                         <img
                             src={imageUrl(problem.image_url, 1000)}
                             alt={t("detail.photoAlt", { title: problem.title })}
-                            className="max-h-[28rem] w-full rounded-lg border border-slate-200 bg-slate-50 object-contain"
+                            className="max-h-[420px] w-full rounded-md border border-border bg-surface-2 object-contain"
                         />
                     </a>
                 )}
-            </article>
 
-            <div className="mt-6">
-                <SimilarProblems
-                    matches={matches}
-                    aiUsed={matchesAiUsed}
-                    title={t("detail.related")}
-                    hint={matchesAiUsed ? t("detail.relatedHintAi") : t("detail.relatedHintWords")}
-                />
-
-                {checkingAi && (
-                    <p className="mt-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50
-                                  px-4 py-2 text-sm text-purple-800">
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
-                        {t("detail.checkingAi")}
-                    </p>
-                )}
-
-                {!checkingAi && matchesAiUsed && matches.length === 0 && (
-                    <p className="mt-3 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500">
-                        {t("detail.aiNone")}
-                    </p>
-                )}
-
-                {!checkingAi && aiFailed && (
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg
-                                    border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-                        <span>
-                            {matches.length > 0 ? t("detail.aiDownWithMatches") : t("detail.aiDownNoMatches")}
-                        </span>
-                        <button
-                            type="button"
-                            onClick={askAI}
-                            className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs
-                                       font-medium text-amber-900 hover:bg-amber-100"
-                        >
-                            {t("detail.tryAgain")}
-                        </button>
+                {!editing && user && (
+                    <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-border pt-2">
+                        {isOwner ? (
+                            <>
+                                <button type="button" onClick={() => setEditing(true)} className={ghost}>{t("common.edit")}</button>
+                                <button
+                                    type="button"
+                                    onClick={handleDelete}
+                                    disabled={deleting}
+                                    className={danger}
+                                >
+                                    {deleting ? t("common.deleting") : t("common.delete")}
+                                </button>
+                            </>
+                        ) : (
+                            <ReportButton problemId={problem.id} />
+                        )}
                     </div>
                 )}
-            </div>
 
-            <section className="mt-8">
-                <h2 className="text-lg font-semibold text-slate-900">
-                    {t("common.solutions", { count: solutions.length })}
-                </h2>
+                {ownerError && (
+                    <p className="mt-3 rounded-md bg-error-soft px-3 py-2 text-sm text-error">
+                        {errorText(ownerError, "detail.couldNotDelete")}
+                    </p>
+                )}
+            </article>
 
-                <div className="mt-4 space-y-3">
-                    {suggestionPending && (
-                        <p className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50
-                                      px-4 py-2 text-sm text-purple-800">
-                            <span className="h-2 w-2 animate-pulse rounded-full bg-purple-500" />
-                            {t("detail.suggestionPending")}
-                        </p>
-                    )}
+            {relatedFirst && <div className="mt-4">{relatedBlock}</div>}
 
-                    {showSuggestion && (
-                        <div className="rounded-xl border border-purple-200 bg-white p-5">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800">
-                                    {t("detail.aiSuggestion")}
-                                </span>
-                                <span className="text-xs text-slate-500">{t("detail.notFromMember")}</span>
-                            </div>
-                            <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{aiSuggestion.suggestion}</p>
-                            <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                                {t("detail.aiSuggestionNote")}
-                            </p>
-                        </div>
-                    )}
-
-                    {solutions.length === 0 && (
-                        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                            {t("detail.noSolutions")}
-                        </p>
-                    )}
-                    {solutions.map((s) => (
-                        <SolutionCard
-                            key={s.id}
-                            solution={s}
-                            problem={problem}
-                            currentUser={user}
-                            onChanged={load}
-                        />
-                    ))}
-                </div>
-            </section>
-
-            <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
-                <h2 className="text-lg font-semibold text-slate-900">{t("detail.yourSolution")}</h2>
+            {/* DESIGN.md: "Write a solution" sits under the problem, above the list. */}
+            <section className="mt-4 rounded-lg border border-border bg-surface p-4">
+                <h2 className="text-base font-semibold text-ink">{t("detail.writeSolution")}</h2>
 
                 {!user ? (
-                    <p className="mt-3 text-sm text-slate-600">
-                        <Link to="/login" className="font-medium text-brand-700 hover:underline">{t("detail.signIn")}</Link>
+                    <p className="mt-2 text-sm text-muted">
+                        <Link to="/login" state={{ from: `/problems/${id}` }} className="font-medium text-link hover:underline">
+                            {t("detail.signIn")}
+                        </Link>
                         {t("detail.toAnswer")}
                     </p>
                 ) : !user.is_verified ? (
-                    <p className="mt-3 text-sm text-amber-800">{t("detail.verifyFirst")}</p>
+                    <p className="mt-2 text-sm text-muted">{t("detail.verifyFirst")}</p>
                 ) : (
                     <form onSubmit={submitSolution} className="mt-3">
                         <textarea
@@ -370,16 +312,15 @@ function ProblemDetail() {
                             value={text}
                             onChange={(e) => setText(e.target.value)}
                             placeholder={t("detail.solutionPlaceholder")}
+                            aria-label={t("detail.writeSolution")}
                             maxLength={5000}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none
-                                       focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                            className="w-full rounded-md border border-border px-3 py-2 text-base"
                         />
                         {submitError && (
-                            <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            <p className="mt-2 rounded-md bg-error-soft px-3 py-2 text-sm text-error">
                                 {errorText(submitError, "detail.couldNotSubmit")}
                             </p>
                         )}
-
                         {solutionGate && (
                             <div className="mt-2">
                                 <ModerationNotice
@@ -390,22 +331,58 @@ function ProblemDetail() {
                                 />
                             </div>
                         )}
-                        {submitting && (
-                            <div className="mt-2">
-                                <AiCheckStatus message={t("aiCheck.solution")} />
-                            </div>
-                        )}
-                        <button
-                            type="submit"
-                            disabled={submitting || !text.trim()}
-                            className="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white
-                                       hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                        >
-                            {submitting ? t("common.checking") : t("detail.postSolution")}
-                        </button>
+                        <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+                            {submitting && <AiCheckStatus message={t("aiCheck.solution")} />}
+                            {/* The one primary button on this page. */}
+                            <button
+                                type="submit"
+                                disabled={submitting || !text.trim()}
+                                className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-semibold text-on-primary
+                                           hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 shine"
+                            >
+                                {submitting ? t("common.checking") : t("detail.postSolution")}
+                            </button>
+                        </div>
                     </form>
                 )}
             </section>
+
+            <section className="mt-6">
+                <h2 className="text-base font-semibold text-ink">{t("common.solutions", { count: solutions.length })}</h2>
+
+                <div className="mt-3 space-y-3">
+                    {suggestionPending && <AiCheckStatus message={t("detail.suggestionPending")} />}
+
+                    {/* AI Suggestion: only when nobody has answered. Labelled plainly, no sparkles, no points. */}
+                    {showSuggestion && (
+                        <div className="rounded-lg border border-border bg-surface p-4">
+                            <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                                <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 text-[12px] font-medium text-ink">
+                                    {t("detail.aiSuggestion")}
+                                </span>
+                                <span className="text-muted">{t("detail.notFromMember")}</span>
+                            </div>
+                            <p className="mt-2 max-w-[75ch] whitespace-pre-wrap text-base leading-[1.6] text-ink">{aiSuggestion.suggestion}</p>
+                            <p className="mt-3 border-t border-border pt-3 text-xs text-muted">{t("detail.aiSuggestionNote")}</p>
+                        </div>
+                    )}
+
+                    {solutions.length === 0 && !showSuggestion && !suggestionPending && (
+                        <p className="py-4 text-sm text-muted">{t("detail.noSolutions")}</p>
+                    )}
+
+                    {/* One flat list, divided by 1px borders; no card per solution. */}
+                    {ordered.length > 0 && (
+                        <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                            {ordered.map((s) => (
+                                <SolutionCard key={s.id} solution={s} problem={problem} currentUser={user} onChanged={load} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </section>
+
+            {!relatedFirst && <div className="mt-6">{relatedBlock}</div>}
         </Layout>
     )
 }

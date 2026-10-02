@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiPost, apiPostForm } from "../api";
+import { ImagePlus } from "lucide-react";
 import { useLanguage } from "../i18n/language-context";
+import { inputClass } from "../form";
+import { alertError, btnPrimary, pageSub, pageTitle, panel } from "../ui";
 import Layout from "./Layout";
+import FormField from "./FormField";
 import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
 import AiCheckStatus from "./AiCheckStatus";
@@ -10,26 +14,28 @@ import CategoryOptions from "./CategoryOptions";
 import BackLink from "./BackLink";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+// The AI check runs once the title has 2+ words and 12+ characters and typing has paused this long
+// (protects the free Gemini quota: about 1-3 calls while someone writes a title).
+const MATCH_DELAY_MS = 1200
+const NO_MATCH = { query: "", matches: [], aiUsed: false, backup: false }
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
-
-const inputClass =
-    "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 " +
-    "outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
 
 function PostProblem() {
     const navigate = useNavigate()
     const { t, errorText } = useLanguage()
+    const [params] = useSearchParams()
 
-    const [title, setTitle] = useState("")
+    // Coming from a search with no results (/postproblem?title=...): start with those words.
+    // Read once at mount; after that the box is the user's to edit.
+    const [title, setTitle] = useState(() => (params.get("title") || "").slice(0, 255))
     const [description, setDescription] = useState("")
     const [category, setCategory] = useState("")
     const [error, setError] = useState(null)
     const [gate, setGate] = useState(null)
     const [submitting, setSubmitting] = useState(false)
     const [step, setStep] = useState("")
-    const [matches, setMatches] = useState([])
-    const [aiUsed, setAiUsed] = useState(false)
-    const [checkingAi, setCheckingAi] = useState(false)
+    // The last answer, remembered with the title it was for, so a changed title shows "looking..."
+    const [match, setMatch] = useState(NO_MATCH)
     const [image, setImage] = useState(null)
 
     const preview = useMemo(() => (image ? URL.createObjectURL(image) : ""), [image])
@@ -52,37 +58,32 @@ function PostProblem() {
         setImage(file)
     }
 
-    async function checkWithAI() {
-        try {
-            setCheckingAi(true)
-            const data = await apiPost("/problems/match/ai", { title, description })
-            setMatches(data.matches || [])
-            setAiUsed(Boolean(data.ai_used))
-        } catch {
-            // Keep the TF-IDF results already on screen.
-        } finally {
-            setCheckingAi(false)
-        }
-    }
+    // Similar problems, judged by the AI (the keyword backup steps in if the AI is unavailable).
+    // Only title changes start a check; the description is sent along but typing it doesn't
+    // trigger new calls, so the ref holds its latest value.
+    const query = title.trim()
+    const readyToMatch = query.split(/\s+/).length >= 2 && query.length >= 12
+    const descriptionRef = useRef(description)
+    useEffect(() => { descriptionRef.current = description }, [description])
 
     useEffect(() => {
+        if (!readyToMatch) return
         let cancelled = false
         const timer = setTimeout(() => {
-            if (title.trim().length < 6) {
-                if (!cancelled) setMatches([])
-                return
-            }
-            apiPost("/problems/match", { title, description })
+            apiPost("/problems/match/ai", { title: query, description: descriptionRef.current })
                 .then((data) => {
-                    if (cancelled) return
-                    setMatches(data.matches || [])
-                    setAiUsed(false)
+                    if (!cancelled) {
+                        setMatch({ query, matches: data.matches || [], aiUsed: Boolean(data.ai_used), backup: Boolean(data.backup) })
+                    }
                 })
-                .catch(() => { if (!cancelled) setMatches([]) })
-        }, 600)
-
+                .catch(() => { if (!cancelled) setMatch({ ...NO_MATCH, query, backup: true }) })
+        }, MATCH_DELAY_MS)
         return () => { cancelled = true; clearTimeout(timer) }
-    }, [title, description])
+    }, [query, readyToMatch])
+
+    // While a new check is pending, the previous results stay visible under a "looking..." line.
+    const current = readyToMatch ? match : NO_MATCH
+    const matching = readyToMatch && match.query !== query
 
     async function submitProblem(acknowledged) {
         try {
@@ -128,130 +129,127 @@ function PostProblem() {
         setGate(null)
     }
 
-    return (
-        <Layout>
-            <div className="mx-auto max-w-2xl">
-                <BackLink />
-                <h1 className="mt-4 text-xl font-bold text-slate-900">{t("post.title")}</h1>
-                <p className="mt-1 text-sm text-slate-500">{t("post.intro")}</p>
-
-                <form onSubmit={handleSubmit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6">
-                    <div>
-                        <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-1">{t("post.titleLabel")}</label>
-                        <input
-                            id="title" type="text" className={inputClass} disabled={submitting} maxLength={255}
-                            placeholder={t("post.titlePlaceholder")}
-                            value={title} onChange={(e) => setTitle(e.target.value)}
-                        />
-                    </div>
-
-                    <div>
-                        <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-1">{t("post.description")}</label>
-                        <textarea
-                            id="description" rows={6} className={inputClass} disabled={submitting} maxLength={5000}
-                            placeholder={t("post.descriptionPlaceholder")}
-                            value={description} onChange={(e) => setDescription(e.target.value)}
-                        />
-                    </div>
-
-                    <div>
-                        <label htmlFor="category" className="block text-sm font-medium text-slate-700 mb-1">{t("post.category")}</label>
-                        <select
-                            id="category" className={inputClass} disabled={submitting} required
-                            value={category} onChange={(e) => setCategory(e.target.value)}
-                        >
-                            <CategoryOptions />
-                        </select>
-                        <p className="mt-1 text-xs text-slate-500">{t("post.categoryHint")}</p>
-                    </div>
-
-                    <div>
-                        <span className="block text-sm font-medium text-slate-700 mb-1">
-                            {t("post.photo")} <span className="font-normal text-slate-400">{t("post.photoHint")}</span>
-                        </span>
-
-                        {image ? (
-                            <div className="flex items-center gap-3">
-                                <img src={preview} alt={t("post.selectedAlt")} className="h-20 w-20 rounded-lg border border-slate-200 object-cover" />
-                                <div className="min-w-0 text-sm">
-                                    <p className="truncate text-slate-700">{image.name}</p>
-                                    <button
-                                        type="button"
-                                        disabled={submitting}
-                                        onClick={() => setImage(null)}
-                                        className="font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
-                                    >
-                                        {t("post.removePhoto")}
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <label
-                                htmlFor="image"
-                                className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed
-                                           border-slate-300 px-3 py-4 text-sm text-slate-500 hover:border-brand-400 hover:text-brand-700"
-                            >
-                                {t("post.choosePhoto")}
-                            </label>
-                        )}
-                        <input
-                            id="image" type="file" accept="image/jpeg,image/png,image/webp"
-                            className="hidden" disabled={submitting} onChange={chooseImage}
-                        />
-                    </div>
-
-                    {error && (
-                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                            {errorText(error)}
-                        </div>
+    // The AI matching panel (the core feature). Desktop: in the right rail from the start.
+    // Smaller screens: right under the title, once the title is long enough to match on.
+    const matchPanel = (
+        <div className="space-y-2">
+            {current.matches.length > 0 ? (
+                <SimilarProblems
+                    matches={current.matches}
+                    aiUsed={current.aiUsed}
+                    backup={current.backup}
+                    hint={t("post.similarHint")}
+                />
+            ) : (
+                <section className="rounded-lg bg-primary-soft p-4">
+                    <h2 className="text-sm font-semibold text-ink">{t("similar.title")}</h2>
+                    {!matching && (
+                        <p className="mt-1 text-sm text-muted">
+                            {current.aiUsed ? t("post.aiNoneFound") : current.backup ? t("similar.backupNote") : t("post.matchHint")}
+                        </p>
                     )}
+                </section>
+            )}
+            {matching && <AiCheckStatus message={t("post.matching")} />}
+        </div>
+    )
 
-                    <ModerationNotice
-                        gate={gate}
-                        busy={submitting}
-                        onUseSuggestion={useSuggestion}
-                        onPostAnyway={() => submitProblem(true)}
+    return (
+        <Layout rail={<div className="sticky top-20">{matchPanel}</div>}>
+            <BackLink />
+            <h1 className={`${pageTitle} mt-2`}>{t("post.title")}</h1>
+            <p className={pageSub}>{t("post.intro")}</p>
+
+            <form onSubmit={handleSubmit} noValidate className={`${panel} mt-4 space-y-5`}>
+                <FormField id="category" label={t("post.category")} hint={t("post.categoryHint")}>
+                    <select
+                        id="category" className={inputClass()} disabled={submitting} required
+                        value={category} onChange={(e) => setCategory(e.target.value)}
+                    >
+                        <CategoryOptions />
+                    </select>
+                </FormField>
+
+                <div>
+                    <div className="mb-1 flex items-baseline justify-between gap-3">
+                        <label htmlFor="title" className="block text-sm font-medium text-ink">{t("post.titleLabel")}</label>
+                        <span className="text-xs tabular-nums text-muted" aria-hidden="true">{title.length}/255</span>
+                    </div>
+                    <input
+                        id="title" type="text" className={inputClass()} disabled={submitting} maxLength={255}
+                        placeholder={t("post.titlePlaceholder")}
+                        value={title} onChange={(e) => setTitle(e.target.value)}
                     />
+                </div>
 
+                {readyToMatch && <div className="xl:hidden">{matchPanel}</div>}
+
+                <FormField id="description" label={t("post.description")}>
+                    <textarea
+                        id="description" rows={6} className={`${inputClass()} text-base leading-[1.6]`}
+                        disabled={submitting} maxLength={5000}
+                        placeholder={t("post.descriptionPlaceholder")}
+                        value={description} onChange={(e) => setDescription(e.target.value)}
+                    />
+                </FormField>
+
+                <div>
+                    <span className="mb-1 block text-sm font-medium text-ink">
+                        {t("post.photo")} <span className="font-normal text-muted">{t("post.photoHint")}</span>
+                    </span>
+                    {image ? (
+                        <div className="flex items-center gap-3">
+                            <img src={preview} alt={t("post.selectedAlt")} className="h-20 w-20 rounded-md border border-border object-cover" />
+                            <div className="min-w-0 text-sm">
+                                <p className="truncate text-ink">{image.name}</p>
+                                <button
+                                    type="button"
+                                    disabled={submitting}
+                                    onClick={() => setImage(null)}
+                                    className="mt-1 font-medium text-error hover:underline disabled:opacity-50"
+                                >
+                                    {t("post.removePhoto")}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <label
+                            htmlFor="image"
+                            className="flex min-h-20 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed
+                                       border-border-strong px-3 py-4 text-sm text-muted hover:border-link hover:text-link"
+                        >
+                            <ImagePlus size={18} strokeWidth={1.75} aria-hidden="true" />
+                            {t("post.choosePhoto")}
+                        </label>
+                    )}
+                    <input
+                        id="image" type="file" accept="image/jpeg,image/png,image/webp"
+                        className="sr-only" disabled={submitting} onChange={chooseImage}
+                    />
+                </div>
+
+                {error && <div role="alert" className={alertError}>{errorText(error)}</div>}
+
+                <ModerationNotice
+                    gate={gate}
+                    busy={submitting}
+                    onUseSuggestion={useSuggestion}
+                    onPostAnyway={() => submitProblem(true)}
+                />
+
+                {/* Actions at the bottom right (DESIGN.md); the one primary button on this page. */}
+                <div className="flex flex-col-reverse items-stretch gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-end">
                     {step === "checking" && <AiCheckStatus />}
                     {step === "uploading" && <AiCheckStatus message={t("post.uploading")} />}
-
                     <button
                         type="submit"
                         disabled={submitting || !title.trim() || !category}
-                        className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white
-                                   hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className={btnPrimary}
                     >
                         {step === "checking" ? t("common.checking") : step === "uploading" ? t("post.submitUploading") : t("post.submit")}
                     </button>
-                </form>
-
-                <div className="mt-6">
-                    <SimilarProblems
-                        matches={matches}
-                        aiUsed={aiUsed}
-                        hint={t("post.similarHint")}
-                    />
-
-                    {aiUsed && matches.length === 0 && (
-                        <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                            {t("post.aiNoneFound")}
-                        </p>
-                    )}
-
-                    {title.trim().length >= 6 && !aiUsed && (
-                        <button
-                            type="button"
-                            onClick={checkWithAI}
-                            disabled={checkingAi}
-                            className="mt-3 w-full rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm
-                                       font-medium text-purple-800 hover:bg-purple-100 disabled:opacity-50"
-                        >
-                            {checkingAi ? t("post.askingAi") : t("post.searchAi")}
-                        </button>
-                    )}
                 </div>
-            </div>
+            </form>
         </Layout>
     )
 }

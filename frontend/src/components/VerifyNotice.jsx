@@ -3,7 +3,9 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
-import LanguageSwitcher from "./LanguageSwitcher";
+import { Mail } from "lucide-react";
+import { alertError, alertNote, btnGhost, btnPrimary } from "../ui";
+import AuthLayout from "./AuthLayout";
 
 const RESEND_SECONDS = 60
 
@@ -75,62 +77,47 @@ function VerifyNotice() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
-            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center">
-                <div className="flex justify-end">
-                    <LanguageSwitcher />
-                </div>
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-xl text-brand-700">
-                    ✉
-                </div>
-
-                <h1 className="mt-5 text-xl font-bold text-slate-900">{t("notice.title")}</h1>
-                <p className="mt-2 text-sm text-slate-600">
+        // Same top bar and 400px panel as Login and Register (DESIGN.md "Login and register").
+        <AuthLayout title={t("notice.title")}>
+            <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary-soft text-link">
+                    <Mail size={20} strokeWidth={1.75} aria-hidden="true" />
+                </span>
+                <p className="text-sm text-muted">
                     {t("notice.sentTo")}<br />
-                    <span className="font-medium text-slate-900">{user.email}</span>
+                    <span className="font-medium text-ink break-all">{user.email}</span>
                 </p>
-                <p className="mt-3 text-sm text-slate-500">{t("notice.enterCode")}</p>
+            </div>
+            <p className="mt-3 text-sm text-muted">{t("notice.enterCode")}</p>
 
-                <form onSubmit={handleVerify} noValidate className="mt-5">
-                    <label htmlFor="code" className="sr-only">{t("notice.codeLabel")}</label>
-                    <input
-                        id="code"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        maxLength={6}
-                        placeholder="••••••"
-                        value={code}
-                        disabled={verifying}
-                        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-3 text-center font-mono text-2xl tracking-[0.5em]
-                                   outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
-                    />
-                    <button
-                        type="submit"
-                        disabled={verifying || code.length !== 6}
-                        className="mt-3 w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white
-                                   hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                        {verifying ? t("notice.verifying") : t("notice.verify")}
-                    </button>
-                </form>
+            <form onSubmit={handleVerify} noValidate className="mt-5">
+                <label htmlFor="code" className="mb-1 block text-sm font-medium text-ink">{t("notice.codeLabel")}</label>
+                <input
+                    id="code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="••••••"
+                    value={code}
+                    disabled={verifying}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="w-full rounded-md border border-border bg-surface px-3 py-3 text-center font-mono text-2xl
+                               tracking-[0.5em] text-ink placeholder:text-muted disabled:opacity-60"
+                />
+                <button type="submit" disabled={verifying || code.length !== 6} className={`${btnPrimary} mt-3 w-full`}>
+                    {verifying ? t("notice.verifying") : t("notice.verify")}
+                </button>
+            </form>
 
-                {sent && (
-                    <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                        {t("notice.newCode")}
-                    </p>
-                )}
-                {error && (
-                    <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                        {errorText(error)}
-                    </p>
-                )}
+            {sent && <p role="status" className={`${alertNote} mt-4`}>{t("notice.newCode")}</p>}
+            {error && <p role="alert" className={`${alertError} mt-4`}>{errorText(error)}</p>}
 
+            <div className="mt-4 border-t border-border pt-4">
                 <button
                     type="button"
                     onClick={handleResend}
                     disabled={sending || cooldown > 0}
-                    className="mt-4 text-sm font-medium text-brand-700 hover:text-brand-800 disabled:cursor-not-allowed disabled:text-slate-400"
+                    className="text-sm font-medium text-link hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline"
                 >
                     {sending
                         ? t("common.sending")
@@ -138,18 +125,13 @@ function VerifyNotice() {
                             ? t("notice.resendIn", { seconds: cooldown })
                             : t("notice.resend")}
                 </button>
-
-                <p className="mt-3 text-xs text-slate-500">{t("notice.spam")}</p>
-
-                <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="mt-6 text-sm font-medium text-slate-500 hover:text-slate-900"
-                >
-                    {t("nav.logout")}
-                </button>
+                <p className="mt-2 text-xs text-muted">{t("notice.spam")}</p>
             </div>
-        </div>
+
+            <button type="button" onClick={handleLogout} className={`${btnGhost} -ml-3 mt-4`}>
+                {t("nav.logout")}
+            </button>
+        </AuthLayout>
     )
 }
 

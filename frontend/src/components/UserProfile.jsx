@@ -3,7 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
+import { alertError, alertNote, btnPrimary, btnSecondary, chip, pageTitle, panel, panelTitle } from "../ui";
 import Layout, { TierBadge } from "./Layout";
+import Avatar from "./Avatar";
+import { StatusChip } from "./ProblemFeed";
 import { InstallSection } from "./InstallButton";
 import BackLink from "./BackLink";
 
@@ -14,15 +17,6 @@ function fullName(u) {
 function addressText(u) {
     const a = u.address || {}
     return [u.street, a.barangay, a.city, a.province, a.region].filter(Boolean).join(", ")
-}
-
-function Stat({ label, value }) {
-    return (
-        <div className="rounded-lg bg-slate-50 px-4 py-3 text-center">
-            <p className="text-xl font-bold text-slate-900">{value}</p>
-            <p className="text-xs text-slate-500">{label}</p>
-        </div>
-    )
 }
 
 // Used for both /users/:id (public) and /profile (own, shows email + change password).
@@ -40,6 +34,7 @@ function UserProfile({ own = false }) {
     const [resetSent, setResetSent] = useState(false)
     const [resetError, setResetError] = useState(null)
     const [sendingReset, setSendingReset] = useState(false)
+    const [activeTab, setActiveTab] = useState("problems")
 
     useEffect(() => {
         if (!userId) return
@@ -70,7 +65,7 @@ function UserProfile({ own = false }) {
     if (loading) {
         return (
             <Layout>
-                <div className="h-40 animate-pulse rounded-xl border border-slate-200 bg-white" />
+                <div className="h-40 animate-pulse rounded-lg border border-border bg-surface" />
             </Layout>
         )
     }
@@ -79,128 +74,154 @@ function UserProfile({ own = false }) {
         return (
             <Layout>
                 <BackLink />
-                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <p role="alert" className={`${alertError} mt-3`}>
                     {error ? errorText(error, "profile.notFound") : t("profile.notFound")}
-                </div>
+                </p>
             </Layout>
         )
     }
 
+    const tabs = [
+        { key: "problems", label: t("profile.problems"), count: profile.problem_count },
+        { key: "solutions", label: t("profile.solutions"), count: profile.solution_count },
+    ]
+
     return (
         <Layout>
             <BackLink />
-            <section className="mt-4 rounded-xl border border-slate-200 bg-white p-6">
-                <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-xl font-bold text-slate-900">{profile.name}</h1>
-                    <TierBadge tier={profile.tier} />
-                </div>
-                <p className="mt-1 text-sm text-slate-500">
-                    {t("profile.pointsJoined", { points: profile.points, date: formatDate(profile.created_at) })}
-                </p>
 
-                {own && (
-                    <div className="mt-4 border-t border-slate-100 pt-4">
-                        <p className="text-sm text-slate-600">
-                            {t("profile.email")} <span className="font-medium text-slate-900">{user.email}</span>
+            {/* Compact header: avatar, name, title, points and join date. No banner image. */}
+            <section className={`${panel} mt-3`}>
+                <div className="flex items-center gap-4">
+                    <Avatar name={profile.name} size="lg" />
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h1 className={pageTitle}>{profile.name}</h1>
+                            <TierBadge tier={profile.tier} />
+                        </div>
+                        <p className="mt-0.5 text-sm text-muted">
+                            {t("profile.pointsJoined", { points: profile.points, date: formatDate(profile.created_at) })}
                         </p>
-                        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                            <dt className="text-slate-500">{t("profile.fullName")}</dt>
-                            <dd className="text-slate-900">{fullName(user) || t("profile.notSet")}</dd>
-                            <dt className="text-slate-500">{t("personal.birthDate")}</dt>
-                            <dd className="text-slate-900">{user.birth_date ? formatDate(user.birth_date) : t("profile.notSet")}</dd>
-                            <dt className="text-slate-500">{t("personal.sex")}</dt>
-                            <dd className="text-slate-900">
-                                {user.sex === "male" ? t("personal.sexMale") : user.sex === "female" ? t("personal.sexFemale") : t("personal.sexUnspecified")}
-                            </dd>
-                            <dt className="text-slate-500">{t("section.address")}</dt>
-                            <dd className="text-slate-900">{addressText(user) || t("profile.notSet")}</dd>
-                        </dl>
-                        {(!user.birth_date || !user.barangay_code) && (
-                            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                                {t("profile.completeHint")}
-                            </p>
-                        )}
-                        <Link
-                            to="/profile/edit"
-                            className="mr-2 mt-3 inline-block rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
-                        >
-                            {t("profile.edit")}
-                        </Link>
-                        <button
-                            type="button"
-                            onClick={handleChangePassword}
-                            disabled={sendingReset}
-                            className="mt-3 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700
-                                       hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                        >
+                    </div>
+                </div>
+
+                {/* Real counts, shown as plain numbers rather than decorative stat cards. */}
+                <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-border pt-4">
+                    {[
+                        [t("profile.statProblems"), profile.problem_count],
+                        [t("profile.statSolutions"), profile.solution_count],
+                        [t("profile.statAccepted"), profile.accepted_count],
+                    ].map(([name, value]) => (
+                        <div key={name}>
+                            <dt className="text-xs text-muted">{name}</dt>
+                            <dd className="text-[17px] font-semibold tabular-nums text-ink">{value}</dd>
+                        </div>
+                    ))}
+                </dl>
+            </section>
+
+            {own && (
+                <section className={`${panel} mt-4`}>
+                    <h2 className={panelTitle}>{t("profile.details")}</h2>
+                    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                        <dt className="text-muted">{t("auth.email")}</dt>
+                        <dd className="break-all text-ink">{user.email}</dd>
+                        <dt className="text-muted">{t("profile.fullName")}</dt>
+                        <dd className="text-ink">{fullName(user) || t("profile.notSet")}</dd>
+                        <dt className="text-muted">{t("personal.birthDate")}</dt>
+                        <dd className="text-ink">{user.birth_date ? formatDate(user.birth_date) : t("profile.notSet")}</dd>
+                        <dt className="text-muted">{t("personal.sex")}</dt>
+                        <dd className="text-ink">
+                            {user.sex === "male" ? t("personal.sexMale") : user.sex === "female" ? t("personal.sexFemale") : t("personal.sexUnspecified")}
+                        </dd>
+                        <dt className="text-muted">{t("section.address")}</dt>
+                        <dd className="text-ink">{addressText(user) || t("profile.notSet")}</dd>
+                    </dl>
+
+                    {(!user.birth_date || !user.barangay_code) && (
+                        <p className={`${alertNote} mt-3`}>{t("profile.completeHint")}</p>
+                    )}
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        <Link to="/profile/edit" className={btnPrimary}>{t("profile.edit")}</Link>
+                        <button type="button" onClick={handleChangePassword} disabled={sendingReset} className={btnSecondary}>
                             {sendingReset ? t("common.sending") : t("profile.changePassword")}
                         </button>
-                        {resetSent && (
-                            <p className="mt-2 text-sm text-emerald-700">
-                                {t("forgot.sent")} {t("common.checkSpam")}
-                            </p>
-                        )}
-                        {resetError && <p className="mt-2 text-sm text-red-700">{errorText(resetError)}</p>}
                     </div>
-                )}
+                    {resetSent && (
+                        <p role="status" className={`${alertNote} mt-3`}>{t("forgot.sent")} {t("common.checkSpam")}</p>
+                    )}
+                    {resetError && <p role="alert" className={`${alertError} mt-3`}>{errorText(resetError)}</p>}
 
-                {own && <InstallSection />}
+                    <InstallSection />
+                </section>
+            )}
 
-                <div className="mt-5 grid grid-cols-3 gap-3">
-                    <Stat label={t("profile.statProblems")} value={profile.problem_count} />
-                    <Stat label={t("profile.statSolutions")} value={profile.solution_count} />
-                    <Stat label={t("profile.statAccepted")} value={profile.accepted_count} />
-                </div>
-            </section>
+            {/* Problems / Solutions as tabs, same underline style as the feed's sort tabs. */}
+            <div role="tablist" aria-label={profile.name} className="mt-6 flex gap-6 border-b border-border">
+                {tabs.map((tab) => {
+                    const active = tab.key === activeTab
+                    return (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`relative -mb-px h-11 text-sm font-medium ${
+                                active ? "text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary" : "text-muted hover:text-ink"
+                            }`}
+                        >
+                            {tab.label} <span className="tabular-nums text-muted">{tab.count}</span>
+                        </button>
+                    )
+                })}
+            </div>
 
-            <section className="mt-6">
-                <h2 className="font-semibold text-slate-900">{t("profile.problems")}</h2>
-                {profile.problems.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-500">{t("profile.noProblems")}</p>
+            {activeTab === "problems" && (
+                profile.problems.length === 0 ? (
+                    <p className="py-8 text-sm text-muted">{t("profile.noProblems")}</p>
                 ) : (
-                    <div className="mt-2 space-y-2">
+                    <ul className="divide-y divide-border">
                         {profile.problems.map((p) => (
-                            <Link
-                                key={p.id}
-                                to={`/problems/${p.id}`}
-                                className="block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-brand-300"
-                            >
-                                <p className="font-medium text-slate-900">{p.title}</p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                    {label("category", p.category)} · {p.status === "resolved" ? t("common.resolved") : t("common.open")} · {formatDate(p.created_at)}
-                                </p>
-                            </Link>
+                            <li key={p.id}>
+                                <Link to={`/problems/${p.id}`} className="-mx-2 block rounded-md px-2 py-3 hover:bg-surface-2">
+                                    <p className="text-[17px] font-semibold leading-snug text-ink">
+                                        {p.title}
+                                        <span className="ml-2 align-middle"><StatusChip status={p.status} t={t} /></span>
+                                    </p>
+                                    <p className="mt-1 flex flex-wrap gap-x-2 text-[13px] text-muted">
+                                        <span>{label("category", p.category)}</span>
+                                        <span>{formatDate(p.created_at)}</span>
+                                    </p>
+                                </Link>
+                            </li>
                         ))}
-                    </div>
-                )}
-            </section>
+                    </ul>
+                )
+            )}
 
-            <section className="mt-6">
-                <h2 className="font-semibold text-slate-900">{t("profile.solutions")}</h2>
-                {profile.solutions.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-500">{t("profile.noSolutions")}</p>
+            {activeTab === "solutions" && (
+                profile.solutions.length === 0 ? (
+                    <p className="py-8 text-sm text-muted">{t("profile.noSolutions")}</p>
                 ) : (
-                    <div className="mt-2 space-y-2">
+                    <ul className="divide-y divide-border">
                         {profile.solutions.map((s) => (
-                            <Link
-                                key={s.id}
-                                to={`/problems/${s.problem_id}`}
-                                className="block rounded-lg border border-slate-200 bg-white px-4 py-3 hover:border-brand-300"
-                            >
-                                <p className="text-xs text-slate-500">
-                                    {t("profile.on")} <span className="font-medium text-slate-700">{s.problem_title}</span>
-                                    {s.status === "accepted" && (
-                                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">
-                                            {t("profile.accepted")}
-                                        </span>
-                                    )}
-                                </p>
-                                <p className="mt-1 text-sm text-slate-700 line-clamp-2">{s.solution_text}</p>
-                            </Link>
+                            <li key={s.id}>
+                                <Link to={`/problems/${s.problem_id}`} className="-mx-2 block rounded-md px-2 py-3 hover:bg-surface-2">
+                                    <p className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
+                                        <span>{t("profile.on")} <span className="font-medium text-ink">{s.problem_title}</span></span>
+                                        {s.status === "accepted" && (
+                                            <span className={`${chip} bg-gold text-on-gold shine`}>{t("profile.accepted")}</span>
+                                        )}
+                                    </p>
+                                    <p className="mt-1 line-clamp-2 text-sm text-ink">{s.solution_text}</p>
+                                </Link>
+                            </li>
                         ))}
-                    </div>
-                )}
-            </section>
+                    </ul>
+                )
+            )}
         </Layout>
     )
 }

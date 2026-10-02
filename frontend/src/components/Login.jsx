@@ -3,13 +3,9 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
+import { inputClass } from "../form";
+import { alertError, alertNote, btnPrimary, btnSecondary, link } from "../ui";
 import AuthLayout from "./AuthLayout";
-
-const inputClass =
-    "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
-    "placeholder-slate-400 outline-none transition " +
-    "focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 " +
-    "disabled:bg-slate-50 disabled:text-slate-400"
 
 function Login() {
     const navigate = useNavigate()
@@ -70,7 +66,7 @@ function Login() {
             footer={
                 <>
                     {t("login.newHere")}{" "}
-                    <Link to="/register" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
+                    <Link to="/register" className={link}>
                         {t("login.createAccount")}
                     </Link>
                 </>
@@ -78,7 +74,7 @@ function Login() {
         >
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
+                    <label htmlFor="email" className="mb-1 block text-sm font-medium text-ink">
                         {t("auth.email")}
                     </label>
                     <input
@@ -86,7 +82,7 @@ function Login() {
                         type="email"
                         autoComplete="email"
                         placeholder={t("auth.emailPlaceholder")}
-                        className={inputClass}
+                        className={inputClass()}
                         disabled={submitting}
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
@@ -95,10 +91,10 @@ function Login() {
 
                 <div>
                     <div className="mb-1 flex items-center justify-between">
-                        <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+                        <label htmlFor="password" className="block text-sm font-medium text-ink">
                             {t("auth.password")}
                         </label>
-                        <Link to="/forgot-password" className="text-sm font-medium text-brand-700 hover:text-brand-800">
+                        <Link to="/forgot-password" className="text-sm font-medium text-link hover:underline">
                             {t("auth.forgot")}
                         </Link>
                     </div>
@@ -107,7 +103,7 @@ function Login() {
                         type="password"
                         autoComplete="current-password"
                         placeholder={t("auth.passwordPlaceholder")}
-                        className={inputClass}
+                        className={inputClass()}
                         disabled={submitting}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -115,18 +111,18 @@ function Login() {
                 </div>
 
                 {error && !deactivated && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <div role="alert" className={alertError}>
                         {errorText(error)}
                     </div>
                 )}
                 {deactivated && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+                    <div role="alert" className={`${alertNote} py-3`}>
                         <p>{t("login.deactivatedBody")}</p>
                         <button
                             type="button"
                             onClick={handleReactivate}
                             disabled={submitting}
-                            className="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                            className={`${btnSecondary} mt-2`}
                         >
                             {submitting ? t("login.reactivating") : t("login.reactivate")}
                         </button>
@@ -136,9 +132,7 @@ function Login() {
                 <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition
-                               hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
-                               disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className={`${btnPrimary} w-full`}
                 >
                     {submitting ? t("login.submitting") : t("login.submit")}
                 </button>

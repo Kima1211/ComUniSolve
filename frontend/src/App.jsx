@@ -13,6 +13,7 @@ import RequireVerified from './components/RequireVerified'
 import UserProfile from './components/UserProfile'
 import EditProfile from './components/EditProfile'
 import NotFound from './components/NotFound'
+import StyleGuide from './components/StyleGuide'
 
 function App() {
   return (
@@ -46,6 +47,7 @@ function App() {
         }
       />
 
+      <Route path="/_styles" element={<StyleGuide />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   )

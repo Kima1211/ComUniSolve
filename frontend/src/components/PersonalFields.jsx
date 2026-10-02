@@ -48,7 +48,7 @@ function PersonalFields({ person, setPerson, errors = {}, disabled }) {
                        value={person.birth_date} onChange={set("birth_date")} />
             </FormField>
 
-            <p className="text-xs text-slate-500">{t("personal.privacy")}</p>
+            <p className="text-xs text-muted">{t("personal.privacy")}</p>
         </div>
     )
 }

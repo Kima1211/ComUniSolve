@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { useLanguage } from "../i18n/language-context";
 
 // The installed app has no browser back button, so pages offer their own.
@@ -16,8 +17,13 @@ function BackLink() {
     }
 
     return (
-        <Link to="/" onClick={goBack} className="text-sm font-medium text-slate-500 hover:text-slate-900">
-            ← {t("common.back")}
+        <Link
+            to="/"
+            onClick={goBack}
+            className="-ml-2 inline-flex h-10 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-muted hover:bg-surface-2 hover:text-ink"
+        >
+            <ArrowLeft size={18} strokeWidth={1.75} aria-hidden="true" />
+            {t("common.back")}
         </Link>
     )
 }

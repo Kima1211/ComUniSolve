@@ -1,42 +1,36 @@
 import { Link } from "react-router-dom";
-import CommunityPreview from "./CommunityPreview";
 import LanguageSwitcher from "./LanguageSwitcher";
+import ThemeToggle from "./ThemeToggle";
+import Logo from "./Logo";
 
+// Centred 400px panel on canvas, per DESIGN.md "Login and register" spec.
+// No side preview, no illustration. Logo + language switch in a thin top bar.
 function AuthLayout({ title, subtitle, children, footer }) {
     return (
-        <div className="min-h-screen grid lg:grid-cols-2">
-
-            <div className="flex flex-col justify-center px-6 py-12 sm:px-12">
-                <div className="mx-auto w-full max-w-sm">
-
-                    <div className="flex items-center justify-between gap-3">
-                        <Link to="/" className="inline-flex items-center gap-2">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-                                C
-                            </span>
-                            <span className="text-lg font-bold tracking-tight text-slate-900">
-                                ComUniSolve
-                            </span>
-                        </Link>
+        <div className="min-h-screen bg-page">
+            <header className="brand-line h-14 border-b border-border bg-surface">
+                <div className="mx-auto flex h-full max-w-5xl items-center justify-between px-4">
+                    <Link to="/" className="flex items-center gap-2">
+                        <Logo size={28} />
+                        <span className="text-lg font-semibold text-ink">ComUniSolve</span>
+                    </Link>
+                    <div className="flex items-center gap-2">
+                        <ThemeToggle />
                         <LanguageSwitcher />
                     </div>
-
-                    <h1 className="mt-10 text-2xl font-bold tracking-tight text-slate-900">
-                        {title}
-                    </h1>
-                    {subtitle && (
-                        <p className="mt-2 text-sm text-slate-500">{subtitle}</p>
-                    )}
-
-                    <div className="mt-8">{children}</div>
-
-                    {footer && (
-                        <p className="mt-8 text-sm text-slate-600">{footer}</p>
-                    )}
                 </div>
-            </div>
+            </header>
 
-            <CommunityPreview />
+            <main className="flex items-start justify-center px-4 py-10 sm:py-16">
+                <div className="w-full max-w-[400px] rounded-lg border border-border bg-surface p-6 sm:p-8">
+                    <h1 className="text-[22px] font-semibold leading-[1.3] tracking-tight text-ink">{title}</h1>
+                    {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
+
+                    <div className="mt-6">{children}</div>
+
+                    {footer && <p className="mt-6 text-sm text-muted">{footer}</p>}
+                </div>
+            </main>
         </div>
     )
 }

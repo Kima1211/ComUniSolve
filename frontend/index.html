@@ -2,13 +2,29 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#0d9488" />
+    <!-- Browser bar colour = the top bar's colour in each mode. src/theme.js updates these
+         when someone picks Light or Dark with the toggle. -->
+    <meta name="theme-color" content="#FFFFFF" data-mode="light" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#15181E" data-mode="dark" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="ComUniSolve: a community-based problem-solution matching platform with AI support." />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ComUniSolve</title>
+    <!-- Apply the saved Light/Dark choice before the page is drawn, so dark mode never flashes white.
+         (main.jsx loads after the page is parsed, which is too late for this.) -->
+    <script>
+      (function () {
+        try {
+          var choice = localStorage.getItem("comunisolve-theme");
+          if (choice !== "light" && choice !== "dark") return;
+          document.documentElement.dataset.theme = choice;
+          var bar = { light: "#FFFFFF", dark: "#15181E" }[choice];
+          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute("content", bar); });
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

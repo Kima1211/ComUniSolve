@@ -1,57 +1,160 @@
-import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
+import { MessageSquare, Star, X } from "lucide-react"
 import { apiGet, imageUrl } from "../api"
 import { useLanguage } from "../i18n/language-context"
+import { SECTORS } from "../categories"
+import Avatar from "./Avatar"
+import SearchBox from "./SearchBox"
+import { searchProblems } from "../search"
+import { timeAgo } from "../time"
+import { authorLabel } from "../author"
 
+function sectorFor(category) {
+    for (const s of SECTORS) if (s.categories.includes(category)) return s.name
+    return "Other"
+}
+
+// Chip rendering: Open uses primary-soft + primary text, Solved uses the reserved gold,
+// Under review uses the neutral surface-muted chip. Rounded-sm (4px) per DESIGN.md chip spec.
+export function StatusChip({ status, t }) {
+    if (status === "resolved") {
+        return <span className="rounded-sm bg-gold px-1.5 py-0.5 text-[12px] font-medium text-on-gold shine">{t("status.solved")}</span>
+    }
+    if (status === "flagged") {
+        return <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 text-[12px] font-medium text-muted">{t("status.underReview")}</span>
+    }
+    return <span className="rounded-sm bg-primary-soft px-1.5 py-0.5 text-[12px] font-medium text-link">{t("status.open")}</span>
+}
+
+// A single forum-style problem row. No shadow, no card border; divided from the next
+// row by the parent's `divide-y`. On hover the row rounds to 8px and gains a canvas tint.
 export function ProblemCard({ problem }) {
     const { t, label } = useLanguage()
+    const authorName = authorLabel(problem.author, t)
+    const categoryLabel = label("category", problem.category)
+
     return (
-        <Link
-            to={`/problems/${problem.id}`}
-            className="block rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-300 hover:shadow-sm"
-        >
-            <div className="flex items-start justify-between gap-3">
-                <h3 className="font-semibold text-slate-900">{problem.title}</h3>
-                <span
-                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        problem.status === "resolved"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-amber-100 text-amber-700"
-                    }`}
+        <article className="group block transition-colors hover:bg-surface-2 hover:rounded-md -mx-2 px-2 py-4">
+            {/* Row 1: metadata. 20px avatar + category/sector + author + relative time. 8px spacing, no dots. */}
+            <div className="flex items-center gap-2 text-[13px]">
+                <Avatar name={authorName} size="xs" />
+                <span className="font-medium text-ink truncate max-w-[180px]">{categoryLabel}</span>
+                <span className="text-muted">·</span>
+                <span className="text-muted truncate max-w-[160px]">{t("post.by", { name: authorName })}</span>
+                <span className="text-muted">·</span>
+                <span className="text-muted whitespace-nowrap">{timeAgo(problem.created_at, t)}</span>
+            </div>
+
+            {/* Row 2: title (17px/600) with status chip inline. */}
+            <Link to={`/problems/${problem.id}`} className="mt-1.5 block">
+                <h3 className="text-[17px] font-semibold leading-tight text-ink group-hover:underline-offset-2">
+                    {problem.title}
+                    <span className="ml-2 align-middle">
+                        <StatusChip status={problem.status} t={t} />
+                    </span>
+                    {problem.accepted_rating && (
+                        <span
+                            role="img"
+                            aria-label={t("common.stars", { count: problem.accepted_rating })}
+                            title={t("common.stars", { count: problem.accepted_rating })}
+                            className="ml-1.5 inline-flex items-center gap-1 align-middle text-[12px] font-medium text-muted"
+                        >
+                            <Star size={13} strokeWidth={1.75} aria-hidden="true" className="fill-gold text-on-gold" />
+                            {t("common.outOfFive", { count: problem.accepted_rating })}
+                        </span>
+                    )}
+                </h3>
+            </Link>
+
+            {/* Row 3: preview text (3 line clamp) OR one 16:9 image at 8px rounded. */}
+            {problem.image_url ? (
+                <Link to={`/problems/${problem.id}`} className="mt-3 block">
+                    <img
+                        src={imageUrl(problem.image_url, 800)}
+                        alt=""
+                        loading="lazy"
+                        className="aspect-[16/9] max-h-[420px] w-full rounded-md border border-border object-cover"
+                    />
+                </Link>
+            ) : (
+                problem.description && (
+                    <Link to={`/problems/${problem.id}`} className="mt-2 block">
+                        <p className="line-clamp-3 text-sm leading-relaxed text-muted">{problem.description}</p>
+                    </Link>
+                )
+            )}
+
+            {/* Row 4: action row. Just the solutions link — ComUniSolve has no problem upvotes
+                or share endpoint, so the Reddit-style vote pill and Share button were removed. */}
+            <div className="mt-3">
+                <Link
+                    to={`/problems/${problem.id}`}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md -ml-2 px-2 text-[13px] font-medium text-muted hover:bg-surface-2 hover:text-ink"
                 >
-                    {problem.status === "resolved" ? t("common.resolved") : t("common.open")}
-                </span>
+                    <MessageSquare size={16} strokeWidth={1.75} aria-hidden="true" />
+                    {t("common.solutions", { count: problem.solution_count ?? 0 })}
+                </Link>
             </div>
+        </article>
+    )
+}
 
-            {problem.description && (
-                <p className="mt-2 text-sm text-slate-600 line-clamp-2">{problem.description}</p>
-            )}
+function Skeleton() {
+    return (
+        <div className="divide-y divide-border">
+            {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2 py-4 -mx-2 px-2">
+                    <div className="h-3 w-48 animate-pulse rounded bg-surface-2" />
+                    <div className="h-4 w-3/4 animate-pulse rounded bg-surface-2" />
+                    <div className="h-3 w-full animate-pulse rounded bg-surface-2" />
+                    <div className="h-3 w-5/6 animate-pulse rounded bg-surface-2" />
+                </div>
+            ))}
+        </div>
+    )
+}
 
-            {problem.image_url && (
-                <img
-                    src={imageUrl(problem.image_url, 600)}
-                    alt=""
-                    loading="lazy"
-                    className="mt-3 h-40 w-full rounded-lg bg-slate-100 object-cover"
-                />
-            )}
-
-            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
-                    {label("category", problem.category)}
-                </span>
-                {problem.author && <span>{t("common.by", { name: problem.author.name })}</span>}
-                <span>{t("common.solutions", { count: problem.solution_count })}</span>
-            </div>
-        </Link>
+// Sort tabs sit at the top of the feed column, flush with the 1px list divider below.
+// "Newest" default, "Needs help" filters open+flagged, "Solved" filters resolved. Client-side.
+function SortTabs({ value, onChange, t }) {
+    const items = [
+        { key: "newest", label: t("sort.newest") },
+        { key: "unresolved", label: t("sort.needsHelp") },
+        { key: "solved", label: t("sort.solved") },
+    ]
+    return (
+        <div className="-mb-px flex gap-6 border-b border-border">
+            {items.map((it) => {
+                const active = value === it.key
+                return (
+                    <button
+                        key={it.key}
+                        type="button"
+                        onClick={() => onChange(it.key)}
+                        aria-pressed={active}
+                        className={`relative h-11 text-sm font-medium ${
+                            active ? "text-ink after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary" : "text-muted hover:text-ink"
+                        }`}
+                    >
+                        {it.label}
+                    </button>
+                )
+            })}
+        </div>
     )
 }
 
 function ProblemFeed() {
     const { t, errorText } = useLanguage()
+    const [params, setParams] = useSearchParams()
     const [error, setError] = useState(null)
     const [problems, setProblems] = useState([])
     const [loading, setLoading] = useState(true)
+
+    const sort = params.get("sort") || "newest"
+    const sector = params.get("sector") || ""
+    const q = (params.get("q") || "").trim()
 
     useEffect(() => {
         let cancelled = false
@@ -62,39 +165,95 @@ function ProblemFeed() {
         return () => { cancelled = true }
     }, [])
 
-    if (loading) {
-        return (
-            <div className="space-y-3">
-                {[0, 1, 2].map((i) => (
-                    <div key={i} className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white" />
-                ))}
-            </div>
-        )
+    // Sort tab and sector first, then the search inside what's left: all three apply together.
+    const { results: shown, closest } = useMemo(() => {
+        let xs = problems
+        if (sort === "solved") xs = xs.filter((p) => p.status === "resolved")
+        else if (sort === "unresolved") xs = xs.filter((p) => p.status !== "resolved")
+        if (sector) xs = xs.filter((p) => sectorFor(p.category) === sector)
+        return searchProblems(xs, q)
+    }, [problems, sort, sector, q])
+
+    function setSort(next) {
+        const n = new URLSearchParams(params)
+        if (next === "newest") n.delete("sort"); else n.set("sort", next)
+        setParams(n, { replace: true })
+    }
+
+    function clearSearch() {
+        const n = new URLSearchParams(params)
+        n.delete("q")
+        setParams(n, { replace: true })
     }
 
     return (
-        <div>
-            <h1 className="text-xl font-bold text-slate-900">{t("feed.title")}</h1>
-            <p className="mt-1 text-sm text-slate-500">{t("feed.newest")}</p>
+        <section>
+            {/* Phones: the search box is the first row of the feed (the top bar has no room for it). */}
+            <SearchBox className="mb-3 md:hidden" />
+
+            <SortTabs value={sort} onChange={setSort} t={t} />
+
+            {q && (
+                <div className="mt-3">
+                    <button
+                        type="button"
+                        onClick={clearSearch}
+                        aria-label={t("search.clear")}
+                        className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-md bg-primary-soft px-3 text-[13px] font-medium text-link hover:bg-surface-2"
+                    >
+                        <span className="truncate">{t("search.active", { q })}</span>
+                        <X size={14} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+                    </button>
+                </div>
+            )}
+
+            {loading && <Skeleton />}
 
             {error && (
-                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div role="alert" className="mt-4 rounded-md bg-error-soft px-3 py-2.5 text-sm text-error">
                     {errorText(error)}
                 </div>
             )}
 
-            {!error && problems.length === 0 && (
-                <p className="mt-6 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-                    {t("feed.empty")}
-                </p>
+            {!loading && !error && shown.length === 0 && !q && (
+                <div className="py-16 text-center">
+                    <p className="text-sm text-muted">{t("feed.empty")}</p>
+                </div>
             )}
 
-            <div className="mt-5 space-y-3">
-                {problems.map((problem) => (
+            {/* Nothing has every word, but some posts come close: show those before offering to post. */}
+            {!loading && !error && q && shown.length === 0 && closest.length > 0 && (
+                <>
+                    <p className="pt-4 pb-1 text-sm text-muted">{t("search.noExact", { q })}</p>
+                    <div className="divide-y divide-border">
+                        {closest.map((problem) => (
+                            <ProblemCard key={problem.id} problem={problem} />
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* Nothing matched: offer to post it, which runs the AI matching check one more time. */}
+            {!loading && !error && q && shown.length === 0 && (
+                <div className={`text-center ${closest.length > 0 ? "border-t border-border py-8" : "py-16"}`}>
+                    <p className="text-sm text-muted">
+                        {closest.length > 0 ? t("search.didntFind") : t("search.noResults", { q })}
+                    </p>
+                    <Link
+                        to={`/postproblem?title=${encodeURIComponent(q.slice(0, 255))}`}
+                        className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-on-primary hover:bg-primary-hover shine"
+                    >
+                        {t("search.postThis")}
+                    </Link>
+                </div>
+            )}
+
+            <div className="divide-y divide-border">
+                {shown.map((problem) => (
                     <ProblemCard key={problem.id} problem={problem} />
                 ))}
             </div>
-        </div>
+        </section>
     )
 }
 

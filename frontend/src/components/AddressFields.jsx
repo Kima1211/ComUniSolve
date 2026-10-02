@@ -61,7 +61,10 @@ function AddressFields({ address, setAddress, errors = {}, disabled }) {
     const placeholder = (loading) => <option value="" disabled>{loading ? t("common.loading") : t("address.choose")}</option>
 
     return (
-        <div className="space-y-4">
+        // Two columns only when the form itself is wide enough (Edit profile), one column in the
+        // 400px sign-up panel: a container query looks at this box, not the screen.
+        <div className="@container">
+        <div className="grid gap-4 @md:grid-cols-2">
             <FormField id="region" label={t("address.region")} error={errors.region_code}>
                 <select id="region" className={inputClass(errors.region_code)} disabled={disabled || !regions.data}
                         value={region} onChange={chooseRegion}>
@@ -99,13 +102,16 @@ function AddressFields({ address, setAddress, errors = {}, disabled }) {
                 </select>
             </FormField>
 
+            <div className="@md:col-span-2">
             <FormField id="street" label={t("address.street")} optional error={errors.street}>
                 <input id="street" className={inputClass(errors.street)} disabled={disabled} maxLength={255}
                        placeholder={t("address.streetPlaceholder")} autoComplete="address-line1"
                        value={address.street} onChange={(e) => setAddress((a) => ({ ...a, street: e.target.value }))} />
             </FormField>
+            </div>
 
-            {failed && <p className="text-xs text-red-600">{t("address.loadFailed")}</p>}
+            {failed && <p className="text-xs text-error @md:col-span-2">{t("address.loadFailed")}</p>}
+        </div>
         </div>
     )
 }

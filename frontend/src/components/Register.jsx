@@ -7,6 +7,7 @@ import { inputClass } from "../form";
 import {
     EMPTY_ADDRESS, EMPTY_PERSON, addressErrors, addressPayload, emailError, passwordOk, personErrors, personPayload,
 } from "../validation";
+import { alertError, btnPrimary, link } from "../ui";
 import AuthLayout from "./AuthLayout";
 import FormField from "./FormField";
 import PersonalFields from "./PersonalFields";
@@ -14,7 +15,7 @@ import AddressFields from "./AddressFields";
 import PasswordChecklist from "./PasswordChecklist";
 
 function SectionTitle({ children }) {
-    return <h2 className="border-b border-slate-200 pb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">{children}</h2>
+    return <h2 className="border-b border-border pb-1.5 text-sm font-semibold text-ink">{children}</h2>
 }
 
 function Register() {
@@ -76,7 +77,7 @@ function Register() {
             footer={
                 <>
                     {t("register.haveAccount")}{" "}
-                    <Link to="/login" className="font-medium text-brand-700 hover:text-brand-800 underline underline-offset-2">
+                    <Link to="/login" className={link}>
                         {t("register.signIn")}
                     </Link>
                 </>
@@ -109,7 +110,7 @@ function Register() {
                 </section>
 
                 {showError && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <div role="alert" className={alertError}>
                         {errorText(error)}
                     </div>
                 )}
@@ -117,9 +118,7 @@ function Register() {
                 <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition
-                               hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40
-                               disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className={`${btnPrimary} w-full`}
                 >
                     {submitting ? t("register.submitting") : t("register.submit")}
                 </button>

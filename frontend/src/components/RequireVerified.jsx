@@ -7,7 +7,7 @@ function RequireVerified({ children }) {
     const { t } = useLanguage()
 
     if (loading) {
-        return <p className="p-8 text-sm text-slate-500">{t("common.loading")}</p>
+        return <p className="p-8 text-sm text-muted">{t("common.loading")}</p>
     }
 
     if (user && !user.is_verified) {

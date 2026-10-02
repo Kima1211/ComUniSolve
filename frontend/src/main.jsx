@@ -1,11 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+// Self-hosted IBM Plex Sans (DESIGN.md typography family), 400/500/600, bundled by Vite.
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/500.css'
+import '@fontsource/ibm-plex-sans/600.css'
 import './install.js'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './auth.jsx'
 import { LanguageProvider } from './i18n/language.jsx'
+import { ConfirmProvider } from './components/ConfirmDialog.jsx'
 
 // Only in production builds: in dev, a service worker would cache files while you're still editing them.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -18,9 +23,11 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <LanguageProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <ConfirmProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </ConfirmProvider>
       </LanguageProvider>
     </BrowserRouter>
   </StrictMode>,

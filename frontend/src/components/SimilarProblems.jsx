@@ -2,92 +2,69 @@ import { Link } from "react-router-dom";
 import { useLanguage } from "../i18n/language-context";
 import Stars from "./Stars";
 
-const RELEVANCE_STYLES = {
-    high: "bg-emerald-100 text-emerald-800",
-    medium: "bg-sky-100 text-sky-800",
-    low: "bg-slate-100 text-slate-600",
+// TF-IDF scores at or above this read as a strong match when the AI didn't judge relevance.
+// (Matching itself starts at 0.10, see SIMILARITY_THRESHOLD in Services/matching.py.)
+const STRONG_SCORE = 0.35
+
+// DESIGN.md: match strength is written as text ("Strong match" / "Possible match"), never a percentage.
+// The exact word-overlap number is kept in the tooltip for anyone who wants it.
+function strengthOf(m) {
+    if (m.relevance) return m.relevance === "high" ? "strong" : "possible"
+    return m.score >= STRONG_SCORE ? "strong" : "possible"
 }
 
-function SimilarProblems({ matches, title, hint, aiUsed = false }) {
+// The AI matching panel: Ember Soft background, 12px rounding (DESIGN.md "ai-match-panel").
+// backup: the AI couldn't answer, so these are keyword matches only (the panel says so).
+function SimilarProblems({ matches, title, hint, aiUsed = false, backup = false }) {
     const { t, label } = useLanguage()
     if (!matches || matches.length === 0) return null
 
     return (
-        <section className="rounded-xl border border-brand-200 bg-brand-50/60 p-5">
+        <section className="rounded-lg bg-primary-soft p-4">
             <div className="flex items-start justify-between gap-3">
-                <div>
-                    <h2 className="text-sm font-semibold text-brand-900">{title || t("similar.title")}</h2>
-                    {hint && <p className="mt-1 text-xs text-brand-800/80">{hint}</p>}
-                </div>
-                {aiUsed && (
-                    <span className="shrink-0 rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800">
-                        {t("similar.aiReviewed")}
-                    </span>
-                )}
+                <h2 className="text-sm font-semibold text-ink">{title || t("similar.title")}</h2>
+                {aiUsed && <span className="shrink-0 text-xs text-muted">{t("similar.aiReviewed")}</span>}
             </div>
+            {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+            {backup && <p className="mt-1 text-xs text-muted">{t("similar.backupNote")}</p>}
 
-            <div className="mt-4 space-y-3">
-                {matches.map((m) => (
-                    <div key={m.id} className="rounded-lg border border-brand-200 bg-white p-4">
-                        <div className="flex items-start justify-between gap-3">
-                            <Link
-                                to={`/problems/${m.id}`}
-                                className="font-medium text-slate-900 hover:text-brand-700 hover:underline"
-                            >
+            <ul className="mt-3 divide-y divide-border overflow-hidden rounded-md border border-border bg-surface">
+                {matches.map((m) => {
+                    const strength = strengthOf(m)
+                    return (
+                        <li key={m.id} className="p-3">
+                            <Link to={`/problems/${m.id}`} className="font-medium text-ink hover:underline">
                                 {m.title}
                             </Link>
-                            <div className="flex shrink-0 items-center gap-1.5">
-                                {m.relevance && (
-                                    <span
-                                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                            RELEVANCE_STYLES[m.relevance] || RELEVANCE_STYLES.low
-                                        }`}
-                                    >
-                                        {label("similar.relevance", m.relevance)}
-                                    </span>
-                                )}
-                                <span
-                                    className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-medium text-brand-800"
-                                    title={t("similar.wordsTitle")}
-                                >
-                                    {t("similar.words", { percent: Math.round(m.score * 100) })}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
-                                {label("category", m.category)}
-                            </span>
                             {m.status === "resolved" && (
-                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700">
-                                    {t("common.resolved")}
+                                <span className="ml-2 rounded-sm bg-gold px-1.5 py-0.5 align-middle text-[12px] font-medium text-on-gold shine">
+                                    {t("status.solved")}
                                 </span>
                             )}
-                        </div>
 
-                        {m.reason && (
-                            <p className="mt-2 text-sm italic text-slate-600">
-                                <span className="font-medium not-italic text-purple-700">{t("similar.ai")}</span> {m.reason}
-                            </p>
-                        )}
-
-                        {m.accepted_solution && (
-                            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <p className="text-xs font-semibold text-amber-800">{t("solution.accepted")}</p>
-                                    {m.accepted_solution_rating && (
-                                        <Stars value={m.accepted_solution_rating} className="text-sm" />
-                                    )}
-                                </div>
-                                <p className="mt-1 text-sm text-slate-700 line-clamp-3">
-                                    {m.accepted_solution}
-                                </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px]">
+                                <span className="text-muted">{label("category", m.category)}</span>
+                                <span
+                                    className={strength === "strong" ? "font-medium text-link" : "text-muted"}
+                                    title={t("similar.overlap", { percent: Math.round(m.score * 100) })}
+                                >
+                                    {strength === "strong" ? t("similar.strong") : t("similar.possible")}
+                                </span>
                             </div>
-                        )}
-                    </div>
-                ))}
-            </div>
+
+                            {m.reason && <p className="mt-1.5 text-sm text-muted">{m.reason}</p>}
+
+                            {/* The accepted solution's first lines: the reusable answer, marked in gold. */}
+                            {m.accepted_solution && (
+                                <div className="mt-2 border-l-[3px] border-gold pl-3">
+                                    {m.accepted_solution_rating && <Stars value={m.accepted_solution_rating} size={13} />}
+                                    <p className="line-clamp-2 text-sm text-ink">{m.accepted_solution}</p>
+                                </div>
+                            )}
+                        </li>
+                    )
+                })}
+            </ul>
         </section>
     )
 }

@@ -67,10 +67,32 @@ async function send(path, options) {
   });
 }
 
+// The free backend sleeps when idle and takes up to a minute to wake. While it wakes, requests fail
+// with a network error or a 502/503/504 from the proxy. Waiting and trying again fixes that.
+// Only GET (reading) is retried: repeating a POST could post the same problem twice.
+const WAKE_DELAYS_MS = [2000, 4000, 8000, 15000, 20000];
+
+function isWaking(response) {
+  return [502, 503, 504].includes(response.status);
+}
+
+async function sendWithWake(path, options) {
+  const canRetry = (options.method || "GET").toUpperCase() === "GET";
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const response = await send(path, options);
+      if (!canRetry || !isWaking(response) || attempt >= WAKE_DELAYS_MS.length) return response;
+    } catch (e) {
+      if (!canRetry || attempt >= WAKE_DELAYS_MS.length) throw e;
+    }
+    await new Promise((resolve) => setTimeout(resolve, WAKE_DELAYS_MS[attempt]));
+  }
+}
+
 export async function api(path, options = {}) {
   const { retryOn401 = true, ...fetchOptions } = options;
 
-  let response = await send(path, fetchOptions);
+  let response = await sendWithWake(path, fetchOptions);
 
   if (retryOn401 && response.status === 401 && path !== "/refresh" && path !== "/login") {
     const refreshed = await refreshSession();
