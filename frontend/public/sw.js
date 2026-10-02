@@ -1,8 +1,8 @@
 // Bump the version whenever this file's caching logic changes; old caches are deleted on activate.
-// v5: charcoal + amber logo. Icons are served cache-first under the same names, so without the bump
-// installed apps would keep showing the old icons.
-const CACHE = "comunisolve-v5"
-const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/favicon-48.png", "/icons/logo-128.png", "/icons/logo-dark-128.png", "/icons/icon-192.png", "/icons/icon-512.png"]
+// v6: theme-init.js (saved Light/Dark choice) is part of the app shell. Like the icons, it keeps the
+// same name across deploys and is served cache-first, so bump this whenever it or an icon changes.
+const CACHE = "comunisolve-v6"
+const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/favicon-48.png", "/icons/logo-128.png", "/icons/logo-dark-128.png", "/icons/icon-192.png", "/icons/icon-512.png", "/theme-init.js"]
 
 self.addEventListener("install", (event) => {
     // One file failing must not stop the new version from installing.

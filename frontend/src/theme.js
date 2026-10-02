@@ -1,7 +1,7 @@
 // Light / dark mode. Three choices: "system" (follow the phone), "light", "dark".
 // "system" means no data-theme on <html>, so the prefers-color-scheme rule in index.css decides.
 // Light and dark set data-theme, which wins over the phone's setting.
-// The saved choice is applied before the first paint by a small script in index.html (no flash).
+// The saved choice is applied before the first paint by public/theme-init.js (no flash).
 const KEY = "comunisolve-theme"
 
 // Browser bar colour per mode: the top bar's Surface colour, so the bar and the page join up.

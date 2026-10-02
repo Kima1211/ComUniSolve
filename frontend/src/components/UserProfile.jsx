@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPost } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
@@ -22,7 +22,8 @@ function addressText(u) {
 // Used for both /users/:id (public) and /profile (own, shows email + change password).
 function UserProfile({ own = false }) {
     const params = useParams()
-    const { user } = useAuth()
+    const navigate = useNavigate()
+    const { user, logout } = useAuth()
     const { t, label, formatDate, errorText } = useLanguage()
     const userId = own ? user?.id : params.id
 
@@ -60,6 +61,13 @@ function UserProfile({ own = false }) {
         } finally {
             setSendingReset(false)
         }
+    }
+
+    // Phones and tablets have no Log out in the top bar (no room), so it lives here too.
+    // Leave the page first: /profile needs a signed-in user, and would bounce to /login otherwise.
+    async function handleLogout() {
+        navigate("/", { replace: true })
+        await logout()
     }
 
     if (loading) {
@@ -146,6 +154,9 @@ function UserProfile({ own = false }) {
                         <Link to="/profile/edit" className={btnPrimary}>{t("profile.edit")}</Link>
                         <button type="button" onClick={handleChangePassword} disabled={sendingReset} className={btnSecondary}>
                             {sendingReset ? t("common.sending") : t("profile.changePassword")}
+                        </button>
+                        <button type="button" onClick={handleLogout} className={btnSecondary}>
+                            {t("nav.logout")}
                         </button>
                     </div>
                     {resetSent && (

@@ -12,19 +12,9 @@
     <meta name="description" content="ComUniSolve: a community-based problem-solution matching platform with AI support." />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ComUniSolve</title>
-    <!-- Apply the saved Light/Dark choice before the page is drawn, so dark mode never flashes white.
-         (main.jsx loads after the page is parsed, which is too late for this.) -->
-    <script>
-      (function () {
-        try {
-          var choice = localStorage.getItem("comunisolve-theme");
-          if (choice !== "light" && choice !== "dark") return;
-          document.documentElement.dataset.theme = choice;
-          var bar = { light: "#FFFFFF", dark: "#15181E" }[choice];
-          document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute("content", bar); });
-        } catch (e) {}
-      })();
-    </script>
+    <!-- Applies the saved Light/Dark choice before the page is drawn. A file, not an inline script:
+         the Content-Security-Policy in vercel.json blocks inline scripts. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

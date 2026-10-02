@@ -401,9 +401,11 @@ function UsersTab() {
 
             <Message error={error} notice={notice} />
 
+            {/* The table keeps a minimum width and scrolls sideways inside its box on phones and tablets,
+                instead of squeezing seven columns until names, emails and badges break mid-word. */}
             <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface">
-                <table className="min-w-full text-left text-sm">
-                    <thead className="border-b border-border bg-surface-2 text-xs text-muted">
+                <table className="w-full min-w-[860px] text-left text-sm">
+                    <thead className="whitespace-nowrap border-b border-border bg-surface-2 text-xs text-muted">
                         <tr>
                             <th className="px-4 py-3 font-medium">{t("admin.col.user")}</th>
                             <th className="px-4 py-3 font-medium">{t("admin.col.reputation")}</th>
@@ -417,15 +419,15 @@ function UsersTab() {
                     <tbody className="divide-y divide-border">
                         {data?.users.map((u) => (
                             <tr key={u.id} className={loading ? "opacity-50" : ""}>
-                                <td className="px-4 py-3">
+                                <td className="min-w-[13rem] px-4 py-3">
                                     <p className="font-medium text-ink">{u.name}</p>
-                                    <p className="break-all text-xs text-muted">{u.email}</p>
+                                    <p className="break-words text-xs text-muted">{u.email}</p>
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="whitespace-nowrap px-4 py-3">
                                     <TierBadge tier={u.tier} />
                                     <p className="mt-1 text-xs tabular-nums text-muted">{t("admin.pts", { points: u.points })}</p>
                                 </td>
-                                <td className="px-4 py-3 text-ink">
+                                <td className="whitespace-nowrap px-4 py-3 text-ink">
                                     {t("admin.problemCount", { count: u.problem_count })}
                                     <br />
                                     {t("common.solutions", { count: u.solution_count })}
@@ -433,7 +435,7 @@ function UsersTab() {
                                 <td className={`px-4 py-3 tabular-nums ${u.removal_count > 0 ? "font-semibold text-error" : "text-muted"}`}>
                                     {u.removal_count}
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="min-w-[8rem] px-4 py-3">
                                     <UserStatus u={u} />
                                     {u.is_suspended && u.suspension_reason && (
                                         <p className="mt-1 text-xs text-muted">{u.suspension_reason}</p>
@@ -442,7 +444,7 @@ function UsersTab() {
                                 <td className="whitespace-nowrap px-4 py-3 text-xs text-muted">
                                     {formatDate(u.created_at)}
                                 </td>
-                                <td className="px-4 py-3 text-right">
+                                <td className="whitespace-nowrap px-4 py-3 text-right">
                                     {u.is_deleted ? null : !u.is_active ? (
                                         <button
                                             type="button"
