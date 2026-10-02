@@ -32,13 +32,17 @@ export function ProblemCard({ problem }) {
 
     return (
         <article className="group block transition-colors hover:bg-surface-2 hover:rounded-md -mx-2 px-2 py-4">
-            <div className="flex items-center gap-2 text-[13px]">
-                <Avatar name={authorName} size="xs" />
-                <span className="font-medium text-ink truncate max-w-[180px]">{categoryLabel}</span>
-                <span className="text-muted">·</span>
-                <span className="text-muted truncate max-w-[160px]">{t("post.by", { name: authorName })}</span>
-                <span className="text-muted">·</span>
-                <span className="text-muted whitespace-nowrap">{timeAgo(problem.created_at, t)}</span>
+            {/* Wraps instead of cutting words off: on narrow screens "by … · time" moves to a second line. */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
+                <span className="flex min-w-0 items-center gap-2">
+                    <Avatar name={authorName} size="xs" />
+                    <span className="truncate font-medium text-ink">{categoryLabel}</span>
+                </span>
+                <span className="flex min-w-0 items-center gap-1.5 text-muted">
+                    <span className="truncate">{t("post.by", { name: authorName })}</span>
+                    <span>·</span>
+                    <span className="whitespace-nowrap">{timeAgo(problem.created_at, t)}</span>
+                </span>
             </div>
 
             <Link to={`/problems/${problem.id}`} className="mt-1.5 block">

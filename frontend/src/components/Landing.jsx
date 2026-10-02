@@ -38,7 +38,7 @@ function ExampleCard() {
     return (
         <div>
             <p className="mb-2 text-xs font-medium text-muted">{t("landing.exampleLabel")}</p>
-            <div className="rounded-lg border border-border bg-surface p-2 pointer-events-none select-none" aria-hidden="true">
+            <div className="rounded-lg border border-border bg-surface px-3 pb-3 pointer-events-none select-none" aria-hidden="true">
                 <ProblemCard problem={example} />
                 <div className="mt-2 overflow-hidden rounded-md border-l-[3px] border-gold">
                     <div className="flex items-center gap-2 bg-gold-soft px-3 py-1.5 text-[13px] font-medium text-on-gold-soft banner-fade">
@@ -63,8 +63,8 @@ function ExampleCard() {
 function Hero({ solved, loaded }) {
     const { t } = useLanguage()
     return (
-        <section className="mb-8 rounded-lg border border-border card-wash p-6">
-            <h1 className="text-[40px] font-semibold leading-[1.15] tracking-[-0.01em] text-ink">
+        <section className="mb-8 rounded-lg border border-border card-wash p-4 sm:p-6">
+            <h1 className="text-[30px] font-semibold leading-[1.15] tracking-[-0.01em] text-ink sm:text-[40px]">
                 {t("landing.headline")}
             </h1>
             <p className="mt-4 max-w-[55ch] text-base leading-relaxed text-muted">{t("landing.sub")}</p>
@@ -83,13 +83,13 @@ function Hero({ solved, loaded }) {
                 </Link>
             </div>
 
-            <div className="mt-10">
+            <div className="mt-8 sm:mt-10">
                 {!loaded ? (
                     <div className="h-56 animate-pulse rounded-lg border border-border bg-surface-2" />
                 ) : solved ? (
                     <div>
                         <p className="mb-2 text-xs font-medium text-muted">{t("landing.livePick")}</p>
-                        <div className="rounded-lg border border-border bg-surface p-2">
+                        <div className="rounded-lg border border-border bg-surface px-3">
                             <ProblemCard problem={solved} />
                         </div>
                     </div>
