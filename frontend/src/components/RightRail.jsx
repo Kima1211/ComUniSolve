@@ -36,7 +36,6 @@ function RightRail() {
                     <li>{t("rail.rule1")}</li>
                     <li>{t("rail.rule2")}</li>
                     <li>{t("rail.rule3")}</li>
-                    <li>{t("rail.rule4")}</li>
                 </ol>
             </Panel>
 

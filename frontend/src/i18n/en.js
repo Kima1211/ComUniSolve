@@ -435,7 +435,7 @@ const en = {
     "admin.couldNotLoadAudit": "Could not load the account log.",
 
     // Landing page (logged-out visitors)
-    "landing.headline": "Problems in school and tech, solved together.",
+    "landing.headline": "Where problems meet solutions.",
     "landing.sub": "Post a problem, see similar ones that were already solved, and get answers from students, parents and teachers.",
     "landing.browse": "Browse problems",
     "landing.exampleLabel": "Example",
@@ -515,9 +515,8 @@ const en = {
     "rail.aboutBody": "A community space where Filipino students, parents and teachers post problems in school and tech, and find answers that already worked.",
     "rail.rulesTitle": "Community rules",
     "rail.rule1": "Be kind. Posts about people are not allowed.",
-    "rail.rule2": "Keep it about education or technology.",
-    "rail.rule3": "Say enough so others can help. One picture is fine.",
-    "rail.rule4": "Thank the person whose solution worked and mark it accepted.",
+    "rail.rule2": "Say enough so others can help. One picture is fine.",
+    "rail.rule3": "Thank the person whose solution worked and mark it accepted.",
     "rail.howTitle": "How it works",
     "rail.how1": "Post the problem. The system checks it before publishing.",
     "rail.how2": "Someone posts a solution. You can vote on the ones that help.",

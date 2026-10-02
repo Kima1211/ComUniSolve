@@ -436,7 +436,7 @@ const tl = {
     "admin.couldNotLoadAudit": "Hindi ma-load ang talaan ng account.",
 
     // Landing page (logged-out visitors)
-    "landing.headline": "Problema sa eskwela at tech, sabay nating lutasin.",
+    "landing.headline": "Tanong mo, sagot natin.",
     "landing.sub": "Mag-post ng problema, tingnan ang mga katulad na nalutas na, at makakuha ng sagot mula sa mga estudyante, magulang at guro.",
     "landing.browse": "Tingnan ang mga problema",
     "landing.exampleLabel": "Halimbawa",
@@ -516,9 +516,8 @@ const tl = {
     "rail.aboutBody": "Komunidad para sa mga estudyante, magulang at guro na Pilipino: mag-post ng problema sa eskwela o tech, at makita ang sagot na gumana na dati.",
     "rail.rulesTitle": "Mga tuntunin ng komunidad",
     "rail.rule1": "Maging mabait. Bawal ang post tungkol sa iba.",
-    "rail.rule2": "Panatilihin ito sa edukasyon o teknolohiya.",
-    "rail.rule3": "Magbigay ng sapat na detalye para matulungan ka. Isang larawan ay okay.",
-    "rail.rule4": "Pasalamatan ang nakatulong at markahan bilang tinanggap.",
+    "rail.rule2": "Magbigay ng sapat na detalye para matulungan ka. Isang larawan ay okay.",
+    "rail.rule3": "Pasalamatan ang nakatulong at markahan bilang tinanggap.",
     "rail.howTitle": "Paano gumagana",
     "rail.how1": "Mag-post ng problema. Sinusuri ito ng sistema bago lumabas.",
     "rail.how2": "May magsa-sagot. Puwede mong i-vote ang nakatulong sa iyo.",
