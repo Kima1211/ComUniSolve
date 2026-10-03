@@ -77,3 +77,6 @@ REGISTER_PER_IP = RateLimiter(max_events=5, window_seconds=60 * 60)
 
 FORGOT_PASSWORD_PER_IP = RateLimiter(max_events=5, window_seconds=15 * 60)
 
+# Keyed by user id ("user:{id}"), not IP: client_ip trusts x-forwarded-for, which can be faked.
+AI_PER_USER = RateLimiter(max_events=30, window_seconds=10 * 60)
+

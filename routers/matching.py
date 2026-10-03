@@ -13,8 +13,15 @@ from Services import gemini
 from Services.ai_suggestion import generate_suggestion
 from Services.rating import poster_ratings
 from Services.errors import api_error
+from Security.utils import get_current_user, get_optional_user
+from Security.rate_limit import AI_PER_USER
+from Models.user import User
 
 router = APIRouter()
+
+
+def _ai_allowed(current_user: Optional[User]) -> bool:
+    return current_user is not None and AI_PER_USER.hit(f"user:{current_user.id}")
 
 _RELEVANCE_ORDER = {"high": 3, "medium": 2, "low": 1, "none": 0}
 
@@ -130,7 +137,11 @@ def match_before_posting(body: MatchRequest, db: Session = Depends(get_db)):
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 @router.post("/problems/match/ai", response_model=MatchResponse)
-def match_with_ai(body: MatchRequest, db: Session = Depends(get_db)):
+def match_with_ai(body: MatchRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not _ai_allowed(current_user):
+        matches, _, _ = _build_matches(body.title, body.description, db, use_ai=False)
+        return MatchResponse(matches=matches, ai_used=False, backup=True)
+
     matches, ai_used, backup = _build_matches(body.title, body.description, db, use_ai=True)
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
@@ -146,10 +157,19 @@ def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 @router.get("/problems/{problem_id}/similar/ai", response_model=MatchResponse)
-def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
+def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db),
+                               current_user: Optional[User] = Depends(get_optional_user)):
     fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
     if not fnd:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
+
+    # Guests get the keyword results quietly; a signed-in user over the limit is told it's the backup.
+    if current_user is None:
+        matches, _, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=False)
+        return MatchResponse(matches=matches, ai_used=False, backup=False)
+    if not _ai_allowed(current_user):
+        matches, _, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=False)
+        return MatchResponse(matches=matches, ai_used=False, backup=True)
 
     matches, ai_used, backup = _build_matches(
         fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True
@@ -157,7 +177,8 @@ def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db)):
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 @router.get("/problems/{problem_id}/ai-suggestion", response_model=AiSuggestionResponse)
-def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
+def ai_suggestion(problem_id: int, db: Session = Depends(get_db),
+                  current_user: Optional[User] = Depends(get_optional_user)):
     fnd = (
         db.query(problem.Problem)
         .filter(
@@ -186,6 +207,10 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db)):
 
     if fnd.ai_suggestion:
         return AiSuggestionResponse(status="shown", suggestion=fnd.ai_suggestion)
+
+    # A stored suggestion is free to show; making a new one costs Gemini calls (one request = one hit).
+    if not _ai_allowed(current_user):
+        return AiSuggestionResponse(status="unavailable")
 
     matches, ai_used, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True)
     if any(m.accepted_solution and (not ai_used or m.relevance in ("high", "medium")) for m in matches):
