@@ -11,6 +11,7 @@ import RightRail from "./RightRail";
 import Avatar from "./Avatar";
 import SearchBox from "./SearchBox";
 import { useHomeClick } from "../home-refresh";
+import NotificationBell from "./NotificationBell";
 
 function TierBadge({ tier }) {
     const { label } = useLanguage()
@@ -60,6 +61,7 @@ function Layout({ children, hideRails = false, rail = null, wide = false }) {
                                 {t("nav.postProblem")}
                             </Link>
                         )}
+                        {!loading && user && <NotificationBell />}
                         <ThemeToggle />
                         <LanguageSwitcher />
                         <HeaderInstallButton />

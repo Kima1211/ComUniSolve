@@ -8,6 +8,7 @@ from Schemas.comment import CommentIn, CommentEdit, CommentResponse
 from Schemas.moderation import ContentCheckResponse
 from Services.moderation import run_pre_post_gate
 from Services.errors import api_error
+from Services.notifications import notify
 
 router = APIRouter()
 
@@ -85,6 +86,7 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
     )
     try:
         db.add(new_comment)
+        notify(db, fnd_solution.user_id, current_user.id, "new_comment", fnd_problem.id, fnd_solution.id)
         db.commit()
         db.refresh(new_comment)
     except Exception:

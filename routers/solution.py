@@ -10,6 +10,7 @@ from Services.rating import poster_ratings, clear_ratings
 from Services.moderation import run_pre_post_gate, removed_with_penalty
 from Schemas.moderation import ContentCheckResponse
 from Services.errors import api_error
+from Services.notifications import notify
 
 router = APIRouter()
 
@@ -63,6 +64,8 @@ def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_d
         
     try:
         db.add(new_solution)
+        db.flush()
+        notify(db, fnd_problem.user_id, current_user.id, "new_solution", fnd_problem.id, new_solution.id)
         db.commit()
         db.refresh(new_solution)
     except Exception: 
@@ -165,6 +168,7 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
     clear_ratings(db, fnd_solution.id)
     fnd_solution.status = "accepted"
     fnd_problem.status = "resolved"
+    notify(db, fnd_solution.user_id, current_user.id, "solution_accepted", fnd_problem.id, fnd_solution.id)
 
     try:
         db.commit()

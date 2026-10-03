@@ -29,7 +29,8 @@ for _limiter in (rate_limit.LOGIN_PER_IP, rate_limit.LOGIN_FAILURES_PER_EMAIL,
     _limiter.max_events = 10_000
 
 from Models.database import engine, Base, SessionLocal
-from Models import user, problem, solution, comment, rating, refresh_token
+# Every model, as in Models/create_tables.py, so create_all builds every table the app writes to.
+from Models import user, problem, solution, comment, rating, refresh_token, report, moderation_log, audit_log, notification  # noqa: F401
 
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
