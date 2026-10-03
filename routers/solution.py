@@ -108,7 +108,9 @@ def get_solution(problem_id: int, db: Session=Depends(get_db), viewer=Depends(ge
 @router.patch("/solutions/{solution_id}/accept", response_model=SolutionAccept)
 def update_solution(solution_id: int, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(
-        solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
+        solution.Solution.id == solution_id,
+        solution.Solution.deleted_at.is_(None),
+        solution.Solution.moderation_status != "removed",
     ).first()
     if not fnd_solution:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
@@ -119,28 +121,36 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
 
     if fnd_problem.user_id != current_user.id:
         raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "Problem doesnt belong to this user")
-    
-    is_self_solve = (
+
+    # A repeated accept (double tap, retry) must not pay the +10 again or clear the rating.
+    if fnd_solution.status == "accepted":
+        return {
+            "status": fnd_solution.status,
+            "problem_status": fnd_problem.status
+        }
+
+    incoming_is_self_solve = (
         fnd_solution.user_id == fnd_problem.user_id
     )
-        
+
     previously_accepted = (
         db.query(solution.Solution).filter
         (solution.Solution.problem_id == fnd_problem.id,
          solution.Solution.status == "accepted"
          ,solution.Solution.id != fnd_solution.id).first()
     )
-    
+
     if previously_accepted:
         previously_accepted.status = "pending"
         clear_ratings(db, previously_accepted.id)
+        outgoing_is_self_solve = previously_accepted.user_id == fnd_problem.user_id
         previous_author = db.query(user.User).filter(user.User.id == previously_accepted.user_id).first()
-        if not is_self_solve:
+        if not outgoing_is_self_solve:
             if previous_author:
                 award_points(previous_author, -10)
-            
+
     new_author = db.query(user.User).filter(user.User.id == fnd_solution.user_id).first()
-    if not is_self_solve:
+    if not incoming_is_self_solve:
         if new_author:
             award_points(new_author, 10)
     
