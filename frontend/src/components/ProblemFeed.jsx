@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useLocation, useSearchParams } from "react-router-dom"
 import { MessageSquare, Star, X } from "lucide-react"
 import { apiGet, imageUrl } from "../api"
 import { useLanguage } from "../i18n/language-context"
@@ -145,6 +145,14 @@ function ProblemFeed() {
     const [error, setError] = useState(null)
     const [problems, setProblems] = useState([])
     const [loading, setLoading] = useState(true)
+    const location = useLocation()
+    const refresh = location.state?.refresh
+    const [seenRefresh, setSeenRefresh] = useState(refresh)
+    if (refresh !== seenRefresh) {
+        setSeenRefresh(refresh)
+        setLoading(true)
+        setError(null)
+    }
 
     const sort = params.get("sort") || "newest"
     const sector = params.get("sector") || ""
@@ -152,12 +160,13 @@ function ProblemFeed() {
 
     useEffect(() => {
         let cancelled = false
+        if (refresh) window.scrollTo({ top: 0, behavior: "smooth" })
         apiGet("/problems")
             .then((data) => { if (!cancelled) setProblems(data) })
             .catch((e) => { if (!cancelled) setError(e) })
             .finally(() => { if (!cancelled) setLoading(false) })
         return () => { cancelled = true }
-    }, [])
+    }, [refresh])
 
     const { results: shown, closest } = useMemo(() => {
         let xs = problems
@@ -170,13 +179,13 @@ function ProblemFeed() {
     function setSort(next) {
         const n = new URLSearchParams(params)
         if (next === "newest") n.delete("sort"); else n.set("sort", next)
-        setParams(n, { replace: true })
+        setParams(n, { replace: true, state: location.state })
     }
 
     function clearSearch() {
         const n = new URLSearchParams(params)
         n.delete("q")
-        setParams(n, { replace: true })
+        setParams(n, { replace: true, state: location.state })
     }
 
     return (

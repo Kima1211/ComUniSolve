@@ -10,6 +10,7 @@ import LeftNav from "./LeftNav";
 import RightRail from "./RightRail";
 import Avatar from "./Avatar";
 import SearchBox from "./SearchBox";
+import { useHomeClick } from "../home-refresh";
 
 function TierBadge({ tier }) {
     const { label } = useLanguage()
@@ -35,6 +36,7 @@ function Layout({ children, hideRails = false, rail = null, wide = false }) {
     const { user, loading, logout } = useAuth()
     const { t } = useLanguage()
     const navigate = useNavigate()
+    const homeClick = useHomeClick()
 
     async function handleLogout() {
         await logout()
@@ -45,7 +47,7 @@ function Layout({ children, hideRails = false, rail = null, wide = false }) {
         <div className="min-h-screen bg-page pb-nav">
             <header className="brand-line sticky top-0 z-20 h-14 border-b border-border bg-surface">
                 <div className="mx-auto flex h-full max-w-[1324px] items-center gap-4 px-4">
-                    <Link to="/" aria-label="ComUniSolve" className="flex items-center gap-2 shrink-0">
+                    <Link to="/" onClick={homeClick} aria-label="ComUniSolve" className="flex items-center gap-2 shrink-0">
                         <Logo size={28} />
                         <span className="text-lg font-semibold text-ink hidden sm:inline">ComUniSolve</span>
                     </Link>

@@ -3,16 +3,17 @@ import { Home, MapPin, CheckCircle2, GraduationCap, Laptop, ShieldCheck } from "
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import { SECTORS } from "../categories";
+import { useHomeClick } from "../home-refresh";
 
 const SECTOR_ICONS = { Education: GraduationCap, Technology: Laptop }
 
-function Item({ to, label, Icon, active }) {
+function Item({ to, label, Icon, active, onClick }) {
     const base = "flex h-10 items-center gap-3 rounded-md px-3 text-sm"
-    const state = active
+    const look = active
         ? "bg-surface-2 text-link font-semibold"
         : "text-ink hover:bg-surface-2"
     return (
-        <Link to={to} aria-current={active ? "page" : undefined} className={`${base} ${state}`}>
+        <Link to={to} onClick={onClick} aria-current={active ? "page" : undefined} className={`${base} ${look}`}>
             <Icon size={18} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
             <span className="truncate">{label}</span>
         </Link>
@@ -34,11 +35,12 @@ function LeftNav() {
     const { pathname, search } = useLocation()
     const query = new URLSearchParams(search)
     const activeSort = query.get("sort")
+    const homeClick = useHomeClick()
 
     return (
         <nav aria-label={t("leftNav.title")} className="space-y-1">
             <Section title={t("leftNav.feeds")}>
-                <Item to="/" label={t("leftNav.home")} Icon={Home} active={pathname === "/" && !activeSort} />
+                <Item to="/" onClick={homeClick} label={t("leftNav.home")} Icon={Home} active={pathname === "/" && !activeSort} />
                 <Item to="/?sort=unresolved" label={t("leftNav.needsHelp")} Icon={MapPin} active={activeSort === "unresolved"} />
                 <Item to="/?sort=solved" label={t("leftNav.solved")} Icon={CheckCircle2} active={activeSort === "solved"} />
             </Section>
