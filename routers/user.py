@@ -204,9 +204,6 @@ def deactivate_account(body: Deactivate, request: Request, response: Response, d
 
     current_user.is_active = False
     current_user.deactivated_at = datetime.now(timezone.utc)
-    # Data Privacy Act: keep only what the account still needs (name for their posts, email + password to come back).
-    for field in PRIVATE_FIELDS:
-        setattr(current_user, field, None)
     current_user.session_version += 1
     revoke_all_refresh_tokens(current_user.id, db)
     record(db, "account_deactivated", request, user=current_user)

@@ -265,8 +265,8 @@ check("A deactivated user's public profile is hidden", TestClient(app).get(f"/us
 
 d = SessionLocal()
 lu = d.query(user.User).filter(user.User.id == lito_id).first()
-check("Deactivation clears personal data but keeps the name and email",
-      lu.birth_date is None and lu.barangay_code is None and lu.street is None
+check("Deactivation keeps the profile so reactivating restores it",
+      lu.birth_date is not None and lu.barangay_code is not None and lu.street is not None
       and lu.first_name == "Lito" and lu.email == "lito@example.com")
 d.close()
 
