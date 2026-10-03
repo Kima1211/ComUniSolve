@@ -152,6 +152,40 @@ def main_test():
     check("accepting the removed solution returns 404 not_found",
           r.status_code == 404 and r.json()["detail"]["code"] == "not_found", f"-> {r.status_code} {r.text[:120]}")
 
+    print("\nA removed accepted solution isn't charged twice")
+    dan = make_user(db, "Dan", "dan@test.local", points=30)
+    make_user(db, "Cara", "cara@test.local")
+    as_dan, as_cara = client_for("dan@test.local"), client_for("cara@test.local")
+
+    for action, dan_expected in (("removed", 27), ("removed_no_penalty", 29)):
+        r = as_ana.post("/problems", json={
+            "title": f"The school projector shows no signal ({action})",
+            "description": "The projector in room 4 says no signal even when the cable is plugged in.",
+            "category": "Other", "acknowledged": True,
+        })
+        assert r.status_code == 201, r.text
+        pid = r.json()["id"]
+        dan_solution = as_dan.post("/solutions", json={
+            "problem_id": pid, "acknowledged": True,
+            "solution_text": "Press the Source button until it shows HDMI.",
+        }).json()["id"]
+        cara_solution = as_cara.post("/solutions", json={
+            "problem_id": pid, "acknowledged": True,
+            "solution_text": "Try another HDMI cable, the old one may be broken.",
+        }).json()["id"]
+        before = points(db, dan)
+        as_ana.patch(f"/solutions/{dan_solution}/accept")
+        as_admin.patch(f"/admin/solutions/{dan_solution}/moderate", json={"action": action, "reason": "test"})
+        r = as_ana.patch(f"/solutions/{cara_solution}/accept")
+        check(f"{action}: Ana can accept Cara's solution instead", r.status_code == 200, f"-> {r.status_code} {r.text[:120]}")
+        got = points(db, dan)
+        if action == "removed":
+            check("removed with penalty (-15): switching away costs Dan nothing more",
+                  got == before + 10 - 15, f"-> Dan {before} -> {got}")
+        else:
+            check("removed without penalty: switching away takes the +10 back as usual",
+                  got == before + 10 - 10, f"-> Dan {before} -> {got}")
+
     db.close()
     print(f"\n{PASSED} passed, {FAILED} failed")
     sys.exit(1 if FAILED else 0)

@@ -148,6 +148,9 @@ def _latest_removal(db: Session, target, target_type: str) -> Optional[str]:
     )
     return entry[0] if entry else None
 
+def removed_with_penalty(db: Session, target, target_type: str) -> bool:
+    return target.moderation_status == "removed" and _latest_removal(db, target, target_type) == "removed"
+
 def _count_actions(db: Session, user_id: int, action: str) -> int:
     return (
         db.query(ModerationLog)

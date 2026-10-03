@@ -7,7 +7,7 @@ from Models import solution,problem,user
 from Security.utils import get_current_user, get_verified_user, get_active_poster, get_optional_user
 from Services.reputation import award_points
 from Services.rating import poster_ratings, clear_ratings
-from Services.moderation import run_pre_post_gate
+from Services.moderation import run_pre_post_gate, removed_with_penalty
 from Schemas.moderation import ContentCheckResponse
 from Services.errors import api_error
 
@@ -150,8 +150,10 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
         previously_accepted.status = "pending"
         clear_ratings(db, previously_accepted.id)
         outgoing_is_self_solve = previously_accepted.user_id == fnd_problem.user_id
+        # Its author already lost 15 for the removal; taking the 10 too would punish them twice.
+        outgoing_already_penalized = removed_with_penalty(db, previously_accepted, "solution")
         previous_author = db.query(user.User).filter(user.User.id == previously_accepted.user_id).first()
-        if not outgoing_is_self_solve:
+        if not outgoing_is_self_solve and not outgoing_already_penalized:
             if previous_author:
                 award_points(previous_author, -10)
 
