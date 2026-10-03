@@ -28,6 +28,7 @@ const tl = {
     // Header and language switch
     "nav.home": "Home",
     "nav.postProblem": "Mag-post ng problema",
+    "nav.post": "Mag-post",
     "nav.admin": "Admin",
     "nav.myProfile": "Profile ko",
     "nav.logout": "Mag-log out",

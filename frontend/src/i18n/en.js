@@ -27,6 +27,7 @@ const en = {
     // Header and language switch
     "nav.home": "Home",
     "nav.postProblem": "Post a problem",
+    "nav.post": "Post",
     "nav.admin": "Admin",
     "nav.myProfile": "My profile",
     "nav.logout": "Log out",

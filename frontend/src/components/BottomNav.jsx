@@ -1,28 +1,24 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, CheckCircle2, PlusCircle, User, LogIn, ShieldCheck } from "lucide-react";
+import { Home, CheckCircle2, Plus, User, LogIn, ShieldCheck } from "lucide-react";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 
-function Tab({ to, label, Icon, active, emphasis = false }) {
-    if (emphasis) {
-        return (
-            <Link to={to} aria-current={active ? "page" : undefined} className="flex min-w-0 flex-1 items-center justify-center py-1.5">
-                <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-on-primary shine">
-                    <Icon size={22} strokeWidth={2} aria-hidden="true" />
-                </span>
-                <span className="sr-only">{label}</span>
-            </Link>
-        )
-    }
+function Tab({ to, label, ariaLabel, Icon, active, emphasis = false }) {
     return (
         <Link
             to={to}
+            aria-label={ariaLabel}
             aria-current={active ? "page" : undefined}
-            className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${
+            className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-medium ${
                 active ? "text-link" : "text-muted hover:text-ink"
             }`}
         >
-            <Icon size={22} strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+            {/* Same-height icon row on every tab keeps the Post pill in line with the others. */}
+            <span className={`flex h-8 items-center justify-center ${
+                emphasis ? "w-14 rounded-full bg-primary text-on-primary shine" : ""
+            }`}>
+                <Icon size={22} strokeWidth={emphasis ? 2.5 : active ? 2.25 : 1.75} aria-hidden="true" />
+            </span>
             <span className="truncate">{label}</span>
         </Link>
     )
@@ -41,7 +37,7 @@ function BottomNav() {
         ? [
             { to: "/", label: t("nav.home"), Icon: Home, active: pathname === "/" && !sort },
             { to: "/?sort=solved", label: t("leftNav.solved"), Icon: CheckCircle2, active: sort === "solved" },
-            { to: "/postproblem", label: t("nav.postProblem"), Icon: PlusCircle, active: pathname === "/postproblem", emphasis: true },
+            { to: "/postproblem", label: t("nav.post"), ariaLabel: t("nav.postProblem"), Icon: Plus, active: pathname === "/postproblem", emphasis: true },
             ...(user.role === "admin"
                 ? [{ to: "/admin/overview", label: t("nav.admin"), Icon: ShieldCheck, active: pathname.startsWith("/admin") }]
                 : []),
@@ -50,7 +46,7 @@ function BottomNav() {
         : [
             { to: "/", label: t("nav.home"), Icon: Home, active: pathname === "/" && !sort },
             { to: "/?sort=solved", label: t("leftNav.solved"), Icon: CheckCircle2, active: sort === "solved" },
-            { to: "/login", label: t("nav.postProblem"), Icon: PlusCircle, active: false, emphasis: true },
+            { to: "/login", label: t("nav.post"), ariaLabel: t("nav.postProblem"), Icon: Plus, active: false, emphasis: true },
             { to: "/login", label: t("nav.login"), Icon: LogIn, active: pathname === "/login" },
             { to: "/register", label: t("nav.register"), Icon: User, active: pathname === "/register" },
         ]
