@@ -458,7 +458,7 @@ const en = {
 
     // Landing page (logged-out visitors)
     "landing.headline": "Where problems meet solutions.",
-    "landing.sub": "Post a problem, see similar ones that were already solved, and get answers from students, parents and teachers.",
+    "landing.sub": "Post a problem, see similar ones that were already solved, and get answers from people in your community.",
     "landing.browse": "Browse problems",
     "landing.exampleLabel": "Example",
     "landing.exampleBody": "The page keeps saying my session expired, even right after I sign in.",
@@ -534,7 +534,7 @@ const en = {
     "status.solved": "Solved",
     "status.underReview": "Under review",
     "rail.aboutTitle": "About ComUniSolve",
-    "rail.aboutBody": "A community space where Filipino students, parents and teachers post problems in school and tech, and find answers that already worked.",
+    "rail.aboutBody": "A community space where Filipinos post their problems and find answers that already worked for others.",
     "rail.rulesTitle": "Community rules",
     "rail.rule1": "Be kind. Posts about people are not allowed.",
     "rail.rule2": "Say enough so others can help. One picture is fine.",

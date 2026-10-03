@@ -459,7 +459,7 @@ const tl = {
 
     // Landing page (logged-out visitors)
     "landing.headline": "Tanong mo, sagot natin.",
-    "landing.sub": "Mag-post ng problema, tingnan ang mga katulad na nalutas na, at makakuha ng sagot mula sa mga estudyante, magulang at guro.",
+    "landing.sub": "Mag-post ng problema, tingnan ang mga katulad na nalutas na, at makakuha ng sagot mula sa mga tao sa iyong komunidad.",
     "landing.browse": "Tingnan ang mga problema",
     "landing.exampleLabel": "Halimbawa",
     "landing.exampleBody": "Lagi nitong sinasabi na nag-expire ang session ko, kahit kaka-sign in ko lang.",
@@ -469,7 +469,6 @@ const tl = {
     "landing.categoriesTitle": "Para sa mga problema sa paaralan at teknolohiya.",
     "landing.categoriesBody": "Piliin ang tamang kategorya para makita ng tamang tao ang tanong mo.",
     "landing.otherNote": "Hindi sigurado kung saan? Piliin ang \"{other}\".",
-    "landing.footer": "Isang capstone project ng NwSSU San Jorge.",
 
     // Errors from the API, by code
     "error.network": "Hindi maabot ang server. Tingnan ang internet mo at subukan ulit.",
@@ -535,7 +534,7 @@ const tl = {
     "status.solved": "Nalutas na",
     "status.underReview": "Sinusuri",
     "rail.aboutTitle": "Tungkol sa ComUniSolve",
-    "rail.aboutBody": "Komunidad para sa mga estudyante, magulang at guro na Pilipino: mag-post ng problema sa eskwela o tech, at makita ang sagot na gumana na dati.",
+    "rail.aboutBody": "Komunidad kung saan nagpo-post ang mga Pilipino ng kanilang problema at nakakakita ng sagot na gumana na sa iba.",
     "rail.rulesTitle": "Mga tuntunin ng komunidad",
     "rail.rule1": "Maging mabait. Bawal ang post tungkol sa iba.",
     "rail.rule2": "Magbigay ng sapat na detalye para matulungan ka. Isang larawan ay okay.",
