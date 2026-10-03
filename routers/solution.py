@@ -21,7 +21,9 @@ def _problem_context(fnd_problem) -> str:
 @router.post("/solutions", status_code=status.HTTP_201_CREATED)
 def create_solution(solution_create: SolutionCreate, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_problem = db.query(problem.Problem).filter(
-        problem.Problem.id == solution_create.problem_id, problem.Problem.deleted_at.is_(None)
+        problem.Problem.id == solution_create.problem_id,
+        problem.Problem.deleted_at.is_(None),
+        problem.Problem.moderation_status != "removed",
     ).first()
      
     if not fnd_problem:
@@ -216,7 +218,9 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
 @router.post("/solutions/{solution_id}/upvote")
 def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user: user.User=Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(
-        solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
+        solution.Solution.id == solution_id,
+        solution.Solution.deleted_at.is_(None),
+        solution.Solution.moderation_status != "removed",
     ).first()
     if not fnd_solution: 
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")

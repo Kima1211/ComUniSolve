@@ -49,7 +49,9 @@ def get_comments(solution_id: int, db: Session = Depends(get_db)):
 @router.post("/comment/{solution_id}", response_model=CommentResponse)
 def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends(get_db), current_user: user.User = Depends(get_active_poster)):
     fnd_solution = db.query(solution.Solution).filter(
-        solution.Solution.id == solution_id, solution.Solution.deleted_at.is_(None)
+        solution.Solution.id == solution_id,
+        solution.Solution.deleted_at.is_(None),
+        solution.Solution.moderation_status != "removed",
     ).first()
     if not fnd_solution:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution Not Found!")

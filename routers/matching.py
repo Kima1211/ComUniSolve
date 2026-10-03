@@ -147,7 +147,11 @@ def match_with_ai(body: MatchRequest, db: Session = Depends(get_db), current_use
 
 @router.get("/problems/{problem_id}/similar", response_model=MatchResponse)
 def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
-    fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
+    fnd = db.query(problem.Problem).filter(
+        problem.Problem.id == problem_id,
+        problem.Problem.moderation_status != "removed",
+        problem.Problem.deleted_at.is_(None),
+    ).first()
     if not fnd:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
@@ -159,7 +163,11 @@ def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
 @router.get("/problems/{problem_id}/similar/ai", response_model=MatchResponse)
 def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db),
                                current_user: Optional[User] = Depends(get_optional_user)):
-    fnd = db.query(problem.Problem).filter(problem.Problem.id == problem_id).first()
+    fnd = db.query(problem.Problem).filter(
+        problem.Problem.id == problem_id,
+        problem.Problem.moderation_status != "removed",
+        problem.Problem.deleted_at.is_(None),
+    ).first()
     if not fnd:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
