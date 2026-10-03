@@ -14,7 +14,7 @@ five-layer moderation, an admin dashboard, and English/Tagalog.
 
 ## Local setup (Windows Command Prompt)
 
-You need Python 3.12, Node.js, and a local PostgreSQL server with an empty database (for example `comunisolve`).
+You need Python 3.12 or newer, Node.js, and a local PostgreSQL server with an empty database (for example `comunisolve`).
 
 Backend, from the repo root:
 
@@ -88,3 +88,16 @@ call the real API. `test_moderation.py` and `smoke_test.py` may call the real Ge
 
 The backend on Render reads its settings from environment variables (see `.env.example`), including
 `DATABASE_URL` for the PostgreSQL database. In production, set `COOKIE_SECURE=true` and `SHOW_API_DOCS=false`.
+
+## Known limitations
+
+- **AI limit per user:** each signed-in user gets 30 AI requests per 10 minutes (matching and AI suggestions),
+  counted per request even when the answer comes from the cache. After that the app switches to keyword
+  matching and shows "The AI check isn't available right now". Guests always get keyword matching.
+- **Expired session on a problem page:** if a signed-in user's 15-minute access token has just expired, the
+  related-problems panel treats them as a guest for that one page load (keyword results). The next request
+  renews the session.
+- **Comments of a removed solution:** the app hides them with the solution, but calling
+  `GET /solutions/{id}/comments` directly still returns them.
+- **Rate limits live in memory:** login, registration and AI limits are counted inside the running backend, so
+  they are only exact while the backend runs as one process, and they reset when it restarts.
