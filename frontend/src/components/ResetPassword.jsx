@@ -88,7 +88,6 @@ function ResetPassword() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
-                    <PasswordChecklist password={password} />
                 </div>
 
                 <div>
@@ -104,6 +103,7 @@ function ResetPassword() {
                         value={confirm}
                         onChange={(e) => setConfirm(e.target.value)}
                     />
+                    <PasswordChecklist password={password} />
                 </div>
 
                 {error && (
