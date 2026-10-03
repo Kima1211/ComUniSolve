@@ -106,13 +106,13 @@ function Register() {
                         <PasswordInput id="password" autoComplete="new-password" placeholder={t("auth.newPasswordPlaceholder")}
                                        className={inputClass(fieldErrors.password)} disabled={submitting} maxLength={128}
                                        value={password} onChange={(e) => setPassword(e.target.value)} />
-                        <PasswordChecklist password={password} />
                     </FormField>
                     <FormField id="confirm" label={t("auth.confirmPassword")} error={fieldErrors.confirm}>
                         <PasswordInput id="confirm" autoComplete="new-password" placeholder={t("reset.confirmPlaceholder")}
                                        className={inputClass(fieldErrors.confirm)} disabled={submitting} maxLength={128}
                                        value={confirm} onChange={(e) => setConfirm(e.target.value)} />
                     </FormField>
+                    <PasswordChecklist password={password} />
                 </section>
 
                 {showError && (
