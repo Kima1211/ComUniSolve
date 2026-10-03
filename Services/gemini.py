@@ -27,7 +27,6 @@ def _chain_from_env(var: str, default: List[str]) -> List[str]:
 
 
 MODEL_CHAIN = _chain_from_env("GEMINI_MODELS", DEFAULT_GEMINI_MODELS)
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", MODEL_CHAIN[0] if MODEL_CHAIN else "")
 
 TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT", "25"))
 
