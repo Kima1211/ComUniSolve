@@ -2,7 +2,7 @@ import re
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, EmailStr, field_validator
 
 from Models.user import SUFFIXES
 
@@ -131,7 +131,9 @@ class ProfileProblem(BaseModel):
     id: int
     title: str
     category: str
-    status: str
+    # Reads shown_status when the API computed one (see shown_status() in Services/moderation.py),
+    # otherwise the stored status.
+    status: str = Field(validation_alias=AliasChoices("shown_status", "status"))
     created_at: Optional[datetime] = None
 
 class ProfileSolution(BaseModel):

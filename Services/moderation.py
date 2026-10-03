@@ -151,6 +151,13 @@ def _latest_removal(db: Session, target, target_type: str) -> Optional[str]:
 def removed_with_penalty(db: Session, target, target_type: str) -> bool:
     return target.moderation_status == "removed" and _latest_removal(db, target, target_type) == "removed"
 
+# A problem whose accepted answer is hidden by moderation is shown as open; the stored status stays,
+# so restoring the answer brings "resolved" back by itself.
+def shown_status(stored_status: str, has_visible_answer: bool) -> str:
+    if stored_status == "resolved" and not has_visible_answer:
+        return "open"
+    return stored_status
+
 def _count_actions(db: Session, user_id: int, action: str) -> int:
     return (
         db.query(ModerationLog)

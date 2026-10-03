@@ -8,7 +8,7 @@ from Schemas.moderation import ContentCheckRequest, ContentCheckResponse
 from Models.database import get_db
 from Security.utils import get_current_user, get_verified_user, get_active_poster
 from Models import problem, user, solution
-from Services.moderation import run_pre_post_gate
+from Services.moderation import run_pre_post_gate, shown_status
 from Services import images
 from Services.errors import api_error
 from Services.rating import poster_ratings
@@ -63,8 +63,10 @@ def _attach_summary(problems, db):
     )
     stars = poster_ratings(db, accepted.keys())
     by_problem = {accepted[sid]: score for sid, score in stars.items()}
+    with_answer = set(accepted.values())
     for p in problems:
         p.accepted_rating = by_problem.get(p.id)
+        p.shown_status = shown_status(p.status, p.id in with_answer)
     return problems
 
 @router.get("/problems", response_model=list[ProblemResponse])

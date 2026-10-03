@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 import test_reputation as t
 from Models.database import Base, engine, SessionLocal
+from Models.problem import Problem
 
 
 def is_not_found(r):
@@ -100,6 +101,43 @@ def main_test():
         t.check(f"comment on a solution of a {state} problem", is_not_found(r), f"-> {r.status_code} {r.text[:120]}")
         r = as_ana.patch(f"/solutions/{other}/accept")
         t.check(f"accept a solution of a {state} problem", is_not_found(r), f"-> {r.status_code} {r.text[:120]}")
+
+    print("\nA problem whose accepted answer is removed shows as open")
+    title = "The library computers cannot open PDF files"
+    solved = post_problem(title)
+    answer = post_solution(as_ben, solved, "Reinstall the PDF reader from the school software page.")
+    assert as_ana.patch(f"/solutions/{answer}/accept").status_code == 200
+    assert as_ana.post(f"/solutions/{answer}/rate", json={"score": 5}).status_code == 200
+    ana_id = as_ana.get("/users/me").json()["id"]
+
+    def statuses():
+        feed = next(p for p in guest.get("/problems").json() if p["id"] == solved)
+        page = guest.get(f"/problems/{solved}").json()
+        profile = next(p for p in guest.get(f"/users/{ana_id}/profile").json()["problems"] if p["id"] == solved)
+        matches = guest.post("/problems/match", json={"title": title, "description": ""}).json()["matches"]
+        match = next((m for m in matches if m["id"] == solved), None)
+        return {"feed": feed["status"], "page": page["status"], "profile": profile["status"],
+                "match": match and match["status"], "stars": feed["accepted_rating"]}
+
+    def stored_status():
+        db.expire_all()
+        return db.get(Problem, solved).status
+
+    got = statuses()
+    t.check("before removal: solved everywhere, 5 stars",
+            got == {"feed": "resolved", "page": "resolved", "profile": "resolved", "match": "resolved", "stars": 5}, f"-> {got}")
+
+    assert as_admin.patch(f"/admin/solutions/{answer}/moderate", json={"action": "removed", "reason": "test"}).status_code == 200
+    got = statuses()
+    t.check("after removal: open in the feed, problem page, profile and matching",
+            {k: got[k] for k in ("feed", "page", "profile", "match")} == {"feed": "open", "page": "open", "profile": "open", "match": "open"},
+            f"-> {got}")
+    t.check("...while the database still says resolved", stored_status() == "resolved", f"-> {stored_status()}")
+
+    assert as_admin.patch(f"/admin/solutions/{answer}/moderate", json={"action": "restored", "reason": "test"}).status_code == 200
+    got = statuses()
+    t.check("after restore: solved everywhere again, with its 5 stars",
+            got == {"feed": "resolved", "page": "resolved", "profile": "resolved", "match": "resolved", "stars": 5}, f"-> {got}")
 
     print("\nVisible content still works")
     r = guest.get(f"/problems/{answered_problem}/similar")

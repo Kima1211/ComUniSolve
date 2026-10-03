@@ -23,6 +23,7 @@ from Security.passwords import password_problems
 from Services.email import send_verification_code
 from Services.reputation import get_tier
 from Services import locations
+from Services.moderation import shown_status
 from Services.audit import record
 from Security.rate_limit import (
     LOGIN_PER_IP,
@@ -285,6 +286,16 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
         .order_by(problem.Problem.created_at.desc())
         .all()
     )
+    with_answer = {
+        pid for (pid,) in db.query(solution.Solution.problem_id).filter(
+            solution.Solution.problem_id.in_([p.id for p in problems]),
+            solution.Solution.status == "accepted",
+            solution.Solution.moderation_status != "removed",
+            solution.Solution.deleted_at.is_(None),
+        )
+    }
+    for p in problems:
+        p.shown_status = shown_status(p.status, p.id in with_answer)
 
     solution_rows = (
         db.query(solution.Solution, problem.Problem.title)

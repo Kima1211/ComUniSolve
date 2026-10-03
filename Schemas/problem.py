@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 from Schemas.author import AuthorOut
@@ -23,7 +23,9 @@ class ProblemResponse(BaseModel):
     title: str
     description: Optional[str] = None
     category: str
-    status: str
+    # Reads shown_status when the API computed one (see shown_status() in Services/moderation.py),
+    # otherwise the stored status.
+    status: str = Field(validation_alias=AliasChoices("shown_status", "status"))
     created_at: datetime
     user_id: int
     author: Optional[AuthorOut] = None

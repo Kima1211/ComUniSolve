@@ -10,6 +10,7 @@ from Models import problem, solution
 from Schemas.matching import AiSuggestionResponse, MatchRequest, MatchResponse, MatchedProblem
 from Services.matching import build_candidate_pool, BACKUP_THRESHOLD, MAX_MATCHES
 from Services import gemini
+from Services.moderation import shown_status
 from Services.ai_suggestion import generate_suggestion
 from Services.rating import poster_ratings
 from Services.errors import api_error
@@ -120,7 +121,7 @@ def _build_matches(
                 title=p.title,
                 description=p.description,
                 category=p.category,
-                status=p.status,
+                status=shown_status(p.status, sol is not None),
                 score=round(score, 4),
                 accepted_solution=sol.solution_text if sol else None,
                 accepted_solution_rating=stars.get(sol.id) if sol else None,
