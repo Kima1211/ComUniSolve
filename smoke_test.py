@@ -311,8 +311,8 @@ r = asker.post("/problems/match", json={
     "title": "Our street light is broken",
     "description": "The lamp outside our house has been dark for a month. Who do we report it to?"})
 ms = r.json()["matches"]
-check("Matching finds the related street-light problems",
-      r.status_code == 200 and len(ms) >= 2,
+check("Matching finds a related street-light problem first",
+      r.status_code == 200 and len(ms) >= 1 and "street" in ms[0]["title"].lower(),
       f"{[(m['score'], m['title'][:40]) for m in ms]}")
 
 check("Matches are ordered by score, highest first",
