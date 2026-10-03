@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from Models.database import get_db
 from Security.utils import get_current_user, get_active_poster
-from Models import user,solution,comment
+from Models import user,solution,comment,problem
 from Schemas.comment import CommentIn, CommentEdit, CommentResponse
 from Schemas.moderation import ContentCheckResponse
 from Services.moderation import run_pre_post_gate
@@ -55,6 +55,14 @@ def create_comment(solution_id: int,create_comm:CommentIn, db: Session = Depends
     ).first()
     if not fnd_solution:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution Not Found!")
+
+    fnd_problem = db.query(problem.Problem).filter(
+        problem.Problem.id == fnd_solution.problem_id,
+        problem.Problem.deleted_at.is_(None),
+        problem.Problem.moderation_status != "removed",
+    ).first()
+    if not fnd_problem:
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
     
     if create_comm.parent_id is not None:
         parent_comment = _live_comments(db.query(comment.Comment)).filter(

@@ -74,6 +74,33 @@ def main_test():
             t.check(f"GET /problems/{{id}}/{path} of a deleted problem ({who})", is_not_found(r),
                     f"-> {r.status_code} {r.text[:120]}")
 
+    print("\nActions on solutions whose problem is removed or deleted return 404 not_found")
+
+    def post_solution(client, problem_id, text):
+        r = client.post("/solutions", json={"problem_id": problem_id, "solution_text": text, "acknowledged": True})
+        assert r.status_code == 201, r.text
+        return r.json()["id"]
+
+    for state in ("removed", "deleted"):
+        gone_problem = post_problem(f"The canteen card reader is broken ({state})")
+        accepted = post_solution(as_ben, gone_problem, "Ask the canteen staff to reset the reader.")
+        other = post_solution(as_cara, gone_problem, "Use cash until it is fixed.")
+        assert as_ana.patch(f"/solutions/{accepted}/accept").status_code == 200
+        if state == "removed":
+            r = as_admin.patch(f"/admin/problems/{gone_problem}/moderate", json={"action": "removed", "reason": "test"})
+        else:
+            r = as_ana.delete(f"/problems/{gone_problem}")
+        assert r.status_code == 200, r.text
+
+        r = as_cara.post(f"/solutions/{accepted}/upvote")
+        t.check(f"upvote a solution of a {state} problem", is_not_found(r), f"-> {r.status_code} {r.text[:120]}")
+        r = as_ana.post(f"/solutions/{accepted}/rate", json={"score": 5})
+        t.check(f"rate a solution of a {state} problem", is_not_found(r), f"-> {r.status_code} {r.text[:120]}")
+        r = as_cara.post(f"/comment/{accepted}", json={"content": "Did this work?"})
+        t.check(f"comment on a solution of a {state} problem", is_not_found(r), f"-> {r.status_code} {r.text[:120]}")
+        r = as_ana.patch(f"/solutions/{other}/accept")
+        t.check(f"accept a solution of a {state} problem", is_not_found(r), f"-> {r.status_code} {r.text[:120]}")
+
     print("\nVisible content still works")
     r = guest.get(f"/problems/{answered_problem}/similar")
     t.check("GET /similar of a visible problem still answers 200", r.status_code == 200, f"-> {r.status_code}")

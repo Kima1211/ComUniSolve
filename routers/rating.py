@@ -18,7 +18,11 @@ def rate(solution_id: int,rate: RateIn,db: Session=Depends(get_db), current_user
     if not fnd_solution:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
     
-    fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
+    fnd_problem = db.query(problem.Problem).filter(
+        problem.Problem.id == fnd_solution.problem_id,
+        problem.Problem.deleted_at.is_(None),
+        problem.Problem.moderation_status != "removed",
+    ).first()
     if not fnd_problem:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 

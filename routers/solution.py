@@ -117,7 +117,11 @@ def update_solution(solution_id: int, db: Session = Depends(get_db), current_use
     if not fnd_solution:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
 
-    fnd_problem = db.query(problem.Problem).filter(problem.Problem.id == fnd_solution.problem_id).first()
+    fnd_problem = db.query(problem.Problem).filter(
+        problem.Problem.id == fnd_solution.problem_id,
+        problem.Problem.deleted_at.is_(None),
+        problem.Problem.moderation_status != "removed",
+    ).first()
     if not fnd_problem:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
@@ -224,6 +228,14 @@ def upvote_solution(solution_id: int, db: Session=Depends(get_db), current_user:
     ).first()
     if not fnd_solution: 
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Solution not found")
+
+    fnd_problem = db.query(problem.Problem).filter(
+        problem.Problem.id == fnd_solution.problem_id,
+        problem.Problem.deleted_at.is_(None),
+        problem.Problem.moderation_status != "removed",
+    ).first()
+    if not fnd_problem:
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
     
     existing_upvote = db.query(solution.Upvote).filter(solution.Upvote.user_id == current_user.id, solution.Upvote.solution_id == solution_id).first()
     point = 0 if fnd_solution.user_id == current_user.id else 1
