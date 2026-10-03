@@ -8,6 +8,7 @@ import Avatar from "./Avatar"
 import SearchBox from "./SearchBox"
 import { searchProblems } from "../search"
 import { timeAgo } from "../time"
+import { alertError } from "../ui"
 import { authorLabel } from "../author"
 
 function sectorFor(category) {
@@ -201,7 +202,7 @@ function ProblemFeed() {
             {loading && <Skeleton />}
 
             {error && (
-                <div role="alert" className="mt-4 rounded-md bg-error-soft px-3 py-2.5 text-sm text-error">
+                <div role="alert" className={`${alertError} mt-4 py-2.5`}>
                     {errorText(error)}
                 </div>
             )}

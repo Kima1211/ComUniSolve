@@ -7,14 +7,14 @@ function ModerationNotice({ gate, onUseSuggestion, onPostAnyway, busy }) {
     const canOverride = Boolean(gate.acknowledgeable)
 
     const tone = canOverride
-        ? { box: "border-border bg-surface-2", head: "text-ink", body: "text-ink" }
-        : { box: "border-transparent bg-error-soft", head: "text-error", body: "text-error" }
+        ? { box: "rounded-md border border-border bg-surface-2 px-3", head: "text-ink", body: "text-ink" }
+        : { box: "alert-error", head: "text-ink", body: "text-ink" }
 
     // The keyword message is ours, so it's translated; AI messages already follow the language of the post.
     const message = gate.code === "keyword_blocked" ? t("mod.keywordBlocked") : gate.message
 
     return (
-        <div role="alert" className={`rounded-md border px-3 py-3 ${tone.box}`}>
+        <div role="alert" className={`py-3 ${tone.box}`}>
             <p className={`text-sm font-semibold ${tone.head}`}>
                 {canOverride ? t("mod.mayBeUnclear") : t("mod.cannotSubmit")}
             </p>

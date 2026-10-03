@@ -14,6 +14,7 @@ import SolutionCard from "./SolutionCard";
 import SimilarProblems from "./SimilarProblems";
 import ModerationNotice from "./ModerationNotice";
 import ReportButton from "./ReportButton";
+import { alertError } from "../ui";
 import EditProblemForm from "./EditProblemForm";
 import AiCheckStatus from "./AiCheckStatus";
 import BackLink from "./BackLink";
@@ -165,7 +166,7 @@ function ProblemDetail() {
     if (error || !problem) {
         return (
             <Layout>
-                <p className="rounded-md bg-error-soft px-3 py-3 text-sm text-error">
+                <p className={`${alertError} py-3`}>
                     {error ? errorText(error, "detail.couldNotLoad") : t("detail.notFound")}
                 </p>
                 <Link to="/" className="mt-4 inline-block text-sm font-medium text-link hover:underline">
@@ -212,7 +213,7 @@ function ProblemDetail() {
             <BackLink />
 
             {imageError && (
-                <p className="mt-3 rounded-md bg-error-soft px-3 py-2 text-sm text-error">
+                <p className={`${alertError} mt-3`}>
                     {t("detail.imageNotAdded", { error: imageError })}
                 </p>
             )}
@@ -280,7 +281,7 @@ function ProblemDetail() {
                 )}
 
                 {ownerError && (
-                    <p className="mt-3 rounded-md bg-error-soft px-3 py-2 text-sm text-error">
+                    <p className={`${alertError} mt-3`}>
                         {errorText(ownerError, "detail.couldNotDelete")}
                     </p>
                 )}
@@ -312,7 +313,7 @@ function ProblemDetail() {
                             className="w-full rounded-md border border-border px-3 py-2 text-base"
                         />
                         {submitError && (
-                            <p className="mt-2 rounded-md bg-error-soft px-3 py-2 text-sm text-error">
+                            <p className={`${alertError} mt-2`}>
                                 {errorText(submitError, "detail.couldNotSubmit")}
                             </p>
                         )}

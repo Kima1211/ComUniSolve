@@ -10,6 +10,7 @@ import { TierBadge } from "./Layout";
 import Avatar from "./Avatar";
 import ReportButton from "./ReportButton";
 import ModerationNotice from "./ModerationNotice";
+import { alertError } from "../ui";
 import Stars from "./Stars";
 import AiCheckStatus from "./AiCheckStatus";
 
@@ -392,7 +393,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                 )}
 
                 {error && (
-                    <p className="mt-3 rounded-md bg-error-soft px-3 py-2 text-sm text-error">{errorText(error)}</p>
+                    <p className={`${alertError} mt-3`}>{errorText(error)}</p>
                 )}
 
                 {comments !== null && (

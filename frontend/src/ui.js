@@ -22,7 +22,7 @@ export const panelTitle = "text-base font-semibold text-ink"
 export const pageTitle = "text-[22px] font-semibold leading-[1.3] text-ink"
 export const pageSub = "mt-1 text-sm text-muted"
 
-export const alertError = "rounded-md bg-error-soft px-3 py-2 text-sm text-error"
+export const alertError = "alert-error"
 export const alertNote = "rounded-md bg-surface-2 px-3 py-2 text-sm text-ink"
 
 export const chip = "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[12px] font-medium"
