@@ -275,6 +275,18 @@ def main_test():
     check("an expired suspension lifts itself with no job running",
           r.status_code == 201, f"-> {r.status_code} {r.text[:120]}")
 
+    print("\nUnverified accounts")
+    pending = make_user(db, "Pending", "pending@test.local")
+    pending.is_verified = False
+    db.commit()
+    as_admin = TestClient(main.app)
+    login(as_admin, "admin@test.local")
+    r = as_admin.patch(f"/admin/users/{pending.id}/suspension", json={"suspend": True, "reason": "test"})
+    check("an unverified account can't be suspended",
+          r.status_code == 400 and r.json()["detail"]["code"] == "suspend_unverified", f"-> {r.status_code} {r.text[:120]}")
+    db.refresh(pending)
+    check("...and it stays unsuspended", pending.is_suspended is False, pending.is_suspended)
+
     db.close()
 
     print(f"\n{PASSED} passed, {FAILED} failed")

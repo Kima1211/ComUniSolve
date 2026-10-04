@@ -517,6 +517,7 @@ const tl = {
     "error.not_removed": "Hindi ito inalis.",
     "error.suspend_self": "Hindi mo puwedeng suspindihin ang sarili mo.",
     "error.suspend_admin": "Hindi puwedeng suspindihin ang admin.",
+    "error.suspend_unverified": "Hindi pa makakapag-post ang hindi pa verified na account, kaya walang dapat suspindihin.",
     "error.already_suspended": "Suspendido na ang user na ito.",
     "error.not_suspended": "Hindi suspendido ang user na ito.",
     "error.weak_password": "Pumili ng mas matibay na password: hindi bababa sa 8 character, may malaki at maliit na letra at numero, at hindi karaniwang password.",

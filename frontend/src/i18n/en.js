@@ -517,6 +517,7 @@ const en = {
     "error.not_removed": "This isn't removed.",
     "error.suspend_self": "You can't suspend yourself.",
     "error.suspend_admin": "Admins can't be suspended.",
+    "error.suspend_unverified": "Unverified accounts can't post yet, so there's nothing to suspend.",
     "error.already_suspended": "This user is already suspended.",
     "error.not_suspended": "This user is not suspended.",
     "error.weak_password": "Choose a stronger password: at least 8 characters with uppercase, lowercase and a number, and not a common password.",

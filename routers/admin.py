@@ -291,6 +291,10 @@ def set_user_suspension(
     if target.role == "admin":
         raise api_error(status.HTTP_400_BAD_REQUEST, "suspend_admin", "Admins cannot be suspended")
 
+    # Unverified accounts are already blocked from posting; a suspension would only use up a step of the ladder.
+    if body.suspend and not target.is_verified:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "suspend_unverified", "Unverified accounts can't be suspended")
+
     # Each suspension moves one step up the ladder (1, 3, 7 days, permanent), so never count one twice.
     currently_suspended = is_currently_suspended(target)
     if body.suspend and currently_suspended:

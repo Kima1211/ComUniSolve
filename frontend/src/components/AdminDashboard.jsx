@@ -456,7 +456,7 @@ function UsersTab() {
                                             >
                                                 {t("admin.unsuspend")}
                                             </button>
-                                        ) : (
+                                        ) : u.is_verified && (
                                             <button
                                                 type="button"
                                                 disabled={busyId === u.id}
