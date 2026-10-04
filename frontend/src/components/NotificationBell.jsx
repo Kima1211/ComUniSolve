@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Bell, Check, MessageCircle, MessageSquareText } from "lucide-react"
-import { apiGet, apiPost } from "../api"
+import { Bell, Check, MessageCircle, MessageSquareText, Trash2 } from "lucide-react"
+import { apiDelete, apiGet, apiPost } from "../api"
+import { useConfirm } from "../confirm-context"
 import { useLanguage } from "../i18n/language-context"
 import { timeAgo } from "../time"
 
@@ -11,6 +12,7 @@ const ICONS = { new_solution: MessageSquareText, new_comment: MessageCircle, sol
 function NotificationBell() {
     const { t } = useLanguage()
     const navigate = useNavigate()
+    const confirm = useConfirm()
     const [open, setOpen] = useState(false)
     const [data, setData] = useState({ unread: 0, items: [] })
     const boxRef = useRef(null)
@@ -55,6 +57,19 @@ function NotificationBell() {
         apiPost("/notifications/read-all").catch(() => {})
     }
 
+    async function clearAll() {
+        setOpen(false)
+        const ok = await confirm({
+            title: t("notif.clearTitle"),
+            body: t("notif.clearBody"),
+            confirmLabel: t("notif.clearAll"),
+            Icon: Trash2,
+        })
+        if (!ok) return
+        setData({ unread: 0, items: [] })
+        apiDelete("/notifications").catch(() => load())
+    }
+
     const badge = data.unread > 9 ? "9+" : String(data.unread)
     const label = data.unread
         ? `${t("notif.title")} (${t("notif.unread", { n: data.unread })})`
@@ -83,11 +98,18 @@ function NotificationBell() {
                                 sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-[360px]">
                     <div className="flex items-center justify-between border-b border-border px-4 py-3">
                         <p className="text-sm font-semibold text-ink">{t("notif.title")}</p>
-                        {data.unread > 0 && (
-                            <button type="button" onClick={markAll} className="text-xs font-medium text-link hover:underline">
-                                {t("notif.markAll")}
-                            </button>
-                        )}
+                        <div className="flex items-center gap-3">
+                            {data.unread > 0 && (
+                                <button type="button" onClick={markAll} className="text-xs font-medium text-link hover:underline">
+                                    {t("notif.markAll")}
+                                </button>
+                            )}
+                            {data.items.length > 0 && (
+                                <button type="button" onClick={clearAll} className="text-xs font-medium text-muted hover:text-error hover:underline">
+                                    {t("notif.clearAll")}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {data.items.length === 0 ? (

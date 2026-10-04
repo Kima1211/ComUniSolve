@@ -327,6 +327,8 @@ def get_moderation_logs(
     limit: int = Query(100, ge=1, le=500),
     target_user_id: Optional[int] = None,
     action: Optional[Literal["removed", "removed_no_penalty", "restored", "suspended", "unsuspended"]] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: user.User = Depends(get_current_admin),
 ):
@@ -335,6 +337,10 @@ def get_moderation_logs(
         query = query.filter(ModerationLog.target_user_id == target_user_id)
     if action:
         query = query.filter(ModerationLog.action == action)
+    if since:
+        query = query.filter(ModerationLog.created_at >= since)
+    if until:
+        query = query.filter(ModerationLog.created_at < until)
     logs = query.order_by(ModerationLog.created_at.desc()).limit(limit).all()
 
     people = {l.admin_id for l in logs} | {l.target_user_id for l in logs}
@@ -375,12 +381,18 @@ def get_moderation_logs(
 def get_audit_logs(
     limit: int = Query(200, ge=1, le=500),
     action: Optional[Literal[tuple(AUDIT_ACTIONS)]] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: user.User = Depends(get_current_admin),
 ):
     query = db.query(AuditLog)
     if action:
         query = query.filter(AuditLog.action == action)
+    if since:
+        query = query.filter(AuditLog.created_at >= since)
+    if until:
+        query = query.filter(AuditLog.created_at < until)
     logs = query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit).all()
 
     ids = {l.user_id for l in logs if l.user_id}

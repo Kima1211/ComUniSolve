@@ -67,6 +67,13 @@ def mark_read(notification_id: int, db: Session = Depends(get_db), current_user:
     return {"unread": _unread(db, current_user)}
 
 
+@router.delete("/notifications", response_model=UnreadCount)
+def clear_notifications(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
+    db.query(Notification).filter(Notification.user_id == current_user.id).delete(synchronize_session=False)
+    db.commit()
+    return {"unread": 0}
+
+
 @router.post("/notifications/read-all", response_model=UnreadCount)
 def mark_all_read(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_user)):
     db.query(Notification).filter(

@@ -287,6 +287,19 @@ def main_test():
     db.refresh(pending)
     check("...and it stays unsuspended", pending.is_suspended is False, pending.is_suspended)
 
+    print("\nDate filter on the logs")
+    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    for path in ("/admin/logs", "/admin/audit"):
+        everything = as_admin.get(path).json()
+        since_yesterday = as_admin.get(path, params={"since": past}).json()
+        until_yesterday = as_admin.get(path, params={"until": past}).json()
+        from_tomorrow = as_admin.get(path, params={"since": future}).json()
+        check(f"{path}: since yesterday keeps today's entries", len(since_yesterday) == len(everything) > 0,
+              f"-> {len(since_yesterday)} of {len(everything)}")
+        check(f"{path}: until yesterday and since tomorrow are empty", until_yesterday == [] and from_tomorrow == [],
+              f"-> {len(until_yesterday)}, {len(from_tomorrow)}")
+
     db.close()
 
     print(f"\n{PASSED} passed, {FAILED} failed")

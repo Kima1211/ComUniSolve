@@ -149,6 +149,39 @@ def main_test():
     check("Ana deletes the problem: Ben's notifications about it disappear", bell(as_ben)["items"] == [],
           f"-> {bell(as_ben)}")
 
+    print("\nNo repeated notifications")
+    p2 = post_problem(as_ana, "Projector in Room 5 shows no signal")
+    s2 = post_solution(as_ben, p2)
+    post_solution(as_ben, p2)
+    lines = [n for n in bell(as_ana)["items"] if n["problem_id"] == p2]
+    check("Ben answering twice gives Ana one line", len(lines) == 1, f"-> {len(lines)}")
+
+    for i in range(3):
+        r = as_ana.post(f"/comment/{s2}", json={"content": f"Follow-up question number {i + 1}"})
+        assert r.status_code == 200, r.text
+    lines = [n for n in bell(as_ben)["items"] if n["type"] == "new_comment" and n["solution_id"] == s2]
+    check("Ana commenting 3 times gives Ben one line", len(lines) == 1, f"-> {len(lines)}")
+
+    def accepted_lines():
+        return [n for n in bell(as_ben)["items"] if n["type"] == "solution_accepted" and n["solution_id"] == s2]
+
+    as_ana.patch(f"/solutions/{s2}/accept")
+    as_ana.patch(f"/solutions/{s2}/unaccept")
+    check("Un-accepting before Ben reads it removes the 'accepted' line", accepted_lines() == [])
+    as_ana.patch(f"/solutions/{s2}/accept")
+    check("Accepting again gives exactly one line", len(accepted_lines()) == 1)
+    as_ben.post(f"/notifications/{accepted_lines()[0]['id']}/read")
+    as_ana.patch(f"/solutions/{s2}/unaccept")
+    as_ana.patch(f"/solutions/{s2}/accept")
+    lines = accepted_lines()
+    check("After Ben read it, toggling accept adds no new line", len(lines) == 1 and lines[0]["read"], f"-> {lines}")
+
+    print("\nClearing")
+    r = as_ben.delete("/notifications")
+    got = bell(as_ben)
+    check("Clear all empties Ben's list", r.status_code == 200 and got["items"] == [] and got["unread"] == 0, f"-> {got}")
+    check("...and leaves Ana's alone", len(bell(as_ana)["items"]) > 0)
+
     print("\nGuests")
     check("A guest can't read notifications (401)", TestClient(main.app).get("/notifications").status_code == 401)
 

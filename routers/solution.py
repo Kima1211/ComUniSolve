@@ -10,7 +10,7 @@ from Services.rating import poster_ratings, clear_ratings
 from Services.moderation import run_pre_post_gate, removed_with_penalty
 from Schemas.moderation import ContentCheckResponse
 from Services.errors import api_error
-from Services.notifications import notify
+from Services.notifications import notify, withdraw_unread_accept
 
 router = APIRouter()
 
@@ -205,6 +205,7 @@ def unaccept_solution(solution_id: int, db: Session = Depends(get_db), current_u
 
     fnd_solution.status = "pending"
     clear_ratings(db, fnd_solution.id)
+    withdraw_unread_accept(db, fnd_solution.id)
     solution_author = db.query(user.User).filter(user.User.id == fnd_solution.user_id).first()
     if not is_self_solve:
         if solution_author:

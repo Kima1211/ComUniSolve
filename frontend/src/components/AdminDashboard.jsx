@@ -508,6 +508,38 @@ function UsersTab() {
 
 const LOG_FILTERS = ["", "removed", "removed_no_penalty", "restored", "suspended", "unsuspended"]
 
+// The picked days become exact times in the admin's own timezone; "To" includes the whole day.
+function addDateRange(params, from, to) {
+    if (from) params.set("since", new Date(`${from}T00:00`).toISOString())
+    if (to) {
+        const end = new Date(`${to}T00:00`)
+        end.setDate(end.getDate() + 1)
+        params.set("until", end.toISOString())
+    }
+}
+
+function DateRange({ from, to, onFrom, onTo }) {
+    const { t } = useLanguage()
+    const field = `${inputClass()} mt-1 block w-auto`
+    return (
+        <>
+            <label className="text-xs font-medium text-muted">
+                {t("admin.dateFrom")}
+                <input type="date" value={from} max={to || undefined} onChange={(e) => onFrom(e.target.value)} className={field} />
+            </label>
+            <label className="text-xs font-medium text-muted">
+                {t("admin.dateTo")}
+                <input type="date" value={to} min={from || undefined} onChange={(e) => onTo(e.target.value)} className={field} />
+            </label>
+            {(from || to) && (
+                <button type="button" onClick={() => { onFrom(""); onTo("") }} className={`${btnSecondary} ${btnSmall} mb-1`}>
+                    {t("admin.clearDates")}
+                </button>
+            )}
+        </>
+    )
+}
+
 const ACTION_TONES = {
     removed: "red",
     removed_no_penalty: "slate",
@@ -526,6 +558,8 @@ function ActivityTab() {
     const [notice, setNotice] = useState("")
     const [busyId, setBusyId] = useState(null)
     const [reloadKey, setReloadKey] = useState(0)
+    const [from, setFrom] = useState("")
+    const [to, setTo] = useState("")
 
     useEffect(() => {
         let cancelled = false
@@ -533,13 +567,14 @@ function ActivityTab() {
             setLoading(true)
             const params = new URLSearchParams({ limit: 200 })
             if (action) params.set("action", action)
+            addDateRange(params, from, to)
             apiGet(`/admin/logs?${params}`)
                 .then((d) => { if (!cancelled) { setLogs(d); setError(null) } })
                 .catch((e) => { if (!cancelled) setError(e.code ? e : { key: "admin.couldNotLoadLog" }) })
                 .finally(() => { if (!cancelled) setLoading(false) })
         }, 0)
         return () => { cancelled = true; clearTimeout(timer) }
-    }, [action, reloadKey])
+    }, [action, reloadKey, from, to])
 
     function describe(log) {
         const params = {
@@ -587,16 +622,18 @@ function ActivityTab() {
 
     return (
         <>
-            <div className="mt-6">
+            <div className="mt-6 flex flex-wrap items-end gap-3">
                 <select
                     value={action}
                     onChange={(e) => setAction(e.target.value)}
+                    aria-label={t("admin.action.all")}
                     className={`${inputClass()} w-auto`}
                 >
                     {LOG_FILTERS.map((value) => (
                         <option key={value} value={value}>{t(`admin.action.${value || "all"}`)}</option>
                     ))}
                 </select>
+                <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
             </div>
 
             <Message error={error} notice={notice} />
@@ -674,6 +711,8 @@ function AccountsTab() {
     const [logs, setLogs] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
+    const [from, setFrom] = useState("")
+    const [to, setTo] = useState("")
 
     useEffect(() => {
         let cancelled = false
@@ -681,25 +720,28 @@ function AccountsTab() {
             setLoading(true)
             const params = new URLSearchParams({ limit: 200 })
             if (action) params.set("action", action)
+            addDateRange(params, from, to)
             apiGet(`/admin/audit?${params}`)
                 .then((d) => { if (!cancelled) { setLogs(d); setError(null) } })
                 .catch((e) => { if (!cancelled) setError(e.code ? e : { key: "admin.couldNotLoadAudit" }) })
                 .finally(() => { if (!cancelled) setLoading(false) })
         }, 0)
         return () => { cancelled = true; clearTimeout(timer) }
-    }, [action])
+    }, [action, from, to])
 
     return (
         <>
-            <div className="mt-6">
+            <div className="mt-6 flex flex-wrap items-end gap-3">
                 <select
                     value={action}
                     onChange={(e) => setAction(e.target.value)}
+                    aria-label={t("admin.audit.all")}
                     className={`${inputClass()} w-auto`}
                 >
                     <option value="">{t("admin.audit.all")}</option>
                     {AUDIT_ACTIONS.map((value) => <option key={value} value={value}>{t(`admin.audit.${value}`)}</option>)}
                 </select>
+                <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
             </div>
 
             <Message error={error} />
