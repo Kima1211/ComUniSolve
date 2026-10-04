@@ -65,6 +65,10 @@ export function LanguageProvider({ children }) {
       return value ? new Date(value).toLocaleDateString(LOCALES[lang], { dateStyle: "medium" }) : "";
     }
 
+    function monthName(month) {
+      return new Date(2000, month, 1).toLocaleDateString(LOCALES[lang], { month: "long" });
+    }
+
     function formatDateTime(value) {
       return value ? new Date(value).toLocaleString(LOCALES[lang], { dateStyle: "medium", timeStyle: "short" }) : "";
     }
@@ -86,7 +90,7 @@ export function LanguageProvider({ children }) {
       return e.message || t(fallbackKey);
     }
 
-    return { lang, setLang, t, label, formatDate, formatDateTime, errorText };
+    return { lang, setLang, t, label, formatDate, formatDateTime, monthName, errorText };
   }, [lang, setLang]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;

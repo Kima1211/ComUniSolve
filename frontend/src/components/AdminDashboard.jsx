@@ -508,34 +508,46 @@ function UsersTab() {
 
 const LOG_FILTERS = ["", "removed", "removed_no_penalty", "restored", "suspended", "unsuspended"]
 
-// The picked days become exact times in the admin's own timezone; "To" includes the whole day.
-function addDateRange(params, from, to) {
-    if (from) params.set("since", new Date(`${from}T00:00`).toISOString())
-    if (to) {
-        const end = new Date(`${to}T00:00`)
-        end.setDate(end.getDate() + 1)
-        params.set("until", end.toISOString())
-    }
+const FIRST_LOG_YEAR = 2026
+
+// Year and month are read in the admin's own timezone, so "October" means October in the Philippines.
+function addDateRange(params, year, month) {
+    if (!year) return
+    const y = Number(year)
+    const start = month === "" ? new Date(y, 0, 1) : new Date(y, Number(month), 1)
+    const end = month === "" ? new Date(y + 1, 0, 1) : new Date(y, Number(month) + 1, 1)
+    params.set("since", start.toISOString())
+    params.set("until", end.toISOString())
 }
 
-function DateRange({ from, to, onFrom, onTo }) {
-    const { t } = useLanguage()
-    const field = `${inputClass()} mt-1 block w-auto`
+function DateFilter({ year, month, onYear, onMonth }) {
+    const { t, monthName } = useLanguage()
+    const now = new Date()
+    const years = []
+    for (let y = now.getFullYear(); y >= FIRST_LOG_YEAR; y--) years.push(y)
+    const lastMonth = Number(year) === now.getFullYear() ? now.getMonth() : 11
+
     return (
         <>
-            <label className="text-xs font-medium text-muted">
-                {t("admin.dateFrom")}
-                <input type="date" value={from} max={to || undefined} onChange={(e) => onFrom(e.target.value)} className={field} />
-            </label>
-            <label className="text-xs font-medium text-muted">
-                {t("admin.dateTo")}
-                <input type="date" value={to} min={from || undefined} onChange={(e) => onTo(e.target.value)} className={field} />
-            </label>
-            {(from || to) && (
-                <button type="button" onClick={() => { onFrom(""); onTo("") }} className={`${btnSecondary} ${btnSmall} mb-1`}>
-                    {t("admin.clearDates")}
-                </button>
-            )}
+            <select
+                value={year}
+                onChange={(e) => { onYear(e.target.value); onMonth("") }}
+                aria-label={t("admin.year")}
+                className={`${inputClass()} w-auto`}
+            >
+                <option value="">{t("admin.allYears")}</option>
+                {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <select
+                value={month}
+                disabled={!year}
+                onChange={(e) => onMonth(e.target.value)}
+                aria-label={t("admin.month")}
+                className={`${inputClass()} w-auto disabled:opacity-50`}
+            >
+                <option value="">{t("admin.allMonths")}</option>
+                {Array.from({ length: lastMonth + 1 }, (_, m) => <option key={m} value={m}>{monthName(m)}</option>)}
+            </select>
         </>
     )
 }
@@ -558,8 +570,8 @@ function ActivityTab() {
     const [notice, setNotice] = useState("")
     const [busyId, setBusyId] = useState(null)
     const [reloadKey, setReloadKey] = useState(0)
-    const [from, setFrom] = useState("")
-    const [to, setTo] = useState("")
+    const [year, setYear] = useState("")
+    const [month, setMonth] = useState("")
 
     useEffect(() => {
         let cancelled = false
@@ -567,14 +579,14 @@ function ActivityTab() {
             setLoading(true)
             const params = new URLSearchParams({ limit: 200 })
             if (action) params.set("action", action)
-            addDateRange(params, from, to)
+            addDateRange(params, year, month)
             apiGet(`/admin/logs?${params}`)
                 .then((d) => { if (!cancelled) { setLogs(d); setError(null) } })
                 .catch((e) => { if (!cancelled) setError(e.code ? e : { key: "admin.couldNotLoadLog" }) })
                 .finally(() => { if (!cancelled) setLoading(false) })
         }, 0)
         return () => { cancelled = true; clearTimeout(timer) }
-    }, [action, reloadKey, from, to])
+    }, [action, reloadKey, year, month])
 
     function describe(log) {
         const params = {
@@ -622,7 +634,7 @@ function ActivityTab() {
 
     return (
         <>
-            <div className="mt-6 flex flex-wrap items-end gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
                 <select
                     value={action}
                     onChange={(e) => setAction(e.target.value)}
@@ -633,7 +645,7 @@ function ActivityTab() {
                         <option key={value} value={value}>{t(`admin.action.${value || "all"}`)}</option>
                     ))}
                 </select>
-                <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+                <DateFilter year={year} month={month} onYear={setYear} onMonth={setMonth} />
             </div>
 
             <Message error={error} notice={notice} />
@@ -711,8 +723,8 @@ function AccountsTab() {
     const [logs, setLogs] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-    const [from, setFrom] = useState("")
-    const [to, setTo] = useState("")
+    const [year, setYear] = useState("")
+    const [month, setMonth] = useState("")
 
     useEffect(() => {
         let cancelled = false
@@ -720,18 +732,18 @@ function AccountsTab() {
             setLoading(true)
             const params = new URLSearchParams({ limit: 200 })
             if (action) params.set("action", action)
-            addDateRange(params, from, to)
+            addDateRange(params, year, month)
             apiGet(`/admin/audit?${params}`)
                 .then((d) => { if (!cancelled) { setLogs(d); setError(null) } })
                 .catch((e) => { if (!cancelled) setError(e.code ? e : { key: "admin.couldNotLoadAudit" }) })
                 .finally(() => { if (!cancelled) setLoading(false) })
         }, 0)
         return () => { cancelled = true; clearTimeout(timer) }
-    }, [action, from, to])
+    }, [action, year, month])
 
     return (
         <>
-            <div className="mt-6 flex flex-wrap items-end gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
                 <select
                     value={action}
                     onChange={(e) => setAction(e.target.value)}
@@ -741,7 +753,7 @@ function AccountsTab() {
                     <option value="">{t("admin.audit.all")}</option>
                     {AUDIT_ACTIONS.map((value) => <option key={value} value={value}>{t(`admin.audit.${value}`)}</option>)}
                 </select>
-                <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+                <DateFilter year={year} month={month} onYear={setYear} onMonth={setMonth} />
             </div>
 
             <Message error={error} />
