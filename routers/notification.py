@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from Models.database import get_db
@@ -17,14 +18,17 @@ LATEST = 30
 
 
 # A notification about a deleted or removed problem would open a 404, so it is hidden.
+# Title notifications have no problem and always show.
 def _mine(db: Session, current_user):
     return (
         db.query(Notification)
-        .join(Problem, Problem.id == Notification.problem_id)
+        .outerjoin(Problem, Problem.id == Notification.problem_id)
         .filter(
             Notification.user_id == current_user.id,
-            Problem.deleted_at.is_(None),
-            Problem.moderation_status != "removed",
+            or_(
+                Notification.problem_id.is_(None),
+                and_(Problem.deleted_at.is_(None), Problem.moderation_status != "removed"),
+            ),
         )
     )
 
@@ -43,7 +47,7 @@ def list_notifications(db: Session = Depends(get_db), current_user: user.User = 
             "actor_name": n.actor.name if n.actor else None,
             "actor_deleted": n.actor is None or n.actor.is_deleted,
             "problem_id": n.problem_id,
-            "problem_title": n.problem.title,
+            "problem_title": n.problem.title if n.problem else None,
             "solution_id": n.solution_id,
             "read": n.read_at is not None,
             "created_at": n.created_at,

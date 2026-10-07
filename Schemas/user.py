@@ -4,7 +4,7 @@ from typing import Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, EmailStr, field_validator, model_validator
 
-from Models.user import SUFFIXES, AVATAR_ICONS, AVATAR_COLORS
+from Models.user import SUFFIXES, AVATAR_ICONS, AVATAR_COLORS, AVATAR_FRAMES
 
 # Keep in sync with frontend/src/validation.js.
 NAME_PATTERN = re.compile(r"[^\W\d_]+(?:[ .'\-]+[^\W\d_]+)*\.?")
@@ -91,6 +91,10 @@ class AvatarChoice(BaseModel):
             raise ValueError("Pick both a character and a colour, or neither")
         return self
 
+class FrameChoice(BaseModel):
+    # "auto" follows the title; stored as NULL.
+    frame: Literal[tuple(["auto"] + AVATAR_FRAMES)]
+
 class VerifyCode(BaseModel):
     code: str = Field(..., pattern=r"^\d{6}$")
 
@@ -162,6 +166,7 @@ class UserProfile(BaseModel):
     name: str
     avatar_icon: Optional[str] = None
     avatar_color: Optional[str] = None
+    shown_frame: Optional[str] = None
     points: int
     tier: str
     created_at: Optional[datetime] = None

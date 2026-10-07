@@ -10,7 +10,7 @@ from sqlalchemy import (
     func,)
 from sqlalchemy.orm import Mapped, mapped_column
 from Models.database import Base
-from Services.reputation import get_tier
+from Services.reputation import get_tier, effective_frame
 from typing import Optional
 from datetime import date
 
@@ -21,6 +21,7 @@ DELETED_NAME = "Deleted user"
 AVATAR_ICONS = ["enrollment", "scholarship", "learning", "facilities", "supplies", "welfare",
                 "devices", "internet", "accounts", "apps", "office", "safety"]
 AVATAR_COLORS = ["amber", "terracotta", "ube", "teal", "dagat", "dahon", "rosas", "kape"]
+AVATAR_FRAMES = ["none", "usbong", "alon", "capiz", "araw"]
 
 class User(Base):
     __tablename__ = "users"
@@ -58,6 +59,7 @@ class User(Base):
     deactivated_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     avatar_icon: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     avatar_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    avatar_frame: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -66,6 +68,7 @@ class User(Base):
         CheckConstraint("sex IS NULL OR sex IN ('male', 'female')", name="valid_sex"),
         CheckConstraint(avatar_icon.is_(None) | avatar_icon.in_(AVATAR_ICONS), name="valid_avatar_icon"),
         CheckConstraint(avatar_color.is_(None) | avatar_color.in_(AVATAR_COLORS), name="valid_avatar_color"),
+        CheckConstraint(avatar_frame.is_(None) | avatar_frame.in_(AVATAR_FRAMES), name="valid_avatar_frame"),
         # An avatar is a picture on a colour: both set, or both empty (initials).
         CheckConstraint("(avatar_icon IS NULL) = (avatar_color IS NULL)", name="avatar_icon_and_color"),
     )
@@ -75,6 +78,10 @@ class User(Base):
         return get_tier(self.points)
 
     # Deleted accounts keep their row; the reserved .invalid email domain marks them.
+    @property
+    def shown_frame(self) -> Optional[str]:
+        return None if self.is_deleted else effective_frame(self.avatar_frame, self.points)
+
     @property
     def is_deleted(self) -> bool:
         return self.email.endswith("@" + DELETED_EMAIL_DOMAIN)

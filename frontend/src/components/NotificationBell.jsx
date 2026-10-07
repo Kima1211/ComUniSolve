@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Bell, Check, MessageCircle, MessageSquareText, Trash2 } from "lucide-react"
+import { Bell, Check, MessageCircle, MessageSquareText, Sparkles, Trash2 } from "lucide-react"
 import { apiDelete, apiGet, apiPost } from "../api"
 import { useConfirm } from "../confirm-context"
 import { useLanguage } from "../i18n/language-context"
 import { timeAgo } from "../time"
 
 const POLL_MS = 60_000
-const ICONS = { new_solution: MessageSquareText, new_comment: MessageCircle, solution_accepted: Check }
+const ICONS = {
+    new_solution: MessageSquareText, new_comment: MessageCircle, solution_accepted: Check,
+    tier_contributor: Sparkles, tier_trusted: Sparkles, tier_expert: Sparkles,
+}
 
 function NotificationBell() {
     const { t } = useLanguage()
@@ -49,7 +52,8 @@ function NotificationBell() {
             setData((d) => ({ unread: Math.max(0, d.unread - 1), items: d.items.map((x) => x.id === n.id ? { ...x, read: true } : x) }))
             apiPost(`/notifications/${n.id}/read`).catch(() => {})
         }
-        navigate(`/problems/${n.problem_id}`)
+        // Title notifications point to where the new frame can be chosen.
+        navigate(n.problem_id ? `/problems/${n.problem_id}` : "/profile/edit")
     }
 
     function markAll() {
@@ -133,7 +137,7 @@ function NotificationBell() {
                                                 <span className="block text-sm text-ink">
                                                     {t(`notif.${n.type}`, { name })}
                                                 </span>
-                                                <span className="block truncate text-sm font-medium text-ink">{n.problem_title}</span>
+                                                <span className="block truncate text-sm font-medium text-ink">{n.problem_title ?? t("notif.tierHint")}</span>
                                                 <span className="block text-xs text-muted">{timeAgo(n.created_at, t)}</span>
                                             </span>
                                             {!n.read && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label={t("notif.new")} />}

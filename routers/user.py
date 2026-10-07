@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, status, Request, Response, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from Schemas.user import Register, Login, UserProfile, ProfileUpdate, Deactivate, AvatarChoice
+from Schemas.user import Register, Login, UserProfile, ProfileUpdate, Deactivate, AvatarChoice, FrameChoice
 from Models import user, problem, solution
 from Models.user import build_display_name, DELETED_EMAIL_DOMAIN, DELETED_NAME
 from Models.audit_log import AuditLog
@@ -21,7 +21,7 @@ from Security.utils import (
 )
 from Security.passwords import password_problems
 from Services.email import send_verification_code
-from Services.reputation import get_tier
+from Services.reputation import get_tier, frame_unlocked, FRAME_MIN_POINTS
 from Services import locations
 from Services.moderation import shown_status
 from Services.audit import record
@@ -149,6 +149,8 @@ def me_payload(u) -> dict:
         "name": u.name,
         "avatar_icon": u.avatar_icon,
         "avatar_color": u.avatar_color,
+        "avatar_frame": u.avatar_frame or "auto",
+        "shown_frame": u.shown_frame,
         "email": u.email,
         "role": u.role,
         "is_verified": u.is_verified,
@@ -201,6 +203,22 @@ def update_avatar(body: AvatarChoice, request: Request, db: Session = Depends(ge
     db.refresh(current_user)
     return me_payload(current_user)
 
+@router.patch("/users/me/frame")
+def update_frame(body: FrameChoice, request: Request, db: Session = Depends(get_db),
+                 current_user: user.User = Depends(get_current_user)):
+    if body.frame in FRAME_MIN_POINTS and not frame_unlocked(body.frame, current_user.points):
+        raise api_error(status.HTTP_400_BAD_REQUEST, "frame_locked", "Reach a higher title to unlock this frame",
+                        {"points": FRAME_MIN_POINTS[body.frame]})
+    current_user.avatar_frame = None if body.frame == "auto" else body.frame
+    record(db, "profile_updated", request, user=current_user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update frame")
+    db.refresh(current_user)
+    return me_payload(current_user)
+
 PRIVATE_FIELDS = ("middle_name", "birth_date", "sex", "region_code", "province_code",
                   "city_code", "barangay_code", "street")
 
@@ -242,7 +260,7 @@ def delete_account(body: Deactivate, request: Request, response: Response, db: S
         raise api_error(status.HTTP_400_BAD_REQUEST, "wrong_password", "Password doesn't match")
 
     placeholder = f"deleted-{current_user.id}@{DELETED_EMAIL_DOMAIN}"
-    for field in PRIVATE_FIELDS + ("first_name", "last_name", "suffix", "avatar_icon", "avatar_color"):
+    for field in PRIVATE_FIELDS + ("first_name", "last_name", "suffix", "avatar_icon", "avatar_color", "avatar_frame"):
         setattr(current_user, field, None)
     current_user.name = DELETED_NAME
     current_user.email = placeholder
@@ -341,6 +359,7 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
         "name": fnd_user.name,
         "avatar_icon": fnd_user.avatar_icon,
         "avatar_color": fnd_user.avatar_color,
+        "shown_frame": fnd_user.shown_frame,
         "points": fnd_user.points,
         "tier": fnd_user.tier,
         "created_at": fnd_user.created_at,

@@ -13,4 +13,5 @@ class AuthorOut(BaseModel):
     is_deleted: bool = False
     avatar_icon: Optional[str] = None
     avatar_color: Optional[str] = None
+    shown_frame: Optional[str] = None
 

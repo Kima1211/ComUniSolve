@@ -97,7 +97,10 @@ def main_test():
 
     db = SessionLocal()
     make_user(db, "Ana", "ana@test.local")
-    make_user(db, "Ben", "ben@test.local")
+    # Ben starts at 40 so these checks never cross a title; titles are tested on their own below.
+    ben = make_user(db, "Ben", "ben@test.local")
+    ben.points = 40
+    db.commit()
     as_ana, as_ben = client_for("ana@test.local"), client_for("ben@test.local")
 
     print("\nThe three events reach the right person")
@@ -220,6 +223,39 @@ def main_test():
     live_for_ana = sum(1 for p in TestClient(main.app).get("/problems").json() if p["author"]["name"] == "Ana")
     check("Users tab counts Ana's live problems only", rows and rows[0]["problem_count"] == live_for_ana,
           f"-> {rows[0]['problem_count'] if rows else None} vs {live_for_ana} in the feed")
+
+    print("\nAvatar frames and title notifications")
+    make_user(db, "Dina", "dina@test.local")
+    as_dina = client_for("dina@test.local")
+    me = as_dina.get("/users/me").json()
+    check("A Newcomer shows the Usbong frame automatically",
+          me["avatar_frame"] == "auto" and me["shown_frame"] == "usbong", f"-> {me['avatar_frame']} / {me['shown_frame']}")
+    r = as_dina.patch("/users/me/frame", json={"frame": "capiz"})
+    check("A locked frame can't be picked", r.status_code == 400 and r.json()["detail"]["code"] == "frame_locked",
+          f"-> {r.status_code} {r.text[:120]}")
+
+    dina_problem = post_problem(as_ana, "Laptop battery drains in an hour")
+    dina_answer = post_solution(as_dina, dina_problem)
+    as_ana.patch(f"/solutions/{dina_answer}/accept")
+    tiers = [n for n in bell(as_dina)["items"] if n["type"].startswith("tier_")]
+    check("Reaching Contributor sends one title notification", [n["type"] for n in tiers] == ["tier_contributor"],
+          f"-> {[n['type'] for n in tiers]}")
+    me = as_dina.get("/users/me").json()
+    check("...and the Alon frame now shows automatically", me["shown_frame"] == "alon", f"-> {me['shown_frame']}")
+
+    as_ana.patch(f"/solutions/{dina_answer}/unaccept")
+    as_ana.patch(f"/solutions/{dina_answer}/accept")
+    tiers = [n for n in bell(as_dina)["items"] if n["type"].startswith("tier_")]
+    check("Dropping back and climbing again doesn't repeat it", len(tiers) == 1, f"-> {len(tiers)}")
+
+    r = as_dina.patch("/users/me/frame", json={"frame": "usbong"})
+    check("A lower unlocked frame can be picked", r.status_code == 200 and r.json()["shown_frame"] == "usbong", f"-> {r.text[:120]}")
+    r = as_dina.patch("/users/me/frame", json={"frame": "none"})
+    check("'No frame' hides it", r.status_code == 200 and r.json()["shown_frame"] is None, f"-> {r.text[:120]}")
+    as_dina.patch("/users/me/frame", json={"frame": "auto"})
+    authors = [p["author"] for p in TestClient(main.app).get("/problems").json() if p["author"]["name"] == "Ana"]
+    check("Authors on posts carry their frame", authors and authors[0]["shown_frame"] in ("usbong", "alon", "capiz", "araw"),
+          f"-> {authors[:1]}")
 
     print("\nGuests")
     check("A guest can't read notifications (401)", TestClient(main.app).get("/notifications").status_code == 401)

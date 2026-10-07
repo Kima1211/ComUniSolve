@@ -9,8 +9,8 @@ class NotificationOut(BaseModel):
     type: str
     actor_name: Optional[str] = None
     actor_deleted: bool = False
-    problem_id: int
-    problem_title: str
+    problem_id: Optional[int] = None
+    problem_title: Optional[str] = None
     solution_id: Optional[int] = None
     read: bool
     created_at: datetime
