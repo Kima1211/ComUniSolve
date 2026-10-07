@@ -607,7 +607,6 @@ const tl = {
     "sort.solved": "Nalutas na",
     "status.open": "Bukas",
     "status.solved": "Nalutas na",
-    "status.underReview": "Sinusuri",
     "rail.aboutTitle": "Tungkol sa ComUniSolve",
     "rail.aboutBody": "Komunidad kung saan nagpo-post ang mga Pilipino ng kanilang problema at nakakakita ng sagot na gumana na sa iba.",
     "rail.rulesTitle": "Mga tuntunin ng komunidad",

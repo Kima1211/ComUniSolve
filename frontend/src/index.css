@@ -467,6 +467,34 @@ body {
   .rep-title__speck { animation: none; opacity: .6; }
 }
 
+/* Problem status: a claim ticket with a punched hole. Only Solved is amber. */
+.status-ticket {
+  --tk-bg: var(--surface);
+  --tk-ink: var(--ink);
+  --tk-line: var(--muted);
+  display: inline-block;
+  vertical-align: middle;
+  /* The outline is drawn around the cut shape, so it follows the point and the hole. */
+  filter: drop-shadow(1px 0 0 var(--tk-line)) drop-shadow(-1px 0 0 var(--tk-line)) drop-shadow(0 1px 0 var(--tk-line)) drop-shadow(0 -1px 0 var(--tk-line));
+}
+.status-ticket__body {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--tk-ink);
+  background: var(--tk-bg);
+  clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%);
+  -webkit-mask: radial-gradient(circle 2.4px at 8px 50%, transparent 95%, #000);
+  mask: radial-gradient(circle 2.4px at 8px 50%, transparent 95%, #000);
+}
+.status-ticket__icon { width: 12px; height: 12px; flex: none; }
+.status-ticket--solved { --tk-bg: #F59E0B; --tk-ink: #2A1703; --tk-line: #9A5A06; }
+
 /* Avatar frames: drawn 40% larger than the avatar so the decoration sits around it. */
 .avatar-frame {
   position: absolute;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useSearchParams } from "react-router-dom"
-import { MessageSquare, Star, X } from "lucide-react"
+import { Check, MessageSquare, Star, X } from "lucide-react"
 import { apiGet, imageUrl } from "../api"
 import { useLanguage } from "../i18n/language-context"
 import { SECTORS } from "../categories"
@@ -17,13 +17,15 @@ function sectorFor(category) {
 }
 
 export function StatusChip({ status, t }) {
-    if (status === "resolved") {
-        return <span className="rounded-sm bg-gold px-1.5 py-0.5 text-[12px] font-medium text-on-gold shine">{t("status.solved")}</span>
-    }
-    if (status === "flagged") {
-        return <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 text-[12px] font-medium text-muted">{t("status.underReview")}</span>
-    }
-    return <span className="rounded-sm bg-primary-soft px-1.5 py-0.5 text-[12px] font-medium text-link">{t("status.open")}</span>
+    const solved = status === "resolved"
+    return (
+        <span className={`status-ticket ${solved ? "status-ticket--solved" : ""}`}>
+            <span className="status-ticket__body">
+                {solved && <Check className="status-ticket__icon" strokeWidth={3} aria-hidden="true" />}
+                {t(solved ? "status.solved" : "status.open")}
+            </span>
+        </span>
+    )
 }
 
 export function ProblemCard({ problem }) {

@@ -607,7 +607,6 @@ const en = {
     "sort.solved": "Solved",
     "status.open": "Open",
     "status.solved": "Solved",
-    "status.underReview": "Under review",
     "rail.aboutTitle": "About ComUniSolve",
     "rail.aboutBody": "A community space where Filipinos post their problems and find answers that already worked for others.",
     "rail.rulesTitle": "Community rules",
