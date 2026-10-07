@@ -13,21 +13,6 @@ import SearchBox from "./SearchBox";
 import { useHomeClick } from "../home-refresh";
 import NotificationBell from "./NotificationBell";
 
-function TierBadge({ tier }) {
-    const { label } = useLanguage()
-    const colours = {
-        "Newcomer": "bg-surface-2 text-muted",
-        "Contributor": "bg-primary-soft text-link",
-        "Trusted Helper": "bg-primary-soft text-link",
-        "Community Expert": "bg-primary text-on-primary shine",
-    }
-    return (
-        <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${colours[tier] || colours.Newcomer}`}>
-            {label("tier", tier)}
-        </span>
-    )
-}
-
 const navLink = "text-sm font-medium text-muted hover:text-ink"
 // No display class here: it would override `hidden` and show the buttons on phones.
 const primaryButton = "items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 h-10 text-sm font-semibold text-on-primary hover:bg-primary-hover shine"
@@ -121,5 +106,4 @@ function Layout({ children, hideRails = false, rail = null, wide = false }) {
     )
 }
 
-export { TierBadge }
 export default Layout

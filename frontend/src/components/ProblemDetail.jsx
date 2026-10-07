@@ -7,7 +7,8 @@ import { timeAgo } from "../time";
 import { useConfirm } from "../confirm-context";
 import { Trash2 } from "lucide-react";
 import { authorLabel, hasProfile } from "../author";
-import Layout, { TierBadge } from "./Layout";
+import Layout from "./Layout";
+import ReputationTitle from "./ReputationTitle";
 import Avatar from "./Avatar";
 import { StatusChip } from "./ProblemFeed";
 import SolutionCard from "./SolutionCard";
@@ -232,7 +233,7 @@ function ProblemDetail() {
                                     <Link to={`/users/${problem.author.id}`} className="hover:text-ink hover:underline">{authorName}</Link>
                                 ) : authorName}
                             </span>
-                            {hasProfile(problem.author) && <TierBadge tier={problem.author.tier} />}
+                            {hasProfile(problem.author) && <ReputationTitle tier={problem.author.tier} />}
                             <span className="text-muted">{timeAgo(problem.created_at, t)}</span>
                             {problem.edited_at && <span className="text-muted">{t("common.edited")}</span>}
                         </div>

@@ -6,7 +6,7 @@ import { useLanguage } from "../i18n/language-context";
 import { timeAgo } from "../time";
 import { useConfirm } from "../confirm-context";
 import { authorLabel, hasProfile } from "../author";
-import { TierBadge } from "./Layout";
+import ReputationTitle from "./ReputationTitle";
 import Avatar from "./Avatar";
 import ReportButton from "./ReportButton";
 import ModerationNotice from "./ModerationNotice";
@@ -269,7 +269,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
                     ) : (
                         <span className="font-medium text-ink">{authorName}</span>
                     )}
-                    {hasProfile(solution.author) && <TierBadge tier={solution.author.tier} />}
+                    {hasProfile(solution.author) && <ReputationTitle tier={solution.author.tier} />}
                     <span className="text-muted">{timeAgo(solution.created_at, t)}</span>
                     {solution.edited_at && <span className="text-muted">{t("common.edited")}</span>}
                     {isAuthor && !editing && (

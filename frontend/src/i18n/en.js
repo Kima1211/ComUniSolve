@@ -281,6 +281,7 @@ const en = {
     // Profile
     "profile.notFound": "User not found",
     "profile.pointsJoined": "{points} points · Joined {date}",
+    "profile.nextTitle": "{n} more points to {tier}",
     "profile.email": "Email:",
     "profile.changePassword": "Change password",
     "profile.statProblems": "Problems",

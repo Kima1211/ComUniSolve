@@ -281,6 +281,7 @@ const tl = {
 
     // Profile
     "profile.notFound": "Hindi makita ang user",
+    "profile.nextTitle": "{n} puntos pa para maging {tier}",
     "profile.pointsJoined": "{points} puntos · Sumali noong {date}",
     "profile.email": "Email:",
     "profile.changePassword": "Palitan ang password",

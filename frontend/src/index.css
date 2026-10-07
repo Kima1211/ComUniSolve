@@ -364,6 +364,109 @@ body {
   }
 }
 
+/* Reputation titles: pixel lettering like a game's title screen, with glitter rising behind it. */
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("./assets/fonts/pixelify-sans-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+.rep-title {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  gap: 5px;
+  font-family: "Pixelify Sans", ui-monospace, monospace;
+  font-weight: 700;
+}
+.rep-title__emblem { position: relative; z-index: 1; display: block; flex: none; width: 15px; height: 15px; }
+.rep-title__text {
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
+  line-height: 1.05;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  color: transparent;
+  background-image: var(--letters);
+  /* One set of colour bands per line, so a wrapped title keeps its bands. */
+  background-size: 100% 1.05em;
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(1px 0 0 #120C08) drop-shadow(-1px 0 0 #120C08) drop-shadow(0 1px 0 #120C08) drop-shadow(0 -1px 0 #120C08);
+}
+.rep-title--lg { gap: 9px; }
+.rep-title--lg .rep-title__emblem { width: 28px; height: 28px; }
+.rep-title--lg .rep-title__text {
+  font-size: 22px;
+  filter: drop-shadow(2px 0 0 #120C08) drop-shadow(-2px 0 0 #120C08) drop-shadow(0 2px 0 #120C08) drop-shadow(0 -2px 0 #120C08) drop-shadow(3px 3px 0 rgb(0 0 0 / .22));
+}
+@media (max-width: 639px) {
+  .rep-title--lg { gap: 7px; }
+  .rep-title--lg .rep-title__emblem { width: 22px; height: 22px; }
+  .rep-title--lg .rep-title__text { font-size: 17px; white-space: normal; }
+}
+
+.rep-title--new { --letters: linear-gradient(180deg, #BBF7D0 0 45%, #22C55E 45% 80%, #15803D 80%); --speck: #16A34A; --speck-hi: #BBF7D0; }
+.rep-title--con { --letters: linear-gradient(180deg, #E0F2FE 0 45%, #38BDF8 45% 80%, #0369A1 80%); --speck: #0284C7; --speck-hi: #BAE6FD; }
+.rep-title--tru { --letters: linear-gradient(180deg, #FFFFFF 0 40%, #C4B5FD 40% 78%, #7C3AED 78%); --speck: #7C3AED; --speck-hi: #DDD6FE; }
+.rep-title--exp { --letters: linear-gradient(180deg, #FFF7CC 0 40%, #FCD34D 40% 75%, #D97706 75%); --speck: #D97706; --speck-hi: #FDE68A; }
+:root[data-theme="dark"] .rep-title--new { --speck: #4ADE80; --speck-hi: #F0FDF4; }
+:root[data-theme="dark"] .rep-title--con { --speck: #38BDF8; --speck-hi: #F0F9FF; }
+:root[data-theme="dark"] .rep-title--tru { --speck: #A78BFA; --speck-hi: #FAF5FF; }
+:root[data-theme="dark"] .rep-title--exp { --speck: #FBBF24; --speck-hi: #FFFBEB; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .rep-title--new { --speck: #4ADE80; --speck-hi: #F0FDF4; }
+  :root:not([data-theme="light"]) .rep-title--con { --speck: #38BDF8; --speck-hi: #F0F9FF; }
+  :root:not([data-theme="light"]) .rep-title--tru { --speck: #A78BFA; --speck-hi: #FAF5FF; }
+  :root:not([data-theme="light"]) .rep-title--exp { --speck: #FBBF24; --speck-hi: #FFFBEB; }
+}
+
+.rep-title__glitter { position: absolute; inset: -5px -6px; z-index: 0; pointer-events: none; }
+.rep-title--lg .rep-title__glitter { inset: -8px -10px; }
+.rep-title__speck {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--speck);
+  opacity: 0;
+  animation: rep-rise-sm 4.2s linear infinite;
+}
+.rep-title--lg .rep-title__speck { width: 3px; height: 3px; animation-name: rep-rise; }
+.rep-title__speck--star,
+.rep-title--lg .rep-title__speck--star {
+  width: 5px;
+  height: 5px;
+  background:
+    linear-gradient(var(--speck-hi), var(--speck-hi)) 2px 2px / 1px 1px no-repeat,
+    linear-gradient(var(--speck), var(--speck)) 2px 0 / 1px 5px no-repeat,
+    linear-gradient(var(--speck), var(--speck)) 0 2px / 5px 1px no-repeat;
+}
+.rep-title--lg .rep-title__speck--star {
+  width: 7px;
+  height: 7px;
+  background:
+    linear-gradient(var(--speck-hi), var(--speck-hi)) 3px 3px / 1px 1px no-repeat,
+    linear-gradient(var(--speck), var(--speck)) 3px 0 / 1px 7px no-repeat,
+    linear-gradient(var(--speck), var(--speck)) 0 3px / 7px 1px no-repeat;
+}
+@keyframes rep-rise {
+  0% { opacity: 0; transform: translateY(6px); }
+  20% { opacity: 1; }
+  75% { opacity: .85; }
+  100% { opacity: 0; transform: translateY(-16px); }
+}
+@keyframes rep-rise-sm {
+  0% { opacity: 0; transform: translateY(4px); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-9px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rep-title__speck { animation: none; opacity: .6; }
+}
+
 /* Avatar frames: drawn 40% larger than the avatar so the decoration sits around it. */
 .avatar-frame {
   position: absolute;

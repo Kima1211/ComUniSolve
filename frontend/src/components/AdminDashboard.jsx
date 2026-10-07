@@ -6,7 +6,8 @@ import { inputClass } from "../form";
 import { useConfirm } from "../confirm-context";
 import { Ban, EyeOff, RotateCcw, UserCheck } from "lucide-react";
 import { alertError, alertNote, btnDanger, btnGhost, btnSecondary, btnSmall, chip, pageSub, pageTitle } from "../ui";
-import Layout, { TierBadge } from "./Layout";
+import Layout from "./Layout";
+import ReputationTitle from "./ReputationTitle";
 import BackLink from "./BackLink";
 import { timeAgo } from "../time";
 
@@ -561,7 +562,7 @@ function UsersTab() {
                                     <p className="break-words text-xs text-muted">{u.email}</p>
                                 </td>
                                 <td className="whitespace-nowrap px-4 py-3">
-                                    <TierBadge tier={u.tier} />
+                                    <ReputationTitle tier={u.tier} />
                                     <p className="mt-1 text-xs tabular-nums text-muted">{t("admin.pts", { points: u.points })}</p>
                                 </td>
                                 <td className="whitespace-nowrap px-4 py-3 text-ink">

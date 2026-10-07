@@ -4,11 +4,13 @@ import { apiGet } from "../api";
 import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import { alertError, alertNote, btnPrimary, btnSecondary, chip, pageTitle, panel, panelTitle } from "../ui";
-import Layout, { TierBadge } from "./Layout";
+import Layout from "./Layout";
+import ReputationTitle from "./ReputationTitle";
 import Avatar from "./Avatar";
 import { StatusChip } from "./ProblemFeed";
 import { InstallSection } from "./InstallButton";
 import BackLink from "./BackLink";
+import { FRAMES } from "../avatar-frames";
 
 function fullName(u) {
     return [u.first_name, u.middle_name, u.last_name, u.suffix].filter(Boolean).join(" ")
@@ -73,6 +75,8 @@ function UserProfile({ own = false }) {
         { key: "solutions", label: t("profile.solutions"), count: profile.solution_count },
     ]
 
+    const next = FRAMES.find((f) => f.min > profile.points)
+
     return (
         <Layout>
             <BackLink />
@@ -81,13 +85,18 @@ function UserProfile({ own = false }) {
                 <div className="flex items-center gap-4">
                     <Avatar name={profile.name} person={profile} size="lg" />
                     <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h1 className={pageTitle}>{profile.name}</h1>
-                            <TierBadge tier={profile.tier} />
+                        <h1 className={pageTitle}>{profile.name}</h1>
+                        <div className="mt-2">
+                            <ReputationTitle tier={profile.tier} size="lg" />
                         </div>
-                        <p className="mt-0.5 text-sm text-muted">
+                        <p className="mt-2 text-sm text-muted">
                             {t("profile.pointsJoined", { points: profile.points, date: formatDate(profile.created_at) })}
                         </p>
+                        {own && next && (
+                            <p className="mt-0.5 text-sm text-muted">
+                                {t("profile.nextTitle", { n: next.min - profile.points, tier: label("tier", next.tier) })}
+                            </p>
+                        )}
                     </div>
                 </div>
 
