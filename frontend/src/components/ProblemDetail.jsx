@@ -5,7 +5,7 @@ import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import { timeAgo } from "../time";
 import { useConfirm } from "../confirm-context";
-import { Trash2 } from "lucide-react";
+import { Info, Sparkles, Trash2 } from "lucide-react";
 import { authorLabel, hasProfile } from "../author";
 import Layout from "./Layout";
 import ReputationTitle from "./ReputationTitle";
@@ -126,6 +126,7 @@ function ProblemDetail() {
     function handleSaved(updated) {
         setProblem(updated)
         setEditing(false)
+        setAttempt((n) => n + 1)
         // The backend cleared the old AI Suggestion, so ask again for the new text.
         suggestionAskedFor.current = null
         setAiSuggestion(null)
@@ -192,6 +193,7 @@ function ProblemDetail() {
                 backup={related.backup}
                 title={t("detail.related")}
                 hint={related.aiUsed ? t("detail.relatedHintAi") : null}
+                collapsible
             />
             {related.aiUsed && related.matches.length === 0 && (
                 <p className="text-sm text-muted">{t("detail.aiNone")}</p>
@@ -290,6 +292,23 @@ function ProblemDetail() {
 
             {relatedFirst && <div className="mt-4">{relatedBlock}</div>}
 
+            {suggestionPending && <div className="mt-4"><AiCheckStatus message={t("detail.suggestionPending")} /></div>}
+
+            {showSuggestion && (
+                <div className="relative mt-7 rounded-lg border-[1.5px] border-dashed border-gold bg-surface px-4 pb-4 pt-5">
+                    <span className="absolute -top-3 left-3 inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-gold bg-surface py-0.5 pl-2 pr-2.5 text-[13px] font-semibold text-ink">
+                        <Sparkles size={15} aria-hidden="true" className="text-link" />
+                        {t("detail.aiSuggestion")}
+                    </span>
+                    <p className="text-[13px] text-muted">{t("detail.notFromMember")}</p>
+                    <p className="mt-2 max-w-[75ch] whitespace-pre-wrap text-base leading-[1.6] text-ink">{aiSuggestion.suggestion}</p>
+                    <p className="mt-3 flex gap-2 border-t border-border pt-3 text-xs leading-[1.5] text-muted">
+                        <Info size={14} aria-hidden="true" className="mt-px shrink-0" />
+                        {t("detail.aiSuggestionNote")}
+                    </p>
+                </div>
+            )}
+
             <section className="mt-4 rounded-lg border border-border bg-surface p-4">
                 <h2 className="text-base font-semibold text-ink">{t("detail.writeSolution")}</h2>
 
@@ -347,22 +366,7 @@ function ProblemDetail() {
                 <h2 className="text-base font-semibold text-ink">{t("common.solutions", { count: solutions.length })}</h2>
 
                 <div className="mt-3 space-y-3">
-                    {suggestionPending && <AiCheckStatus message={t("detail.suggestionPending")} />}
-
-                    {showSuggestion && (
-                        <div className="rounded-lg border border-border bg-surface p-4">
-                            <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                                <span className="rounded-sm bg-surface-2 px-1.5 py-0.5 text-[12px] font-medium text-ink">
-                                    {t("detail.aiSuggestion")}
-                                </span>
-                                <span className="text-muted">{t("detail.notFromMember")}</span>
-                            </div>
-                            <p className="mt-2 max-w-[75ch] whitespace-pre-wrap text-base leading-[1.6] text-ink">{aiSuggestion.suggestion}</p>
-                            <p className="mt-3 border-t border-border pt-3 text-xs text-muted">{t("detail.aiSuggestionNote")}</p>
-                        </div>
-                    )}
-
-                    {solutions.length === 0 && !showSuggestion && !suggestionPending && (
+                    {solutions.length === 0 && (
                         <p className="py-4 text-sm text-muted">{t("detail.noSolutions")}</p>
                     )}
 
