@@ -616,7 +616,7 @@ const en = {
     "rail.howTitle": "How it works",
     "rail.how1": "Post the problem. The system checks it before publishing.",
     "rail.how2": "Someone posts a solution. You can vote on the ones that help.",
-    "rail.how3": "Accept the best one. Both of you earn reputation.",
+    "rail.how3": "Accept the one that worked. Its author earns reputation.",
     "landing.livePick": "A real solved problem from our community",
     "landing.recentHeading": "Recent problems",
     "landing.acceptedBanner": "Accepted by the poster",

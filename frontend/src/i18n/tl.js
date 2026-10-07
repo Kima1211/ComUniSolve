@@ -616,7 +616,7 @@ const tl = {
     "rail.howTitle": "Paano gumagana",
     "rail.how1": "Mag-post ng problema. Sinusuri ito ng sistema bago lumabas.",
     "rail.how2": "May magsa-sagot. Puwede mong i-vote ang nakatulong sa iyo.",
-    "rail.how3": "Tanggapin ang pinakamagandang sagot. Pareho kayong kikita ng reputasyon.",
+    "rail.how3": "Tanggapin ang sagot na gumana. Kikita ng reputasyon ang sumagot.",
     "landing.livePick": "Totoong problema galing sa aming komunidad",
     "landing.recentHeading": "Mga bagong problema",
     "landing.acceptedBanner": "Tinanggap ng nag-post",
