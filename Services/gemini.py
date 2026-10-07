@@ -86,8 +86,12 @@ def _candidate_line(c: dict) -> str:
     return " ".join(parts)
 
 
-def _build_prompt(query_title: str, query_description: Optional[str], candidates: List[dict]) -> str:
+def _build_prompt(query_title: str, query_description: Optional[str], candidates: List[dict],
+                  query_category: Optional[str] = None) -> str:
     listing = "\n".join(_candidate_line(c) for c in candidates)
+    category_line = (
+        f"Category (picked by the poster, may be wrong): {_flatten(query_category)}\n" if query_category else ""
+    )
     return (
         "You are helping a Filipino platform decide whether a newly written problem "
         "has already been asked before. A problem can be about anything - a barangay "
@@ -102,6 +106,7 @@ def _build_prompt(query_title: str, query_description: Optional[str], candidates
         "--- NEW PROBLEM BEGINS ---\n"
         f"Title: {_flatten(query_title)}\n"
         f"Description: {_flatten(query_description) or '(none)'}\n"
+        f"{category_line}"
         "--- NEW PROBLEM ENDS ---\n\n"
         "--- EXISTING PROBLEMS BEGIN ---\n"
         f"{listing}\n"
@@ -115,6 +120,9 @@ def _build_prompt(query_title: str, query_description: Optional[str], candidates
         "a Waray post and an English post about the same real-world situation ARE a match. "
         "Be strict about subject: a schoolwork problem and a barangay problem are not "
         "related just because both are problems.\n"
+        "Judge mainly by the title and description. Use categories only to decide between "
+        "readings when the wording is unclear; never leave out a match only because the "
+        "categories differ, since posters often pick the wrong one.\n"
         "  'high'   - clearly the same issue.\n"
         "  'medium' - the same kind of issue in a different place, time or context.\n"
         "  'low'    - only loosely related.\n"
@@ -126,9 +134,10 @@ def _build_prompt(query_title: str, query_description: Optional[str], candidates
     )
 
 
-def _cache_key(query_title: str, query_description: Optional[str], candidates: List[dict]) -> str:
+def _cache_key(query_title: str, query_description: Optional[str], candidates: List[dict],
+               query_category: Optional[str] = None) -> str:
     ids = ",".join(str(c["id"]) for c in sorted(candidates, key=lambda c: c["id"]))
-    return f"{query_title}|{query_description or ''}|{ids}"
+    return f"{query_title}|{query_description or ''}|{query_category or ''}|{ids}"
 
 
 def _gemini_body(model: str, prompt: str, schema: dict = _RESPONSE_SCHEMA) -> dict:
@@ -219,17 +228,18 @@ def _ask_gemini(prompt: str, schema: dict, deadline: float) -> Tuple[Optional[st
     return None, last_status
 
 
-def rerank(query_title: str, query_description: Optional[str], candidates: List[dict]) -> Optional[dict]:
+def rerank(query_title: str, query_description: Optional[str], candidates: List[dict],
+           query_category: Optional[str] = None) -> Optional[dict]:
     if not is_enabled() or not candidates:
         return None
 
-    key = _cache_key(query_title, query_description, candidates)
+    key = _cache_key(query_title, query_description, candidates, query_category)
     cached = _CACHE.get(key)
     if cached and time.time() - cached[0] < CACHE_TTL_SECONDS:
         print(f"[AI] cache hit - no API call, {len(cached[1])} related")
         return cached[1]
 
-    prompt = _build_prompt(query_title, query_description, candidates[:MAX_CANDIDATES])
+    prompt = _build_prompt(query_title, query_description, candidates[:MAX_CANDIDATES], query_category)
 
     started = time.monotonic()
     deadline = started + DEADLINE_SECONDS

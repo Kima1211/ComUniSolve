@@ -147,6 +147,28 @@ PROBLEMS = [
              "hinihingi ng GCash. I-block ang number at i-report sa GCash Help Center.", 3, True),
         ],
     ),
+    # Same symptom ("can't get into the portal"), different cause: used by the category cases in test_matching.py.
+    (
+        "Ayaw tanggapin ng student portal ang password ko",
+        "Laging 'incorrect password' kahit sigurado akong tama. Nag-forgot password na ako "
+        "pero walang dumarating na reset email.",
+        "Accounts & Passwords", 2,
+        [
+            ("Tingnan mo ang Spam folder, doon napupunta ang reset email. Kung wala pa rin, "
+             "pumunta ka sa MIS office dala ang school ID mo at sila ang magre-reset ng "
+             "password mo.", 3, True),
+        ],
+    ),
+    (
+        "Ayaw mag-load ng student portal sa campus Wi-Fi",
+        "Sa Wi-Fi ng school, umiikot lang ang portal hanggang mag-time out. Sa mobile data "
+        "naman ay gumagana.",
+        "Internet & Connectivity", 1,
+        [
+            ("Naka-block pala ang portal sa campus network. Ini-report namin sa IT office at "
+             "pina-whitelist nila. Habang hinihintay, gumamit muna ng mobile data.", 2, True),
+        ],
+    ),
 ]
 
 def main():

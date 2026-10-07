@@ -64,6 +64,7 @@ def _build_matches(
     db: Session,
     exclude_id: Optional[int] = None,
     use_ai: bool = False,
+    query_category: Optional[str] = None,
 ):
     """Returns (matches, ai_used, backup).
 
@@ -82,7 +83,7 @@ def _build_matches(
     ai_ranked = None
     if use_ai and gemini.is_enabled():
         pool = [c for c in candidates if c["id"] in tfidf_scores]
-        ai_ranked = gemini.rerank(query_title, query_description, pool)
+        ai_ranked = gemini.rerank(query_title, query_description, pool, query_category)
 
     if ai_ranked is not None:
         accepted = _accepted_solutions(db, list(ai_ranked.keys()))
@@ -96,9 +97,14 @@ def _build_matches(
             (pid, tfidf_scores.get(pid, 0.0), info)
             for pid, info in ai_ranked.items()
         ]
-        # Similarity first: stars only break ties inside the same AI relevance level.
+        # Similarity first; inside the same relevance level: stars, then solved before unsolved.
         chosen.sort(
-            key=lambda t: (_RELEVANCE_ORDER.get(t[2]["relevance"], 0), rating_of(t[0]), t[1]),
+            key=lambda t: (
+                _RELEVANCE_ORDER.get(t[2]["relevance"], 0),
+                rating_of(t[0]),
+                t[0] in accepted,
+                t[1],
+            ),
             reverse=True,
         )
         chosen = chosen[:MAX_MATCHES]
@@ -143,7 +149,9 @@ def match_with_ai(body: MatchRequest, db: Session = Depends(get_db), current_use
         matches, _, _ = _build_matches(body.title, body.description, db, use_ai=False)
         return MatchResponse(matches=matches, ai_used=False, backup=True)
 
-    matches, ai_used, backup = _build_matches(body.title, body.description, db, use_ai=True)
+    matches, ai_used, backup = _build_matches(
+        body.title, body.description, db, use_ai=True, query_category=body.category
+    )
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
 @router.get("/problems/{problem_id}/similar", response_model=MatchResponse)
@@ -157,7 +165,8 @@ def similar_to_problem(problem_id: int, db: Session = Depends(get_db)):
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
     matches, ai_used, backup = _build_matches(
-        fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=AUTO_AI_ON_DETAIL
+        fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=AUTO_AI_ON_DETAIL,
+        query_category=fnd.category,
     )
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
@@ -181,7 +190,7 @@ def similar_to_problem_with_ai(problem_id: int, db: Session = Depends(get_db),
         return MatchResponse(matches=matches, ai_used=False, backup=True)
 
     matches, ai_used, backup = _build_matches(
-        fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True
+        fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True, query_category=fnd.category
     )
     return MatchResponse(matches=matches, ai_used=ai_used, backup=backup)
 
@@ -221,7 +230,9 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db),
     if not _ai_allowed(current_user):
         return AiSuggestionResponse(status="unavailable")
 
-    matches, ai_used, _ = _build_matches(fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True)
+    matches, ai_used, _ = _build_matches(
+        fnd.title, fnd.description, db, exclude_id=problem_id, use_ai=True, query_category=fnd.category
+    )
     if any(m.accepted_solution and (not ai_used or m.relevance in ("high", "medium")) for m in matches):
         return AiSuggestionResponse(status="similar_solution_exists")
 

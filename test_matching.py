@@ -52,6 +52,18 @@ PAGE_CASES = [
     ("Na-hack ang Facebook", [], ["Walang signal sa bahay", "bond paper", "Form 137"]),
 ]
 
+# (typed title, description, picked category, should come FIRST, should appear)
+# The two portal problems share the symptom but not the cause; the category decides which fits.
+# The last case picks the wrong category on purpose: the real match must still appear.
+CATEGORY_CASES = [
+    ("Hindi ako makapasok sa student portal", "Kahapon ko pa sinusubukan pero hindi talaga ako makapasok.",
+     "Accounts & Passwords", "tanggapin ng student portal", []),
+    ("Hindi ako makapasok sa student portal", "Kahapon ko pa sinusubukan pero hindi talaga ako makapasok.",
+     "Internet & Connectivity", "mag-load ng student portal", []),
+    ("Ayaw gumana ng portal sa Wi-Fi ng school", "Sa campus Wi-Fi lang ito nangyayari, sa data okay naman.",
+     "Accounts & Passwords", None, ["mag-load ng student portal"]),
+]
+
 PASSED = FAILED = SKIPPED = 0
 
 def check(label, ok, detail=""):
@@ -63,8 +75,10 @@ def check(label, ok, detail=""):
         FAILED += 1
         print(f"  FAIL  {label}  {detail}")
 
-def run(title, db, description=None, exclude_id=None):
-    out = matching_router._build_matches(title, description, db, exclude_id=exclude_id, use_ai=True)
+def run(title, db, description=None, exclude_id=None, category=None):
+    out = matching_router._build_matches(
+        title, description, db, exclude_id=exclude_id, use_ai=True, query_category=category
+    )
     return out[0], out[1]
 
 def main_test():
@@ -98,7 +112,7 @@ def main_test():
                     SKIPPED += 1
                     continue
                 if q is not None:
-                    results, ai_used = run(q.title, db, q.description, exclude_id=q.id)
+                    results, ai_used = run(q.title, db, q.description, exclude_id=q.id, category=q.category)
                 else:
                     results, ai_used = run(title, db)
                 got = {m.id: m for m in results}
@@ -114,6 +128,27 @@ def main_test():
                 for p in banned:
                     if p is not None:
                         check(f"does not show #{p.id} {p.title[:40]!r}", p.id not in got)
+
+            # The keyword backup ignores categories, so these only run in AI mode.
+            for title, description, category, first, should in (CATEGORY_CASES if mode == "AI" else []):
+                expected_first = find(first) if first else None
+                wanted = [find(s) for s in should]
+                if (first and expected_first is None) or not all(wanted):
+                    print(f"  SKIP  {title!r} [{category}]: run seed_demo.py for the portal problems")
+                    SKIPPED += 1
+                    continue
+                results, ai_used = run(title, db, description, category=category)
+                shown = ", ".join(f'#{m.id} {m.title[:30]!r} {m.relevance}' for m in results) or "(nothing)"
+                print(f"\n  {title!r} [{category}] -> {shown}")
+                if not ai_used:
+                    print("  SKIP  Gemini did not answer (quota or network): AI result not checked")
+                    SKIPPED += 1
+                    continue
+                if expected_first:
+                    check(f"#{expected_first.id} {expected_first.title[:40]!r} comes first",
+                          bool(results) and results[0].id == expected_first.id)
+                for p in wanted:
+                    check(f"finds #{p.id} {p.title[:40]!r} despite the category", p.id in {m.id for m in results})
         finally:
             gemini.is_enabled = real_is_enabled
 

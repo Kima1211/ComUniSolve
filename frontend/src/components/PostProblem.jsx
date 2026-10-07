@@ -16,7 +16,7 @@ import BackLink from "./BackLink";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 // Waits for a pause in typing, to protect the free Gemini quota.
 const MATCH_DELAY_MS = 1200
-const NO_MATCH = { query: "", matches: [], aiUsed: false, backup: false }
+const NO_MATCH = { key: "", matches: [], aiUsed: false, backup: false }
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
 function PostProblem() {
@@ -54,9 +54,10 @@ function PostProblem() {
         setImage(file)
     }
 
-    // Only title changes start a check; the description is read from a ref.
+    // Title and category changes start a check; the description is read from a ref.
     const query = title.trim()
     const readyToMatch = query.split(/\s+/).length >= 2 && query.length >= 12
+    const matchKey = `${query}|${category}`
     const descriptionRef = useRef(description)
     useEffect(() => { descriptionRef.current = description }, [description])
 
@@ -64,19 +65,19 @@ function PostProblem() {
         if (!readyToMatch) return
         let cancelled = false
         const timer = setTimeout(() => {
-            apiPost("/problems/match/ai", { title: query, description: descriptionRef.current })
+            apiPost("/problems/match/ai", { title: query, description: descriptionRef.current, category: category || null })
                 .then((data) => {
                     if (!cancelled) {
-                        setMatch({ query, matches: data.matches || [], aiUsed: Boolean(data.ai_used), backup: Boolean(data.backup) })
+                        setMatch({ key: matchKey, matches: data.matches || [], aiUsed: Boolean(data.ai_used), backup: Boolean(data.backup) })
                     }
                 })
-                .catch(() => { if (!cancelled) setMatch({ ...NO_MATCH, query, backup: true }) })
+                .catch(() => { if (!cancelled) setMatch({ ...NO_MATCH, key: matchKey, backup: true }) })
         }, MATCH_DELAY_MS)
         return () => { cancelled = true; clearTimeout(timer) }
-    }, [query, readyToMatch])
+    }, [query, category, matchKey, readyToMatch])
 
     const current = readyToMatch ? match : NO_MATCH
-    const matching = readyToMatch && match.query !== query
+    const matching = readyToMatch && match.key !== matchKey
 
     async function submitProblem(acknowledged) {
         try {

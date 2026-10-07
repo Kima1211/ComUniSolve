@@ -1,10 +1,13 @@
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, List
 
+from Schemas.categories import Category
+
 
 class MatchRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=5000)
+    category: Optional[Category] = None
 
 
 class MatchedProblem(BaseModel):
