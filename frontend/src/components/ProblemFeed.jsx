@@ -36,7 +36,7 @@ export function ProblemCard({ problem }) {
             {/* Wraps instead of cutting words off: on narrow screens "by … · time" moves to a second line. */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
                 <span className="flex min-w-0 items-center gap-2">
-                    <Avatar name={authorName} size="xs" />
+                    <Avatar name={authorName} person={problem.author} size="xs" />
                     <span className="truncate font-medium text-ink">{categoryLabel}</span>
                 </span>
                 <span className="flex min-w-0 items-center gap-1.5 text-muted">

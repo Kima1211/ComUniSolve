@@ -91,6 +91,8 @@ def list_users(
             is_verified=u.is_verified,
             is_active=u.is_active,
             is_deleted=u.is_deleted,
+            avatar_icon=u.avatar_icon,
+            avatar_color=u.avatar_color,
             is_suspended=is_currently_suspended(u),
             suspended_until=u.suspended_until,
             suspension_reason=u.suspension_reason,

@@ -15,6 +15,7 @@ import BackLink from "./BackLink";
 import PersonalFields from "./PersonalFields";
 import AddressFields from "./AddressFields";
 import PasswordInput from "./PasswordInput";
+import AvatarPicker from "./AvatarPicker";
 
 function SecuritySection() {
     const { user, logout } = useAuth()
@@ -251,6 +252,8 @@ function EditProfile() {
                 <BackLink />
                 <h1 className={`${pageTitle} mt-2`}>{t("edit.title")}</h1>
                 <p className={pageSub}>{t("edit.emailNote", { email: user.email })}</p>
+
+                <AvatarPicker />
 
                 <form onSubmit={save} noValidate className={`${panel} mt-4 space-y-6`}>
                     <section className="space-y-4">

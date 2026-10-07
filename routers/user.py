@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, status, Request, Response, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from Schemas.user import Register, Login, UserProfile, ProfileUpdate, Deactivate
+from Schemas.user import Register, Login, UserProfile, ProfileUpdate, Deactivate, AvatarChoice
 from Models import user, problem, solution
 from Models.user import build_display_name, DELETED_EMAIL_DOMAIN, DELETED_NAME
 from Models.audit_log import AuditLog
@@ -147,6 +147,8 @@ def me_payload(u) -> dict:
     return {
         "id": u.id,
         "name": u.name,
+        "avatar_icon": u.avatar_icon,
+        "avatar_color": u.avatar_color,
         "email": u.email,
         "role": u.role,
         "is_verified": u.is_verified,
@@ -182,6 +184,20 @@ def update_profile(body: ProfileUpdate, request: Request, db: Session = Depends(
     except Exception:
         db.rollback()
         raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update profile")
+    db.refresh(current_user)
+    return me_payload(current_user)
+
+@router.patch("/users/me/avatar")
+def update_avatar(body: AvatarChoice, request: Request, db: Session = Depends(get_db),
+                  current_user: user.User = Depends(get_current_user)):
+    current_user.avatar_icon = body.icon
+    current_user.avatar_color = body.color
+    record(db, "profile_updated", request, user=current_user)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise api_error(status.HTTP_500_INTERNAL_SERVER_ERROR, "server_error", "Failed to update avatar")
     db.refresh(current_user)
     return me_payload(current_user)
 
@@ -226,7 +242,7 @@ def delete_account(body: Deactivate, request: Request, response: Response, db: S
         raise api_error(status.HTTP_400_BAD_REQUEST, "wrong_password", "Password doesn't match")
 
     placeholder = f"deleted-{current_user.id}@{DELETED_EMAIL_DOMAIN}"
-    for field in PRIVATE_FIELDS + ("first_name", "last_name", "suffix"):
+    for field in PRIVATE_FIELDS + ("first_name", "last_name", "suffix", "avatar_icon", "avatar_color"):
         setattr(current_user, field, None)
     current_user.name = DELETED_NAME
     current_user.email = placeholder
@@ -323,6 +339,8 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db)):
     return {
         "id": fnd_user.id,
         "name": fnd_user.name,
+        "avatar_icon": fnd_user.avatar_icon,
+        "avatar_color": fnd_user.avatar_color,
         "points": fnd_user.points,
         "tier": fnd_user.tier,
         "created_at": fnd_user.created_at,

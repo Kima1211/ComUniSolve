@@ -79,7 +79,7 @@ function UserProfile({ own = false }) {
 
             <section className={`${panel} mt-3`}>
                 <div className="flex items-center gap-4">
-                    <Avatar name={profile.name} size="lg" />
+                    <Avatar name={profile.name} person={profile} size="lg" />
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <h1 className={pageTitle}>{profile.name}</h1>

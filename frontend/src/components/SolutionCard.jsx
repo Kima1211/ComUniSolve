@@ -263,7 +263,7 @@ function SolutionCard({ solution, problem, currentUser, onChanged }) {
 
             <div className="p-4">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-                    <Avatar name={authorName} size="xs" />
+                    <Avatar name={authorName} person={solution.author} size="xs" />
                     {hasProfile(solution.author) ? (
                         <Link to={`/users/${solution.author.id}`} className="font-medium text-ink hover:underline">{authorName}</Link>
                     ) : (

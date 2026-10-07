@@ -2,9 +2,9 @@ import re
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, EmailStr, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, EmailStr, field_validator, model_validator
 
-from Models.user import SUFFIXES
+from Models.user import SUFFIXES, AVATAR_ICONS, AVATAR_COLORS
 
 # Keep in sync with frontend/src/validation.js.
 NAME_PATTERN = re.compile(r"[^\W\d_]+(?:[ .'\-]+[^\W\d_]+)*\.?")
@@ -81,6 +81,16 @@ class Register(PersonalInfo):
 class ProfileUpdate(PersonalInfo):
     pass
 
+class AvatarChoice(BaseModel):
+    icon: Optional[Literal[tuple(AVATAR_ICONS)]] = None
+    color: Optional[Literal[tuple(AVATAR_COLORS)]] = None
+
+    @model_validator(mode="after")
+    def both_or_neither(self):
+        if (self.icon is None) != (self.color is None):
+            raise ValueError("Pick both a character and a colour, or neither")
+        return self
+
 class VerifyCode(BaseModel):
     code: str = Field(..., pattern=r"^\d{6}$")
 
@@ -113,6 +123,8 @@ class AdminUserRow(BaseModel):
     is_verified: bool
     is_active: bool
     is_deleted: bool = False
+    avatar_icon: Optional[str] = None
+    avatar_color: Optional[str] = None
     is_suspended: bool
     suspended_until: Optional[datetime] = None
     suspension_reason: Optional[str] = None
@@ -148,6 +160,8 @@ class ProfileSolution(BaseModel):
 class UserProfile(BaseModel):
     id: int
     name: str
+    avatar_icon: Optional[str] = None
+    avatar_color: Optional[str] = None
     points: int
     tier: str
     created_at: Optional[datetime] = None

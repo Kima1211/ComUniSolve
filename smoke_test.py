@@ -303,6 +303,33 @@ check("Account activity is logged (sign-ups, logins, failed logins, verification
 r = asker.post("/resend-verification")
 check("An already-verified account cannot resend", r.status_code == 400, f"status={r.status_code}")
 
+r = asker.patch("/users/me/avatar", json={"icon": "internet", "color": "dagat"})
+check("A user can pick a pixel avatar", r.status_code == 200 and r.json()["avatar_icon"] == "internet", f"{r.json()}")
+feed_authors = [p["author"] for p in TestClient(app).get("/problems").json() if p["author"]["id"] == asker_id]
+check("Their posts carry the avatar", feed_authors and feed_authors[0]["avatar_icon"] == "internet"
+      and feed_authors[0]["avatar_color"] == "dagat", f"{feed_authors[:1]}")
+r = TestClient(app).get(f"/users/{asker_id}/profile")
+check("Their public profile carries the avatar", r.json().get("avatar_icon") == "internet", f"{r.json().get('avatar_icon')}")
+r = asker.patch("/users/me/avatar", json={"icon": "dragon", "color": "dagat"})
+check("An avatar that isn't in the list is rejected", r.status_code == 422, f"status={r.status_code}")
+r = asker.patch("/users/me/avatar", json={"icon": "internet"})
+check("A character without a colour is rejected", r.status_code == 422, f"status={r.status_code}")
+r = asker.patch("/users/me/avatar", json={"icon": None, "color": None})
+check("Going back to initials clears the avatar", r.status_code == 200 and r.json()["avatar_icon"] is None, f"{r.json()}")
+
+mila, mila_id = verified_client("Mila Reyes", "mila@example.com")
+mila.patch("/users/me/avatar", json={"icon": "welfare", "color": "rosas"})
+r = mila.post("/users/me/delete", json={"password": PASSWORD})
+d = SessionLocal()
+gone = d.query(user.User).filter(user.User.id == mila_id).first()
+check("Delete account anonymises the user and resets the avatar",
+      r.status_code == 200 and gone.name == "Deleted user" and gone.avatar_icon is None and gone.avatar_color is None
+      and gone.email.endswith("@deleted.invalid") and gone.is_active is False,
+      f"{r.status_code} {gone.name} {gone.avatar_icon}")
+d.close()
+r = TestClient(app).post("/login", json={"email": "mila@example.com", "password": PASSWORD})
+check("...and the deleted account can't sign in", r.status_code == 401, f"status={r.status_code}")
+
 asker.post("/problems", json={
     "title": "Barangay streetlight not working near the basketball court",
     "description": "Another dark corner at night. Who do we report a broken street light to?",

@@ -72,7 +72,7 @@ function Layout({ children, hideRails = false, rail = null, wide = false }) {
                                     title={t("nav.myProfile")}
                                     className="hidden h-10 items-center gap-2 rounded-md pl-1 pr-2 hover:bg-surface-2 md:inline-flex"
                                 >
-                                    <Avatar name={user.name} size="sm" />
+                                    <Avatar name={user.name} person={user} size="sm" />
                                     <span className="text-sm font-medium text-ink hidden lg:inline">{user.name}</span>
                                 </Link>
                                 <button

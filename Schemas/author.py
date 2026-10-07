@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -9,4 +11,6 @@ class AuthorOut(BaseModel):
     points: int
     tier: str
     is_deleted: bool = False
+    avatar_icon: Optional[str] = None
+    avatar_color: Optional[str] = None
 

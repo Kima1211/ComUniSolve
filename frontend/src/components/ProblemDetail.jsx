@@ -224,7 +224,7 @@ function ProblemDetail() {
                 ) : (
                     <>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-                            <Avatar name={authorName} size="xs" />
+                            <Avatar name={authorName} person={problem.author} size="xs" />
                             <span className="font-medium text-ink">{label("category", problem.category)}</span>
                             <span className="text-muted">
                                 {t("detail.postedBy")}{" "}

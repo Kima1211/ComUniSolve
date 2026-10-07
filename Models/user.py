@@ -17,6 +17,11 @@ from datetime import date
 DELETED_EMAIL_DOMAIN = "deleted.invalid"
 DELETED_NAME = "Deleted user"
 
+# Pixel avatars a user can pick; keep in sync with frontend/src/pixel-avatars.js.
+AVATAR_ICONS = ["enrollment", "scholarship", "learning", "facilities", "supplies", "welfare",
+                "devices", "internet", "accounts", "apps", "office", "safety"]
+AVATAR_COLORS = ["amber", "terracotta", "ube", "teal", "dagat", "dahon", "rosas", "kape"]
+
 class User(Base):
     __tablename__ = "users"
     
@@ -51,12 +56,18 @@ class User(Base):
     suspended_until: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
     suspension_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     deactivated_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    avatar_icon: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    avatar_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     __table_args__ = (
         CheckConstraint(role.in_(['admin', 'client']), name="user_role"),
         CheckConstraint("sex IS NULL OR sex IN ('male', 'female')", name="valid_sex"),
+        CheckConstraint(avatar_icon.is_(None) | avatar_icon.in_(AVATAR_ICONS), name="valid_avatar_icon"),
+        CheckConstraint(avatar_color.is_(None) | avatar_color.in_(AVATAR_COLORS), name="valid_avatar_color"),
+        # An avatar is a picture on a colour: both set, or both empty (initials).
+        CheckConstraint("(avatar_icon IS NULL) = (avatar_color IS NULL)", name="avatar_icon_and_color"),
     )
 
     @property
