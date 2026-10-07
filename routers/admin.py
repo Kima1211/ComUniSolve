@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -19,6 +19,7 @@ from Models.database import get_db
 from Models.report import Report
 from Models.moderation_log import ModerationLog
 from Models.audit_log import AuditLog, AUDIT_ACTIONS
+from Models.refresh_token import RefreshToken
 from Security.utils import get_current_admin
 from Models import problem, user, solution, comment
 from Models.user import DELETED_EMAIL_DOMAIN
@@ -147,6 +148,14 @@ def get_problem_overview(db: Session = Depends(get_db), current_user: user.User 
     deleted_users = db.query(U).filter(U.email.like("%@" + DELETED_EMAIL_DOMAIN)).count()
     deactivated_users = db.query(U).filter(U.is_active.is_(False), U.deactivated_at.isnot(None)).count()
     total_users = db.query(U).filter(U.is_active.is_(True)).count()
+
+    # Using the app creates a refresh token (sign-in, or the session refresh every 15 minutes).
+    # Logging out deletes that token, so sign-ins from the account log are counted too.
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    recent = {uid for (uid,) in db.query(RefreshToken.user_id).filter(RefreshToken.created_at >= week_ago)}
+    recent |= {uid for (uid,) in db.query(AuditLog.user_id).filter(
+        AuditLog.action == "login_success", AuditLog.created_at >= week_ago, AuditLog.user_id.isnot(None))}
+    active_this_week = db.query(U).filter(U.id.in_(recent or [-1]), U.is_active.is_(True)).count()
     pending_reports = db.query(Report).filter(Report.status == "pending").count()
     flagged_content = (
         db.query(problem.Problem).filter(problem.Problem.moderation_status == "flagged").count()
@@ -159,6 +168,7 @@ def get_problem_overview(db: Session = Depends(get_db), current_user: user.User 
         "total_problems": total_problems,
         "total_solutions": total_solutions,
         "deactivated_users": deactivated_users,
+        "active_this_week": active_this_week,
         "deleted_users": deleted_users,
         "deleted_problems": deleted_problems,
         "removed_problems": removed_problems,

@@ -111,7 +111,7 @@ const SPLIT_COLOURS = {
 }
 
 // One total with a thin bar showing how it splits: on the site, deleted, removed...
-function SplitRow({ label, value, parts }) {
+function SplitRow({ label, value, parts, note }) {
     const { t } = useLanguage()
     const shown = parts.filter((p) => p.n > 0)
     const sum = shown.reduce((a, p) => a + p.n, 0) || 1
@@ -121,6 +121,7 @@ function SplitRow({ label, value, parts }) {
                 <span className="text-sm font-medium text-ink">{label}</span>
                 <span className="text-2xl font-bold tabular-nums text-ink">{value}</span>
             </div>
+            {note && <p className="-mt-0.5 text-xs font-medium text-link">{note}</p>}
             <div className="mt-2 flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
                 {shown.map((p) => <span key={p.key} className={SPLIT_COLOURS[p.tone]} style={{ width: `${(p.n / sum) * 100}%` }} />)}
             </div>
@@ -142,7 +143,8 @@ function Community({ total }) {
         <section className="rounded-lg border border-border bg-surface p-5">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{t("admin.community.title")}</h2>
             <div className="mt-2">
-                <SplitRow label={t("admin.stat.users")} value={total.total_users} parts={[
+                <SplitRow label={t("admin.stat.users")} value={total.total_users}
+                          note={t("admin.stat.usedThisWeek", { count: total.active_this_week ?? 0 })} parts={[
                     { key: "admin.stat.active", n: total.total_users, tone: "live" },
                     { key: "admin.stat.deactivated", n: total.deactivated_users, tone: "deleted" },
                     { key: "admin.stat.deletedAccounts", n: total.deleted_users, tone: "removed" },

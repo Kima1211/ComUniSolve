@@ -210,6 +210,12 @@ def main_test():
           grew("total_solutions") == 1 and grew("hidden_solutions") == 1,
           f"-> +{grew('total_solutions')} live, +{grew('hidden_solutions')} hidden")
 
+    make_user(db, "Cara", "cara@test.local")
+    as_cara = client_for("cara@test.local")
+    as_cara.post("/users/me/deactivate", json={"password": "password123"})
+    week = as_boss.get("/admin/overview").json()["active_this_week"]
+    check("'Used the app this week' counts Ana, Ben and Boss, not the deactivated Cara", week == 3, f"-> {week}")
+
     rows = as_boss.get("/admin/users", params={"search": "ana@test.local"}).json()["users"]
     live_for_ana = sum(1 for p in TestClient(main.app).get("/problems").json() if p["author"]["name"] == "Ana")
     check("Users tab counts Ana's live problems only", rows and rows[0]["problem_count"] == live_for_ana,

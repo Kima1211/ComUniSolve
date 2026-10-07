@@ -41,6 +41,7 @@ class ProblemOverview(BaseModel):
     pending_reports: int = 0
     flagged_content: int = 0
     deactivated_users: int = 0
+    active_this_week: int = 0
     deleted_users: int = 0
     deleted_problems: int = 0
     removed_problems: int = 0
