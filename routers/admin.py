@@ -21,6 +21,7 @@ from Models.moderation_log import ModerationLog
 from Models.audit_log import AuditLog, AUDIT_ACTIONS
 from Security.utils import get_current_admin
 from Models import problem, user, solution, comment
+from Models.user import DELETED_EMAIL_DOMAIN
 from routers.user import reactivate
 from Services.moderation import active_removal_counts, remove_content, restore_content, suspend_user, unsuspend_user
 from Services.reputation import is_currently_suspended, get_tier
@@ -76,8 +77,22 @@ def list_users(
     )
 
     ids = [u.id for u in rows]
-    problem_counts = _count_per_user(db, problem.Problem.user_id, ids)
-    solution_counts = _count_per_user(db, solution.Solution.user_id, ids)
+    # Same rule as the public profile: only posts that are still on the site.
+    problem_counts = _count_per_user(
+        db, problem.Problem.user_id, ids,
+        problem.Problem.deleted_at.is_(None), problem.Problem.moderation_status != "removed",
+    )
+    solution_counts = dict(
+        db.query(solution.Solution.user_id, func.count())
+        .join(problem.Problem, problem.Problem.id == solution.Solution.problem_id)
+        .filter(
+            solution.Solution.user_id.in_(ids or [-1]),
+            solution.Solution.deleted_at.is_(None), solution.Solution.moderation_status != "removed",
+            problem.Problem.deleted_at.is_(None), problem.Problem.moderation_status != "removed",
+        )
+        .group_by(solution.Solution.user_id)
+        .all()
+    )
     removal_counts = active_removal_counts(db, ids)
 
     return AdminUserList(total=total, users=[
@@ -106,9 +121,32 @@ def list_users(
 
 @router.get("/admin/overview", response_model=ProblemOverview)
 def get_problem_overview(db: Session = Depends(get_db), current_user: user.User = Depends(get_current_admin)):
-    total_users = db.query(user.User).count()
-    total_problems = db.query(problem.Problem).count()
-    total_solutions = db.query(solution.Solution).count()
+    # Soft deletes keep the rows, so each total splits into what is on the site and what isn't.
+    P, S, U = problem.Problem, solution.Solution, user.User
+    problem_visible = (P.deleted_at.is_(None), P.moderation_status != "removed")
+    solution_live = (S.deleted_at.is_(None), S.moderation_status != "removed")
+
+    removed_problems = db.query(P).filter(P.moderation_status == "removed").count()
+    deleted_problems = db.query(P).filter(P.deleted_at.isnot(None), P.moderation_status != "removed").count()
+    total_problems = db.query(P).filter(*problem_visible).count()
+
+    removed_solutions = db.query(S).filter(S.moderation_status == "removed").count()
+    deleted_solutions = db.query(S).filter(S.deleted_at.isnot(None), S.moderation_status != "removed").count()
+    total_solutions = db.query(S).join(P, P.id == S.problem_id).filter(*solution_live, *problem_visible).count()
+    hidden_solutions = db.query(S).filter(*solution_live).count() - total_solutions
+
+    # Solved the way the site shows it: the accepted answer must itself still be up (see shown_status).
+    solved_problems = (
+        db.query(func.count(func.distinct(P.id)))
+        .join(S, S.problem_id == P.id)
+        .filter(*problem_visible, *solution_live, S.status == "accepted")
+        .scalar()
+    )
+    oldest_report_at = db.query(func.min(Report.created_at)).filter(Report.status == "pending").scalar()
+
+    deleted_users = db.query(U).filter(U.email.like("%@" + DELETED_EMAIL_DOMAIN)).count()
+    deactivated_users = db.query(U).filter(U.is_active.is_(False), U.deactivated_at.isnot(None)).count()
+    total_users = db.query(U).filter(U.is_active.is_(True)).count()
     pending_reports = db.query(Report).filter(Report.status == "pending").count()
     flagged_content = (
         db.query(problem.Problem).filter(problem.Problem.moderation_status == "flagged").count()
@@ -120,6 +158,15 @@ def get_problem_overview(db: Session = Depends(get_db), current_user: user.User 
         "total_users": total_users,
         "total_problems": total_problems,
         "total_solutions": total_solutions,
+        "deactivated_users": deactivated_users,
+        "deleted_users": deleted_users,
+        "deleted_problems": deleted_problems,
+        "removed_problems": removed_problems,
+        "deleted_solutions": deleted_solutions,
+        "removed_solutions": removed_solutions,
+        "hidden_solutions": hidden_solutions,
+        "solved_problems": solved_problems,
+        "oldest_report_at": oldest_report_at,
         "pending_reports": pending_reports,
         "flagged_content": flagged_content,
     }

@@ -40,4 +40,13 @@ class ProblemOverview(BaseModel):
     total_solutions: int
     pending_reports: int = 0
     flagged_content: int = 0
+    deactivated_users: int = 0
+    deleted_users: int = 0
+    deleted_problems: int = 0
+    removed_problems: int = 0
+    deleted_solutions: int = 0
+    removed_solutions: int = 0
+    hidden_solutions: int = 0
+    solved_problems: int = 0
+    oldest_report_at: Optional[datetime] = None
 

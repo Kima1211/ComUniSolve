@@ -182,6 +182,39 @@ def main_test():
     check("Clear all empties Ben's list", r.status_code == 200 and got["items"] == [] and got["unread"] == 0, f"-> {got}")
     check("...and leaves Ana's alone", len(bell(as_ana)["items"]) > 0)
 
+    print("\nAdmin overview counts what is on the site")
+    boss = make_user(db, "Boss", "boss@test.local")
+    boss.role = "admin"
+    db.commit()
+    as_boss = client_for("boss@test.local")
+    before = as_boss.get("/admin/overview").json()
+
+    gone = post_problem(as_ana, "Old question I no longer need")
+    as_ana.delete(f"/problems/{gone}")
+    bad = post_problem(as_ana, "A post the admin will remove")
+    as_boss.patch(f"/admin/problems/{bad}/moderate", json={"action": "removed_no_penalty", "reason": "test"})
+    keep = post_problem(as_ana, "Printer in the library is jammed")
+    as_ana.patch(f"/solutions/{post_solution(as_ben, keep)}/accept")
+    orphan_parent = post_problem(as_ana, "Laptop fan is loud")
+    post_solution(as_ben, orphan_parent)
+    as_ana.delete(f"/problems/{orphan_parent}")
+    after = as_boss.get("/admin/overview").json()
+
+    def grew(key):
+        return after[key] - before[key]
+    check("Only the problem still up adds to 'Problems on the site'", grew("total_problems") == 1, f"-> +{grew('total_problems')}")
+    check("Deleted problems are counted separately", grew("deleted_problems") == 2, f"-> +{grew('deleted_problems')}")
+    check("Removed problems are counted separately", grew("removed_problems") == 1, f"-> +{grew('removed_problems')}")
+    check("Matching health counts the newly solved problem once", grew("solved_problems") == 1, f"-> +{grew('solved_problems')}")
+    check("An answer on a deleted problem isn't 'on the site' (only the printer answer is)",
+          grew("total_solutions") == 1 and grew("hidden_solutions") == 1,
+          f"-> +{grew('total_solutions')} live, +{grew('hidden_solutions')} hidden")
+
+    rows = as_boss.get("/admin/users", params={"search": "ana@test.local"}).json()["users"]
+    live_for_ana = sum(1 for p in TestClient(main.app).get("/problems").json() if p["author"]["name"] == "Ana")
+    check("Users tab counts Ana's live problems only", rows and rows[0]["problem_count"] == live_for_ana,
+          f"-> {rows[0]['problem_count'] if rows else None} vs {live_for_ana} in the feed")
+
     print("\nGuests")
     check("A guest can't read notifications (401)", TestClient(main.app).get("/notifications").status_code == 401)
 

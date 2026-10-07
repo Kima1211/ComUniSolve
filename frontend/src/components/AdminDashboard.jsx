@@ -8,16 +8,158 @@ import { Ban, EyeOff, RotateCcw, UserCheck } from "lucide-react";
 import { alertError, alertNote, btnDanger, btnGhost, btnSecondary, btnSmall, chip, pageSub, pageTitle } from "../ui";
 import Layout, { TierBadge } from "./Layout";
 import BackLink from "./BackLink";
+import { timeAgo } from "../time";
 
 const PAGE_SIZE = 50
 
-function Stat({ label, value, highlight }) {
-    const attention = highlight && value > 0
+// The logo's two speech bubbles: an outlined one behind, a filled one in front holding the count.
+function CountBubble({ count, quiet = false }) {
+    const label = count > 99 ? "99+" : String(count)
     return (
-        <div>
-            <dt className="text-xs text-muted">{label}</dt>
-            <dd className={`text-[22px] font-semibold tabular-nums ${attention ? "text-link" : "text-ink"}`}>{value}</dd>
+        <span className="relative block h-14 w-16 shrink-0" aria-hidden="true">
+            <svg viewBox="0 0 64 56" className="absolute inset-0 h-full w-full">
+                <path d="M10 3h30a8 8 0 0 1 8 8v16a8 8 0 0 1-8 8H18l-8 7v-7a8 8 0 0 1-8-8V11a8 8 0 0 1 8-8Z"
+                      fill="none" stroke="var(--muted)" strokeWidth="2" opacity=".55" />
+                <path d="M22 13h32a8 8 0 0 1 8 8v18a8 8 0 0 1-8 8h-2v7l-9-7H22a8 8 0 0 1-8-8V21a8 8 0 0 1 8-8Z"
+                      fill={quiet ? "var(--surface-2)" : "var(--primary)"} stroke="var(--ink)" strokeWidth="1.6" />
+            </svg>
+            <b className={`absolute left-3.5 right-0.5 top-[15px] text-center font-bold tabular-nums text-ink ${label.length > 2 ? "text-base" : "text-2xl"}`}>
+                {label}
+            </b>
+        </span>
+    )
+}
+
+// One sentence, never a list, so a busy day does not push the rest of the page down.
+function StatusBubble({ total, onReview }) {
+    const { t } = useLanguage()
+    const reports = total.pending_reports ?? 0
+    const flagged = total.flagged_content ?? 0
+    const waiting = reports + flagged
+
+    if (waiting === 0) {
+        return (
+            <div className="status-bubble status-bubble--clear mt-6">
+                <CountBubble count={0} quiet />
+                <p className="min-w-0 flex-1 text-lg font-semibold text-ink">
+                    {t("admin.status.clear")}
+                    <span className="block text-sm font-normal text-muted">{t("admin.status.clearHint")}</span>
+                </p>
+            </div>
+        )
+    }
+
+    const parts = []
+    if (reports) parts.push(t("admin.reports", { count: reports }))
+    if (flagged) parts.push(t("admin.status.flagged", { count: flagged }))
+    // Split the translated sentence around {what} so the counts can be highlighted in either language.
+    const [before, after] = t("admin.status.waiting", { count: waiting, what: "\u0000" }).split("\u0000")
+
+    return (
+        <div role="status" className="status-bubble mt-6">
+            <CountBubble count={waiting} />
+            <p className="min-w-[13rem] flex-1 text-lg font-semibold text-ink">
+                {before}
+                {parts.map((part, i) => (
+                    <span key={part}>
+                        {i > 0 && t("admin.status.and")}
+                        <span className="text-link">{part}</span>
+                    </span>
+                ))}
+                {after}
+                {reports > 0 && total.oldest_report_at && (
+                    <span className="block text-sm font-normal text-muted">
+                        {t("admin.status.oldest", { time: timeAgo(total.oldest_report_at, t) })}
+                    </span>
+                )}
+            </p>
+            <button type="button" onClick={onReview}
+                    className="h-10 shrink-0 rounded-md bg-primary px-4 text-sm font-semibold text-on-primary hover:bg-primary-hover shine">
+                {t("admin.status.review")}
+            </button>
         </div>
+    )
+}
+
+function MatchingHealth({ total }) {
+    const { t } = useLanguage()
+    const solved = total.solved_problems ?? 0
+    const percent = total.total_problems ? Math.round((solved / total.total_problems) * 100) : 0
+    return (
+        <section className="rounded-lg border border-border bg-surface p-5">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{t("admin.health.title")}</h2>
+            <p className="mt-3 text-[44px] font-bold leading-none tabular-nums text-ink">
+                {percent}%<span className="ml-1.5 text-base font-medium text-muted">{t("admin.health.solved")}</span>
+            </p>
+            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-surface-2"
+                 role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={t("admin.health.title")}>
+                <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+            </div>
+            <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+                <span>{t("admin.health.accepted", { n: solved })}</span>
+                <span>{t("admin.health.open", { n: Math.max(0, total.total_problems - solved) })}</span>
+            </p>
+        </section>
+    )
+}
+
+const SPLIT_COLOURS = {
+    live: "bg-[var(--split-live)]",
+    deleted: "bg-[var(--split-deleted)]",
+    removed: "bg-[var(--split-removed)]",
+    hidden: "bg-[var(--split-hidden)]",
+}
+
+// One total with a thin bar showing how it splits: on the site, deleted, removed...
+function SplitRow({ label, value, parts }) {
+    const { t } = useLanguage()
+    const shown = parts.filter((p) => p.n > 0)
+    const sum = shown.reduce((a, p) => a + p.n, 0) || 1
+    return (
+        <div className="border-t border-border py-3 first:border-t-0 first:pt-1">
+            <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-medium text-ink">{label}</span>
+                <span className="text-2xl font-bold tabular-nums text-ink">{value}</span>
+            </div>
+            <div className="mt-2 flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+                {shown.map((p) => <span key={p.key} className={SPLIT_COLOURS[p.tone]} style={{ width: `${(p.n / sum) * 100}%` }} />)}
+            </div>
+            <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+                {shown.map((p) => (
+                    <span key={p.key} className="inline-flex items-center gap-1.5">
+                        <i className={`inline-block h-2 w-2 rounded-sm ${SPLIT_COLOURS[p.tone]}`} aria-hidden="true" />
+                        {t(p.key, { n: p.n })}
+                    </span>
+                ))}
+            </p>
+        </div>
+    )
+}
+
+function Community({ total }) {
+    const { t } = useLanguage()
+    return (
+        <section className="rounded-lg border border-border bg-surface p-5">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{t("admin.community.title")}</h2>
+            <div className="mt-2">
+                <SplitRow label={t("admin.stat.users")} value={total.total_users} parts={[
+                    { key: "admin.stat.active", n: total.total_users, tone: "live" },
+                    { key: "admin.stat.deactivated", n: total.deactivated_users, tone: "deleted" },
+                    { key: "admin.stat.deletedAccounts", n: total.deleted_users, tone: "removed" },
+                ]} />
+                <SplitRow label={t("admin.stat.problems")} value={total.total_problems} parts={[
+                    { key: "admin.stat.onSite", n: total.total_problems, tone: "live" },
+                    { key: "admin.stat.deleted", n: total.deleted_problems, tone: "deleted" },
+                    { key: "admin.stat.removed", n: total.removed_problems, tone: "removed" },
+                ]} />
+                <SplitRow label={t("admin.stat.solutions")} value={total.total_solutions} parts={[
+                    { key: "admin.stat.onSite", n: total.total_solutions, tone: "live" },
+                    { key: "admin.stat.deleted", n: total.deleted_solutions, tone: "deleted" },
+                    { key: "admin.stat.removed", n: total.removed_solutions, tone: "removed" },
+                    { key: "admin.stat.onHidden", n: total.hidden_solutions, tone: "hidden" },
+                ]} />
+            </div>
+        </section>
     )
 }
 
@@ -219,16 +361,17 @@ function OverviewTab() {
             <Message error={error} notice={notice} />
 
             {total && (
-                <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border border-border bg-surface p-4 sm:grid-cols-3 lg:grid-cols-5">
-                    <Stat label={t("admin.stat.users")} value={total.total_users} />
-                    <Stat label={t("admin.stat.problems")} value={total.total_problems} />
-                    <Stat label={t("admin.stat.solutions")} value={total.total_solutions} />
-                    <Stat label={t("admin.stat.pending")} value={total.pending_reports ?? 0} highlight />
-                    <Stat label={t("admin.stat.flagged")} value={total.flagged_content ?? 0} highlight />
-                </dl>
+                <>
+                    <StatusBubble total={total} onReview={() =>
+                        document.getElementById("queue")?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+                    <div className="mt-7 grid items-start gap-4 md:grid-cols-[1fr_1.35fr]">
+                        <MatchingHealth total={total} />
+                        <Community total={total} />
+                    </div>
+                </>
             )}
 
-            <h2 className="mt-8 text-base font-semibold text-ink">{t("admin.queue")}</h2>
+            <h2 id="queue" className="mt-8 scroll-mt-20 text-base font-semibold text-ink">{t("admin.queue")}</h2>
             <p className="mt-1 text-sm text-muted">{t("admin.queueHint")}</p>
 
             {!loading && queue.length === 0 && (
