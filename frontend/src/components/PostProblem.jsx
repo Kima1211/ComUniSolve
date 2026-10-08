@@ -18,21 +18,50 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const MATCH_DELAY_MS = 1200
 const NO_MATCH = { key: "", matches: [], aiUsed: false, backup: false }
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
+const DRAFT_KEY = "comunisolve-post-draft"
+
+// sessionStorage can throw (private mode, blocked storage), so the form must work without it.
+function loadDraft(search) {
+    try {
+        const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY)) || {}
+        return draft.search === search ? draft : {}
+    } catch {
+        return {}
+    }
+}
+
+function clearDraft() {
+    try {
+        sessionStorage.removeItem(DRAFT_KEY)
+    } catch {
+        // Nothing was saved.
+    }
+}
 
 function PostProblem() {
     const navigate = useNavigate()
     const { t, errorText } = useLanguage()
     const [params] = useSearchParams()
+    const search = (params.get("title") || "").slice(0, 255)
 
-    const [title, setTitle] = useState(() => (params.get("title") || "").slice(0, 255))
-    const [description, setDescription] = useState("")
-    const [category, setCategory] = useState("")
+    const [draft] = useState(() => loadDraft(search))
+    const [title, setTitle] = useState(draft.title ?? search)
+    const [description, setDescription] = useState(draft.description || "")
+    const [category, setCategory] = useState(draft.category || "")
     const [error, setError] = useState(null)
     const [gate, setGate] = useState(null)
     const [submitting, setSubmitting] = useState(false)
     const [step, setStep] = useState("")
     const [match, setMatch] = useState(NO_MATCH)
     const [image, setImage] = useState(null)
+
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ search, title, description, category }))
+        } catch {
+            // The form still works, the draft just won't survive leaving the page.
+        }
+    }, [search, title, description, category])
 
     const preview = useMemo(() => (image ? URL.createObjectURL(image) : ""), [image])
     useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
@@ -55,7 +84,7 @@ function PostProblem() {
     }
 
     // The description only counts once the user leaves the box, so typing in it doesn't spend AI requests.
-    const [settledDescription, setSettledDescription] = useState("")
+    const [settledDescription, setSettledDescription] = useState(description.trim())
     const query = title.trim()
     const readyToMatch = query.split(/\s+/).length >= 2 && query.length >= 12
     const matchKey = `${query}|${category}|${settledDescription}`
@@ -85,6 +114,7 @@ function PostProblem() {
             setSubmitting(true)
             setStep("checking")
             const data = await apiPost("/problems", { title, description, category, acknowledged })
+            clearDraft()
 
             let imageError = ""
             if (image) {
