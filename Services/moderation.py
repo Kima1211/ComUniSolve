@@ -28,6 +28,7 @@ class GateResult:
     moderation_status: str = "visible"
     message: Optional[str] = None
     suggestion: Optional[str] = None
+    suggestion_title: Optional[str] = None
     matched_terms: list[str] = field(default_factory=list)
 
 def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = False,
@@ -74,6 +75,7 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
             code="ai_inappropriate",
             message=ai["reason"] or "This post looks inappropriate for the platform.",
             suggestion=ai["suggestion"],
+            suggestion_title=ai.get("suggestion_title"),
             matched_terms=keywords.flagged,
         )
 
@@ -86,6 +88,7 @@ def run_pre_post_gate(title: Optional[str], text: str, acknowledged: bool = Fals
                 code="ai_unclear",
                 message=ai["reason"] or "This post may be too vague for others to act on.",
                 suggestion=ai["suggestion"],
+                suggestion_title=ai.get("suggestion_title"),
                 matched_terms=keywords.flagged,
             )
         return GateResult(

@@ -117,8 +117,9 @@ function PostProblem() {
         submitProblem(false)
     }
 
-    function useSuggestion(text) {
+    function useSuggestion(text, newTitle) {
         setDescription(text)
+        if (newTitle) setTitle(newTitle.slice(0, 255))
         setGate(null)
     }
 

@@ -32,11 +32,14 @@ function ModerationNotice({ gate, onUseSuggestion, onPostAnyway, busy }) {
             {gate.suggestion && (
                 <div className="mt-3 rounded-md border border-border bg-surface p-3">
                     <p className="text-xs font-medium text-muted">{t("mod.suggested")}</p>
+                    {gate.suggestion_title && (
+                        <p className="mt-1 text-sm font-semibold text-ink">{gate.suggestion_title}</p>
+                    )}
                     <p className="mt-1 text-sm text-ink">{gate.suggestion}</p>
                     {onUseSuggestion && (
                         <button
                             type="button"
-                            onClick={() => onUseSuggestion(gate.suggestion)}
+                            onClick={() => onUseSuggestion(gate.suggestion, gate.suggestion_title)}
                             disabled={busy}
                             className="mt-2 inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-xs font-semibold text-link
                                        hover:bg-surface-2 disabled:opacity-50"

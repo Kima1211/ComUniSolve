@@ -24,6 +24,7 @@ def _gate_to_response(result) -> dict:
         message=result.message,
         matched_terms=result.matched_terms,
         suggestion=result.suggestion,
+        suggestion_title=result.suggestion_title,
     ).model_dump()
 
 # Admin removal and author deletion are both soft deletes: every public query must go through this filter.

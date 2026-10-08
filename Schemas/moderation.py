@@ -14,6 +14,7 @@ class ContentCheckResponse(BaseModel):
     message: Optional[str] = None
     matched_terms: list[str] = []
     suggestion: Optional[str] = None
+    suggestion_title: Optional[str] = None
 
 
 class ContentCheckRequest(BaseModel):

@@ -75,7 +75,11 @@ function EditProblemForm({ problem, onSaved, onCancel }) {
                 <ModerationNotice
                     gate={gate}
                     busy={saving}
-                    onUseSuggestion={(s) => { setDescription(s); setGate(null) }}
+                    onUseSuggestion={(s, newTitle) => {
+                        setDescription(s)
+                        if (newTitle) setTitle(newTitle.slice(0, 255))
+                        setGate(null)
+                    }}
                     onPostAnyway={() => save(true)}
                 />
             )}
