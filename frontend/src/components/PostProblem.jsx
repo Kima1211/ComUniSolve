@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiPost, apiPostForm } from "../api";
 import { ImagePlus } from "lucide-react";
@@ -54,18 +54,17 @@ function PostProblem() {
         setImage(file)
     }
 
-    // Title and category changes start a check; the description is read from a ref.
+    // The description only counts once the user leaves the box, so typing in it doesn't spend AI requests.
+    const [settledDescription, setSettledDescription] = useState("")
     const query = title.trim()
     const readyToMatch = query.split(/\s+/).length >= 2 && query.length >= 12
-    const matchKey = `${query}|${category}`
-    const descriptionRef = useRef(description)
-    useEffect(() => { descriptionRef.current = description }, [description])
+    const matchKey = `${query}|${category}|${settledDescription}`
 
     useEffect(() => {
         if (!readyToMatch) return
         let cancelled = false
         const timer = setTimeout(() => {
-            apiPost("/problems/match/ai", { title: query, description: descriptionRef.current, category: category || null })
+            apiPost("/problems/match/ai", { title: query, description: settledDescription, category: category || null })
                 .then((data) => {
                     if (!cancelled) {
                         setMatch({ key: matchKey, matches: data.matches || [], aiUsed: Boolean(data.ai_used), backup: Boolean(data.backup) })
@@ -74,7 +73,7 @@ function PostProblem() {
                 .catch(() => { if (!cancelled) setMatch({ ...NO_MATCH, key: matchKey, backup: true }) })
         }, MATCH_DELAY_MS)
         return () => { cancelled = true; clearTimeout(timer) }
-    }, [query, category, matchKey, readyToMatch])
+    }, [query, category, settledDescription, matchKey, readyToMatch])
 
     const current = readyToMatch ? match : NO_MATCH
     const matching = readyToMatch && match.key !== matchKey
@@ -119,6 +118,7 @@ function PostProblem() {
 
     function useSuggestion(text, newTitle) {
         setDescription(text)
+        setSettledDescription(text.trim())
         if (newTitle) setTitle(newTitle.slice(0, 255))
         setGate(null)
     }
@@ -182,6 +182,7 @@ function PostProblem() {
                         disabled={submitting} maxLength={5000}
                         placeholder={t("post.descriptionPlaceholder")}
                         value={description} onChange={(e) => setDescription(e.target.value)}
+                        onBlur={() => setSettledDescription(description.trim())}
                     />
                 </FormField>
 
