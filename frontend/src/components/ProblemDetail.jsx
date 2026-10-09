@@ -5,7 +5,7 @@ import { useAuth } from "../auth-context";
 import { useLanguage } from "../i18n/language-context";
 import { timeAgo } from "../time";
 import { useConfirm } from "../confirm-context";
-import { Info, Sparkles, Trash2 } from "lucide-react";
+import { ChevronDown, Info, Sparkles, Trash2 } from "lucide-react";
 import { authorLabel, hasProfile } from "../author";
 import Layout from "./Layout";
 import ReputationTitle from "./ReputationTitle";
@@ -19,11 +19,34 @@ import { alertError } from "../ui";
 import EditProblemForm from "./EditProblemForm";
 import AiCheckStatus from "./AiCheckStatus";
 import BackLink from "./BackLink";
+import RightRail from "./RightRail";
 
 const ghostBase = "inline-flex h-10 items-center rounded-md px-2 text-[13px] font-medium disabled:opacity-50 sm:h-8"
 const ghost = `${ghostBase} text-muted hover:bg-surface-2 hover:text-ink`
 const danger = `${ghostBase} text-error hover:bg-error-soft`
 const ghostLink = `${ghostBase} text-link hover:bg-surface-2`
+
+function MinimizedSuggestion({ text, t }) {
+    return (
+        <details className="group rounded-lg border-[1.5px] border-dashed border-gold bg-surface">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <Sparkles size={15} aria-hidden="true" className="shrink-0 text-link" />
+                <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold text-ink">{t("detail.aiSuggestion")}</span>
+                    <span className="block text-xs text-muted">{t("detail.notFromMember")}</span>
+                </span>
+                <ChevronDown size={16} aria-hidden="true" className="shrink-0 text-muted transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-border px-4 pb-4 pt-3">
+                <p className="whitespace-pre-wrap text-sm leading-[1.6] text-ink">{text}</p>
+                <p className="mt-3 flex gap-2 text-xs leading-[1.5] text-muted">
+                    <Info size={14} aria-hidden="true" className="mt-px shrink-0" />
+                    {t("detail.aiSuggestionMinNote")}
+                </p>
+            </div>
+        </details>
+    )
+}
 
 function ProblemDetail() {
     const { id } = useParams()
@@ -90,17 +113,18 @@ function ProblemDetail() {
     }, [fetchAll])
 
     useEffect(() => {
-        if (loading || !problem || solutions.length > 0) return
+        if (loading || !problem) return
         if (suggestionAskedFor.current === id) return
         suggestionAskedFor.current = id
 
         apiGet(`/problems/${id}/ai-suggestion`)
             .then((data) => setAiSuggestion({ ...data, forId: id }))
             .catch(() => setAiSuggestion({ status: "unavailable", forId: id }))
-    }, [id, loading, problem, solutions.length])
+    }, [id, loading, problem])
 
     const suggestionPending = !loading && problem && solutions.length === 0 && aiSuggestion?.forId !== id
     const showSuggestion = solutions.length === 0 && aiSuggestion?.forId === id && aiSuggestion.status === "shown"
+    const minimizedSuggestion = solutions.length > 0 && aiSuggestion?.forId === id ? aiSuggestion.suggestion : null
 
     async function postSolution(acknowledged) {
         try {
@@ -211,8 +235,15 @@ function ProblemDetail() {
 
     const authorName = authorLabel(problem.author, t)
 
+    const rail = minimizedSuggestion ? (
+        <div className="space-y-4">
+            <MinimizedSuggestion text={minimizedSuggestion} t={t} />
+            <RightRail />
+        </div>
+    ) : null
+
     return (
-        <Layout>
+        <Layout rail={rail}>
             <BackLink />
 
             {imageError && (
@@ -379,6 +410,12 @@ function ProblemDetail() {
                     )}
                 </div>
             </section>
+
+            {minimizedSuggestion && (
+                <div className="mt-4 xl:hidden">
+                    <MinimizedSuggestion text={minimizedSuggestion} t={t} />
+                </div>
+            )}
 
             {!relatedFirst && <div className="mt-6">{relatedBlock}</div>}
         </Layout>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, apiPost } from "./api";
 import { AuthContext } from "./auth-context";
+import { clearDraft } from "./postDraft";
 
 async function fetchMe() {
   try {
@@ -40,6 +41,8 @@ export function AuthProvider({ children }) {
     } catch {
       // Clear the local state even if the request fails.
     }
+    // A shared computer must not show the next person this user's unfinished post.
+    clearDraft();
     setUser(null);
   }, []);
 

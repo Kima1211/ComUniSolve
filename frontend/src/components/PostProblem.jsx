@@ -12,32 +12,13 @@ import ModerationNotice from "./ModerationNotice";
 import AiCheckStatus from "./AiCheckStatus";
 import CategoryOptions from "./CategoryOptions";
 import BackLink from "./BackLink";
+import { clearDraft, loadDraft, saveDraft } from "../postDraft";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 // Waits for a pause in typing, to protect the free Gemini quota.
 const MATCH_DELAY_MS = 1200
 const NO_MATCH = { key: "", matches: [], aiUsed: false, backup: false }
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
-const DRAFT_KEY = "comunisolve-post-draft"
-
-// sessionStorage can throw (private mode, blocked storage), so the form must work without it.
-function loadDraft(search) {
-    try {
-        const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY)) || {}
-        return draft.search === search ? draft : {}
-    } catch {
-        return {}
-    }
-}
-
-function clearDraft() {
-    try {
-        sessionStorage.removeItem(DRAFT_KEY)
-    } catch {
-        // Nothing was saved.
-    }
-}
-
 function PostProblem() {
     const navigate = useNavigate()
     const { t, errorText } = useLanguage()
@@ -46,6 +27,7 @@ function PostProblem() {
 
     const [draft] = useState(() => loadDraft(search))
     const [title, setTitle] = useState(draft.title ?? search)
+    const draftSearch = search || draft.search || ""
     const [description, setDescription] = useState(draft.description || "")
     const [category, setCategory] = useState(draft.category || "")
     const [error, setError] = useState(null)
@@ -56,12 +38,8 @@ function PostProblem() {
     const [image, setImage] = useState(null)
 
     useEffect(() => {
-        try {
-            sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ search, title, description, category }))
-        } catch {
-            // The form still works, the draft just won't survive leaving the page.
-        }
-    }, [search, title, description, category])
+        saveDraft({ search: draftSearch, title, description, category })
+    }, [draftSearch, title, description, category])
 
     const preview = useMemo(() => (image ? URL.createObjectURL(image) : ""), [image])
     useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])

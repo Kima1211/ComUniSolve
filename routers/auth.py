@@ -25,7 +25,7 @@ from Schemas.user import ForgotPassword, ResetPassword, VerifyCode
 from Services.email import send_verification_code, send_password_reset_email
 from Services.audit import record
 from routers.user import check_password_strength, find_by_email
-from Security.rate_limit import FORGOT_PASSWORD_PER_IP, client_ip, enforce
+from Security.rate_limit import FORGOT_PASSWORD_PER_EMAIL, FORGOT_PASSWORD_PER_IP, client_ip, enforce
 from Services.errors import api_error
 
 router = APIRouter()
@@ -174,7 +174,13 @@ def forgot_password(body: ForgotPassword, request: Request, db: Session = Depend
     enforce(FORGOT_PASSWORD_PER_IP, client_ip(request),
             "Too many reset requests from your network. Please try again in 15 minutes.")
 
-    db_user = find_by_email(db, body.email)
+    email_key = body.email.strip().lower()
+    # Counted for every email, registered or not, so the answer still doesn't reveal which emails have accounts.
+    if not FORGOT_PASSWORD_PER_EMAIL.hit(email_key):
+        raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "reset_locked",
+                        "Too many reset requests for this email. Please wait 15 minutes.", {"minutes": 15})
+
+    db_user = find_by_email(db, email_key)
 
     if db_user is None or not db_user.is_active:
         return {"message": FORGOT_PASSWORD_MESSAGE}
@@ -186,7 +192,7 @@ def forgot_password(body: ForgotPassword, request: Request, db: Session = Depend
             return {"message": FORGOT_PASSWORD_MESSAGE}
 
     token = issue_password_reset_token(db_user, db)
-    send_password_reset_email(db_user.email, db_user.name, token)
+    send_password_reset_email(db_user.email, db_user.name, token, verified=db_user.is_verified)
 
     return {"message": FORGOT_PASSWORD_MESSAGE}
 

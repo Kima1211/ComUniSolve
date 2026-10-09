@@ -209,7 +209,7 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db),
     if not fnd:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "Problem not found")
 
-    # A real answer replaces the AI one; the stored suggestion returns if every real solution is removed.
+    # A real answer takes the main spot; a stored suggestion is still sent so the page can show it minimized.
     has_solution = (
         db.query(solution.Solution.id)
         .filter(
@@ -221,7 +221,7 @@ def ai_suggestion(problem_id: int, db: Session = Depends(get_db),
         is not None
     )
     if has_solution:
-        return AiSuggestionResponse(status="has_solutions")
+        return AiSuggestionResponse(status="has_solutions", suggestion=fnd.ai_suggestion)
 
     if fnd.ai_suggestion:
         return AiSuggestionResponse(status="shown", suggestion=fnd.ai_suggestion)

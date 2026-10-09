@@ -73,9 +73,12 @@ LOGIN_PER_IP = RateLimiter(max_events=30, window_seconds=5 * 60)
 
 LOGIN_FAILURES_PER_EMAIL = RateLimiter(max_events=5, window_seconds=15 * 60)
 
-REGISTER_PER_IP = RateLimiter(max_events=5, window_seconds=60 * 60)
+# Per-IP limits stay loose: a whole school lab or campus Wi-Fi shares one IP.
+REGISTER_PER_IP = RateLimiter(max_events=20, window_seconds=60 * 60)
 
-FORGOT_PASSWORD_PER_IP = RateLimiter(max_events=5, window_seconds=15 * 60)
+FORGOT_PASSWORD_PER_IP = RateLimiter(max_events=20, window_seconds=15 * 60)
+
+FORGOT_PASSWORD_PER_EMAIL = RateLimiter(max_events=3, window_seconds=15 * 60)
 
 # Keyed by user id ("user:{id}"), not IP: client_ip trusts x-forwarded-for, which can be faked.
 AI_PER_USER = RateLimiter(max_events=30, window_seconds=10 * 60)

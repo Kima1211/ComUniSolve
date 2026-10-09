@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { apiPost } from "../api";
 import { useAuth } from "../auth-context";
@@ -32,6 +32,17 @@ function Register() {
     const [attempted, setAttempted] = useState(false)
     const [error, setError] = useState(null)
     const [submitting, setSubmitting] = useState(false)
+    const [failedSubmits, setFailedSubmits] = useState(0)
+    const formRef = useRef(null)
+
+    // Runs after the red fields are on screen, so the topmost one can be found.
+    useEffect(() => {
+        if (failedSubmits === 0) return
+        const field = formRef.current?.querySelector("[data-invalid]")
+        if (!field) return
+        field.scrollIntoView({ behavior: "smooth", block: "center" })
+        field.querySelector("input, select, textarea")?.focus({ preventScroll: true })
+    }, [failedSubmits])
 
     function findProblems() {
         const problems = { ...personErrors(person), ...addressErrors(address) }
@@ -52,6 +63,7 @@ function Register() {
         setAttempted(true)
         if (Object.keys(problems).length > 0) {
             setError({ key: "validation.fixErrors" })
+            setFailedSubmits((n) => n + 1)
             return
         }
 
@@ -84,7 +96,7 @@ function Register() {
                 </>
             }
         >
-            <form onSubmit={handleSubmit} noValidate className="space-y-6">
+            <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-6">
                 <section className="space-y-4">
                     <SectionTitle>{t("section.personal")}</SectionTitle>
                     <PersonalFields person={person} setPerson={setPerson} errors={fieldErrors} disabled={submitting} />

@@ -87,13 +87,20 @@ def verification_email(name: str, code: str) -> tuple[str, str, str]:
     )
     return subject, _layout("Your code expires in 10 minutes.", body, footer), text
 
-def reset_email(name: str, token: str) -> tuple[str, str, str]:
+UNVERIFIED_NOTE = (
+    "Your email isn't verified on ComUniSolve yet. Using this link also verifies it, "
+    "because only the owner of this inbox can open it."
+)
+
+# The forgot-password screen gives everyone the same answer, so only the inbox owner learns this.
+def reset_email(name: str, token: str, verified: bool = True) -> tuple[str, str, str]:
     reset_link = f"{FRONTEND_URL}/reset-password/{token}"
     safe_name = html.escape(name)
     subject = "Reset your ComUniSolve password"
     body = (
         _heading("Reset your password")
         + _muted(f"Hi {safe_name}, we got a request to reset your password. The link works once and expires in 30 minutes.")
+        + ("" if verified else _muted(UNVERIFIED_NOTE))
         + _button(reset_link, "Reset password")
         + _muted(f'Or paste this link into your browser:<br>'
                  f'<a href="{reset_link}" style="color:{LINK};word-break:break-all;">{reset_link}</a>', bottom=32)
@@ -105,6 +112,7 @@ def reset_email(name: str, token: str) -> tuple[str, str, str]:
     text = (
         f"Hi {name},\n\nSomeone asked to reset your ComUniSolve password. If it was you, open this link:\n"
         f"{reset_link}\n\nIt works once and expires in 30 minutes. Didn't ask for this? Ignore this email."
+        + ("" if verified else f"\n\n{UNVERIFIED_NOTE}")
     )
     return subject, _layout("Your reset link expires in 30 minutes.", body, footer), text
 
@@ -112,8 +120,8 @@ def send_verification_code(to_email: str, to_name: str, code: str) -> bool:
     subject, html_content, text = verification_email(to_name, code)
     return _send_email(to_email, to_name, subject, html_content, text)
 
-def send_password_reset_email(to_email: str, to_name: str, token: str) -> bool:
-    subject, html_content, text = reset_email(to_name, token)
+def send_password_reset_email(to_email: str, to_name: str, token: str, verified: bool = True) -> bool:
+    subject, html_content, text = reset_email(to_name, token, verified)
     return _send_email(to_email, to_name, subject, html_content, text)
 
 def _send_email(to_email: str, to_name: str, subject: str, html_content: str, text_content: str) -> bool:
@@ -147,7 +155,8 @@ def _send_email(to_email: str, to_name: str, subject: str, html_content: str, te
 if __name__ == "__main__":
     import tempfile
     previews = {"verify": verification_email("Juan Dela Cruz", "482917"),
-                "reset": reset_email("Juan Dela Cruz", "sample-token")}
+                "reset": reset_email("Juan Dela Cruz", "sample-token"),
+                "reset-unverified": reset_email("Juan Dela Cruz", "sample-token", verified=False)}
     for label, (_, page, _) in previews.items():
         path = os.path.join(tempfile.gettempdir(), f"comunisolve-email-{label}.html")
         with open(path, "w", encoding="utf-8") as f:

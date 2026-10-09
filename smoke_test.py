@@ -25,7 +25,8 @@ auth_router.send_verification_code = _fake_send_code
 
 from Security import rate_limit
 for _limiter in (rate_limit.LOGIN_PER_IP, rate_limit.LOGIN_FAILURES_PER_EMAIL,
-                 rate_limit.REGISTER_PER_IP, rate_limit.FORGOT_PASSWORD_PER_IP):
+                 rate_limit.REGISTER_PER_IP, rate_limit.FORGOT_PASSWORD_PER_IP,
+                 rate_limit.FORGOT_PASSWORD_PER_EMAIL):
     _limiter.max_events = 10_000
 
 from Models.database import engine, Base, SessionLocal
