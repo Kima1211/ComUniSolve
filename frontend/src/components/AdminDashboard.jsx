@@ -399,7 +399,7 @@ function OverviewTab() {
     )
 }
 
-const USER_FILTERS = ["all", "suspended", "unverified", "admins"]
+const USER_FILTERS = ["all", "suspended", "verified", "unverified", "admins"]
 
 function UserStatus({ u }) {
     const { t, formatDate } = useLanguage()

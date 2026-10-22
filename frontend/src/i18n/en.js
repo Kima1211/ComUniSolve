@@ -362,6 +362,7 @@ const en = {
     "admin.couldNotAct": "Could not apply that action.",
     "admin.filter.all": "All",
     "admin.filter.suspended": "Suspended",
+    "admin.filter.verified": "Verified",
     "admin.filter.unverified": "Unverified",
     "admin.filter.admins": "Admins",
     "admin.badge.admin": "admin",

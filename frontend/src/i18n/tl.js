@@ -363,6 +363,7 @@ const tl = {
     "admin.couldNotAct": "Hindi nagawa ang aksyon.",
     "admin.filter.all": "Lahat",
     "admin.filter.suspended": "Suspendido",
+    "admin.filter.verified": "Verified",
     "admin.filter.unverified": "Hindi verified",
     "admin.filter.admins": "Mga admin",
     "admin.badge.admin": "admin",

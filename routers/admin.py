@@ -44,7 +44,7 @@ def _count_per_user(db: Session, column, user_ids: list[int], *filters) -> dict[
 @router.get("/admin/users", response_model=AdminUserList)
 def list_users(
     search: str = Query("", max_length=100),
-    show: Literal["all", "suspended", "unverified", "admins"] = "all",
+    show: Literal["all", "suspended", "verified", "unverified", "admins"] = "all",
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -66,6 +66,8 @@ def list_users(
             or_(user.User.suspended_until.is_(None),
                 user.User.suspended_until > datetime.now(timezone.utc)),
         )
+    elif show == "verified":
+        query = query.filter(user.User.is_verified.is_(True))
     elif show == "unverified":
         query = query.filter(user.User.is_verified.is_(False))
     elif show == "admins":
