@@ -188,6 +188,13 @@ def _own_problem(problem_id: int, db: Session, current_user):
         raise api_error(status.HTTP_403_FORBIDDEN, "not_owner", "You can only change your own problem")
     return fnd_prob
 
+def _has_solutions(problem_id: int, db: Session) -> bool:
+    return db.query(solution.Solution.id).filter(
+        solution.Solution.problem_id == problem_id,
+        solution.Solution.moderation_status != "removed",
+        solution.Solution.deleted_at.is_(None),
+    ).first() is not None
+
 @router.patch("/problems/{problem_id}", response_model=ProblemResponse)
 def edit_problem(
     problem_id: int,
@@ -207,13 +214,11 @@ def edit_problem(
     fnd_prob.description = body.description
     fnd_prob.category = body.category
     fnd_prob.ai_status = gate.verdict
-    # Never un-flag on edit, or a small edit would skip admin review.
     if fnd_prob.moderation_status != "flagged":
         fnd_prob.moderation_status = gate.moderation_status
     fnd_prob.edited_at = datetime.now(timezone.utc)
 
-    # The old AI Suggestion answered the old text; a new one is generated on the next view.
-    if text_changed:
+    if text_changed and not _has_solutions(fnd_prob.id, db):
         fnd_prob.ai_suggestion = None
         fnd_prob.ai_suggestion_at = None
 
@@ -227,7 +232,6 @@ def edit_problem(
     _attach_summary([fnd_prob], db)
     return fnd_prob
 
-# Owners may delete anytime; helpers keep the points they earned on it.
 @router.delete("/problems/{problem_id}")
 def delete_problem(
     problem_id: int,
